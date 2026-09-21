@@ -100,7 +100,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Attest release packages
-        uses: crmne/native-packages/.github/actions/attest@7b4d5e42b565ec178d8658a73ea05dca3bd29190
+        uses: crmne/native-packages/.github/actions/attest@dc0cb1586894ca0239c53fd02d4da8064712671c # v0.7.0
         with:
           subject-path: |
             dist/*.tar.gz
@@ -157,7 +157,7 @@ jobs:
         with:
           ruby-version: '4.0'
       - name: Install native packaging
-        run: gem install native-packages --version 0.6.0 --no-document
+        run: gem install native-packages --version 0.7.0 --no-document
 
       - name: App bundle
         run: |
@@ -177,7 +177,7 @@ jobs:
         run: bash packaging/macos/verify.sh "dist/zapfast-${GITHUB_REF_NAME}-macos-universal.dmg"
 
       - name: Attest macOS package
-        uses: crmne/native-packages/.github/actions/attest@7b4d5e42b565ec178d8658a73ea05dca3bd29190
+        uses: crmne/native-packages/.github/actions/attest@dc0cb1586894ca0239c53fd02d4da8064712671c # v0.7.0
         with:
           subject-path: dist/*.dmg
       - uses: actions/upload-artifact@v7
@@ -217,7 +217,7 @@ jobs:
           cache: false
           upload-artifact: false
       - name: Attest Flatpak bundle
-        uses: crmne/native-packages/.github/actions/attest@7b4d5e42b565ec178d8658a73ea05dca3bd29190
+        uses: crmne/native-packages/.github/actions/attest@dc0cb1586894ca0239c53fd02d4da8064712671c # v0.7.0
         with:
           subject-path: "*.flatpak"
       - uses: actions/upload-artifact@v7
@@ -245,7 +245,7 @@ jobs:
         with:
           ruby-version: '4.0'
       - name: Sign update manifest
-        uses: crmne/native-packages/.github/actions/sign-release@7b4d5e42b565ec178d8658a73ea05dca3bd29190
+        uses: crmne/native-packages/.github/actions/sign-release@dc0cb1586894ca0239c53fd02d4da8064712671c # v0.7.0
         with:
           directory: dist
           public-key: assets/update-public-key.hex

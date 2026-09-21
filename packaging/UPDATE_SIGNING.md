@@ -19,7 +19,7 @@ hashes, signs the checksums, and verifies its output. The key is read in-process
 no temporary private-key file is created. Never enable shell tracing in this
 step or print the signing secret. Signing and attestation machinery are shared;
 ZapFast still owns its key, approval environment and updater verification.
-See the [shared signing guide](https://github.com/crmne/native-packages/blob/7b4d5e42b565ec178d8658a73ea05dca3bd29190/docs/_guides/release-signing.md).
+See the [shared signing guide](https://github.com/crmne/native-packages/blob/dc0cb1586894ca0239c53fd02d4da8064712671c/docs/_guides/release-signing.md).
 
 Build jobs also publish GitHub artifact attestations. These identify the
 repository, workflow and commit that built each file; they do not replace the

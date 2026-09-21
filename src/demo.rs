@@ -894,9 +894,11 @@ pub fn apply_flags(app: &mut App, page: Option<&str>) {
             "locked-open" => {
                 app.chats[0].locked = true;
                 app.settings.set_chat_lock_code(Some("demo-code"));
-                app.search = "demo-code".into();
-                app.locked_folder = true;
-                app.open_chat = Some(app.chats[0].id.clone());
+                app.open_chat = None;
+                app.actions
+                    .push(crate::model::Action::UnlockLockedFolder("demo-code".into()));
+                app.actions
+                    .push(crate::model::Action::OpenChat(app.chats[0].id.clone()));
             }
             "keyring" => {
                 unlink(app);
@@ -1492,6 +1494,11 @@ mod tests {
         apply_flags(&mut app, Some("locked-open"));
         let ctx = egui::Context::default();
         app.attach(&ctx);
+        render(&mut app, &ctx);
+        assert!(
+            app.search.is_empty(),
+            "unlocking must not expose the code in search"
+        );
         ctx.enable_accesskit();
         assert!(!app.current_chat().unwrap().can_send());
         let mut output = ctx.run_ui(

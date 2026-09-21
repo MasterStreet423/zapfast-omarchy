@@ -3019,7 +3019,12 @@ fn fit_sticker(width: f32, height: f32) -> Vec2 {
 }
 
 /// Reserved size for an image or video before and after download.
-fn frame_size(media: &Media, thumbnail_hint: Option<(u32, u32)>, limit: f32) -> Vec2 {
+fn frame_size(
+    media: &Media,
+    thumbnail_hint: Option<(u32, u32)>,
+    max_width: f32,
+    max_height: f32,
+) -> Vec2 {
     let (w, h) = match (media.width, media.height) {
         (Some(w), Some(h)) if w > 0 && h > 0 => (w as f32, h as f32),
         _ => match thumbnail_hint {
@@ -3027,7 +3032,7 @@ fn frame_size(media: &Media, thumbnail_hint: Option<(u32, u32)>, limit: f32) -> 
             _ => (4.0, 3.0),
         },
     };
-    fit_picture(w, h, limit, PICTURE_HEIGHT.min(limit * 1.3))
+    fit_picture(w, h, max_width, max_height)
 }
 
 /// Draws an image or sticker, using its preview until downloaded. Returns its width.
@@ -3099,7 +3104,7 @@ fn picture(
                 let size = if sticker.is_some() {
                     Vec2::splat(STICKER_SIDE)
                 } else {
-                    frame_size(media, None, max_width)
+                    frame_size(media, None, max_width, max_height)
                 };
                 let (rect, _) = ui.allocate_exact_size(size, Sense::hover());
                 if ui.is_rect_visible(rect) {
@@ -3112,7 +3117,7 @@ fn picture(
                 let size = if sticker.is_some() {
                     Vec2::splat(STICKER_SIDE)
                 } else {
-                    frame_size(media, None, max_width)
+                    frame_size(media, None, max_width, max_height)
                 };
                 let (rect, response) = ui.allocate_exact_size(size, Sense::click());
                 if ui.is_rect_visible(rect) {
@@ -3133,7 +3138,7 @@ fn picture(
             }
         };
     }
-    let size = frame_size(media, None, max_width);
+    let size = frame_size(media, None, max_width, max_height);
     let (rect, response) = ui.allocate_exact_size(size, Sense::click());
     if ui.is_rect_visible(rect) {
         let thumbnail = message
@@ -3249,7 +3254,8 @@ fn video(
         return width;
     };
     let uri = thumbnail_uri(ui.ctx(), &message.chat, &message.id, thumbnail);
-    let size = frame_size(media, Some((16, 9)), width.min(PICTURE_WIDTH));
+    let limit = width.min(PICTURE_WIDTH);
+    let size = frame_size(media, Some((16, 9)), limit, PICTURE_HEIGHT.min(limit * 1.3));
     // Play downloaded GIFs in place; keep a poster for other videos.
     let (rect, response) = ui.allocate_exact_size(size, Sense::click());
     let playing = match (&media.path, gif) {
@@ -3802,18 +3808,36 @@ mod tests {
     }
 
     #[test]
+    fn picture_placeholder_matches_decoded_dimensions() {
+        for limit in [200.0, PICTURE_WIDTH] {
+            for (width, height) in [(900, 1200), (600, 1600), (1600, 900)] {
+                assert_eq!(
+                    frame_size(
+                        &media(Some(width), Some(height)),
+                        None,
+                        limit,
+                        PICTURE_HEIGHT
+                    ),
+                    fit_picture(width as f32, height as f32, limit, PICTURE_HEIGHT),
+                    "decoding a {width}x{height} photo must not shift the transcript"
+                );
+            }
+        }
+    }
+
+    #[test]
     fn picture_frames_keep_their_shape_within_the_limit() {
-        let landscape = frame_size(&media(Some(1600), Some(1200)), None, 340.0);
+        let landscape = frame_size(&media(Some(1600), Some(1200)), None, 340.0, PICTURE_HEIGHT);
         assert!((landscape.x - 340.0).abs() < 0.01);
         assert!((landscape.y - 255.0).abs() < 0.01);
-        let tall = frame_size(&media(Some(600), Some(1200)), None, 340.0);
+        let tall = frame_size(&media(Some(600), Some(1200)), None, 340.0, PICTURE_HEIGHT);
         assert!(tall.y > 340.0 && tall.y <= PICTURE_HEIGHT);
         let exact = fit_picture(900.0, 1600.0, PICTURE_WIDTH, PICTURE_HEIGHT);
         assert!((exact.y - PICTURE_HEIGHT).abs() < 0.01);
         assert!(exact.x < PICTURE_WIDTH);
-        let unknown = frame_size(&media(None, None), Some((16, 9)), 340.0);
+        let unknown = frame_size(&media(None, None), Some((16, 9)), 340.0, PICTURE_HEIGHT);
         assert!(unknown.x > unknown.y);
-        let tiny = frame_size(&media(Some(40), Some(40)), None, 340.0);
+        let tiny = frame_size(&media(Some(40), Some(40)), None, 340.0, PICTURE_HEIGHT);
         assert!(tiny.x >= 120.0);
     }
 
