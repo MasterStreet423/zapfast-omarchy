@@ -1,6 +1,6 @@
 [package]
 name = "zapfast"
-version = "0.14.0"
+version = "0.15.0-rc.1"
 edition = "2024"
 rust-version = "1.98"
 license = "MIT"
@@ -22,7 +22,7 @@ path = "src/main.rs"
 anyhow = "1"
 # Hashes saved stickers by content. Already included through wacore.
 sha2 = "0.11"
-# Already in the tree through rustls; used for the locked-chat code verifier.
+# Already in the tree through rustls; verifies lock codes and update signatures.
 ring = "0.17"
 # Decrypts Signal sticker packs. All four crates are already included through
 # wacore at these versions.

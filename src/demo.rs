@@ -1916,6 +1916,92 @@ mod tests {
     }
 
     #[test]
+    fn enter_submits_the_locked_chat_code_and_keeps_wrong_codes_locked() {
+        for code in ["wrong-code", "demo-code"] {
+            let mut app = app();
+            apply_flags(&mut app, Some("locked-prompt"));
+            let ctx = egui::Context::default();
+            app.attach(&ctx);
+            render(&mut app, &ctx);
+            frame_with(&mut app, &ctx, vec![egui::Event::Text(code.into())]);
+            assert_eq!(app.chat_lock_entry, code);
+            frame_with(
+                &mut app,
+                &ctx,
+                vec![key(egui::Key::Enter, egui::Modifiers::NONE)],
+            );
+            assert_eq!(app.locked_folder, code == "demo-code");
+            assert_eq!(app.dialog.is_none(), code == "demo-code");
+        }
+    }
+
+    #[test]
+    fn enter_creates_a_lock_code_only_when_confirmation_matches() {
+        for confirmation in ["different", "fixture-code"] {
+            let mut app = app();
+            apply_flags(&mut app, Some("locked-setup"));
+            let ctx = egui::Context::default();
+            app.attach(&ctx);
+            render(&mut app, &ctx);
+            frame_with(
+                &mut app,
+                &ctx,
+                vec![egui::Event::Text("fixture-code".into())],
+            );
+            frame_with(
+                &mut app,
+                &ctx,
+                vec![key(egui::Key::Tab, egui::Modifiers::NONE)],
+            );
+            frame_with(&mut app, &ctx, vec![egui::Event::Text(confirmation.into())]);
+            assert_eq!(app.chat_lock_confirm, confirmation);
+            frame_with(
+                &mut app,
+                &ctx,
+                vec![key(egui::Key::Enter, egui::Modifiers::NONE)],
+            );
+            assert_eq!(app.locked_folder, confirmation == "fixture-code");
+            assert_eq!(
+                app.settings.verifies_chat_lock_code("fixture-code"),
+                confirmation == "fixture-code"
+            );
+        }
+    }
+
+    #[test]
+    fn an_open_context_menu_outlines_its_message_without_a_reaction_picker() {
+        let mut app = app();
+        apply_flags(&mut app, Some("react-menu"));
+        let ctx = egui::Context::default();
+        app.attach(&ctx);
+        render(&mut app, &ctx);
+        let shapes = frame_sized(&mut app, &ctx, 780.0, Vec::new());
+        let id = crate::ui::conversation::bubble_id(sample_ids()[0], "ada-link");
+        let target = ctx
+            .data(|data| data.get_temp::<egui::Rect>(id.with("rect")))
+            .unwrap()
+            .expand(2.0);
+        let accent = app.palette.accent;
+        let outline_count = |shapes: &[egui::epaint::ClippedShape]| {
+            shapes
+                .iter()
+                .filter(|shape| {
+                    matches!(&shape.shape, egui::Shape::Rect(rect)
+                if rect.rect == target && rect.stroke.color == accent
+                    && rect.stroke.width == crate::theme::FOCUS_STROKE_WIDTH
+                    && rect.stroke_kind == egui::StrokeKind::Outside)
+                })
+                .count()
+        };
+        assert!(app.reaction_target.is_none());
+        assert_eq!(outline_count(&shapes), 1);
+        app.open_message_menu = None;
+        egui::Popup::close_id(&ctx, id.with("popup"));
+        let shapes = frame_sized(&mut app, &ctx, 780.0, Vec::new());
+        assert_eq!(outline_count(&shapes), 0);
+    }
+
+    #[test]
     fn a_demo_flag_keeps_the_reaction_menu_open() {
         let mut app = app();
         apply_flags(&mut app, Some("react-menu"));
@@ -3139,6 +3225,9 @@ mod tests {
         ] {
             let mut app = app();
             app.settings.show_shortcut_hints = hints;
+            // This tests navigation through a fixed transcript, not live
+            // typing-indicator expiry while a slower CI runner draws it.
+            app.typing.clear();
             if ready {
                 app.composer = "A synthetic draft".into();
             }

@@ -80,9 +80,16 @@ fn unlock_locked_chats(app: &mut App, ui: &mut egui::Ui) {
         theme::regular(13.0),
         palette.secondary,
     );
+    let entry_id = ui.make_persistent_id("locked-code");
+    let confirm_id = ui.make_persistent_id("locked-code-confirm");
+    // TextEdit consumes Enter while surrendering focus. Capture and consume
+    // it before drawing either editor instead of looking for it afterwards.
+    let mut submit = ui
+        .memory(|memory| memory.has_focus(entry_id) || (setup && memory.has_focus(confirm_id)))
+        && ui.input_mut(|input| input.consume_key(egui::Modifiers::NONE, egui::Key::Enter));
     let entry = ui.add(
         egui::TextEdit::singleline(&mut app.chat_lock_entry)
-            .id_salt("locked-code")
+            .id(entry_id)
             .password(true)
             .hint_text("Local code")
             .desired_width(f32::INFINITY),
@@ -90,16 +97,14 @@ fn unlock_locked_chats(app: &mut App, ui: &mut egui::Ui) {
     if ui.memory(|memory| memory.focused().is_none()) {
         entry.request_focus();
     }
-    let mut submit = entry.lost_focus() && ui.input(|input| input.key_pressed(egui::Key::Enter));
     if setup {
-        let confirm = ui.add(
+        ui.add(
             egui::TextEdit::singleline(&mut app.chat_lock_confirm)
-                .id_salt("locked-code-confirm")
+                .id(confirm_id)
                 .password(true)
                 .hint_text("Confirm code")
                 .desired_width(f32::INFINITY),
         );
-        submit |= confirm.lost_focus() && ui.input(|input| input.key_pressed(egui::Key::Enter));
     }
     if app.chat_lock_error {
         theme::paragraph(

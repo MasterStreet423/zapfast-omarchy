@@ -94,8 +94,9 @@ See **[zapfast.rocks](https://zapfast.rocks)** for downloads and guides.
   an emoji without leaving the composer, or `@` in a group to mention a member.
   Reply, react with any emoji, edit, forward, delete, and check when a message was sent,
   delivered, or read.
-  The full reaction picker stays beside the message menu, highlights its target,
-  and shows a preview. The conversation stays still while you choose; the emoji
+  Opening a message's context menu outlines that message until the menu closes.
+  The full reaction picker stays beside the menu and adds a target preview.
+  The conversation stays still while you choose; the emoji
   grid can scroll. Quick reactions learn from usage on this computer, independently
   of inserted emoji. These preferences do not sync from the phone.
 - **Disappearing-message timers.** Outgoing messages use the chat's known
@@ -319,7 +320,8 @@ folder: it disappears from the chat list, search, and the unread badge, and
 its messages never raise a desktop notification. The lock state syncs
 with your phone and other linked devices.
 
-Choose **Locked** beside the other chat filters and enter your local code.
+Choose **Locked** beside the other chat filters, type your local code, and press
+Enter or choose **Open locked chats**.
 The tab appears when locked chats exist, without a count or names before opening.
 If no local code exists, it offers to set one up. The local code is separate
 from your phone's code and is a visibility control, not an extra encryption layer.
@@ -407,8 +409,13 @@ Click **Update** in the banner to download and verify a newer release, then
 **Restart to update** when convenient. **Download updates automatically** is
 optional and off by default; it downloads in the background and still waits for
 you to restart. Downloads contact GitHub's API and release-asset hosts and are
-checked against the release's SHA-256 checksums. The updater keeps a backup and
-restores it if the updated app cannot start.
+checked against the release's SHA-256 checksums. Before downloading a package,
+the updater verifies the checksum manifest's Ed25519 publisher signature using
+its embedded public key. Missing or invalid signatures stop the update.
+The updater keeps a backup and restores it if the updated app cannot start.
+Release builds also carry GitHub provenance attestations, independently
+verifiable with `gh attestation verify FILE -R crmne/zapfast`.
+See [update signing](packaging/UPDATE_SIGNING.md) for key custody and recovery.
 
 The in-app updater supports marked portable downloads, the Windows installer,
 and the macOS app in Applications. Keep `zapfast-portable.txt` beside a portable
@@ -438,7 +445,7 @@ The earlier `FASTSAPP_GIPHY_KEY` build variable remains supported as a fallback.
 
 `AGENTS.md` describes the architecture and the rules for changes.
 CI checks the complete lockfile against RustSec advisories with `cargo audit`.
-For the manual checks before a release, see [Release testing](RELEASE_TESTING.md).
+Candidate-specific manual checks and results are tracked in the release PR.
 
 ### Recording a demo
 

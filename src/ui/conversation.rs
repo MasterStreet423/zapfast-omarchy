@@ -1924,14 +1924,6 @@ fn bubble_frame(
         }
     }
     let reacting = view.reaction == Some(message.id.as_str());
-    if reacting {
-        ui.painter().rect_stroke(
-            inner.response.rect.expand(2.0),
-            12.0,
-            Stroke::new(2.0, palette.accent),
-            egui::StrokeKind::Outside,
-        );
-    }
     // Inner widgets own their clicks, so this fires only on the bubble's padding
     // and footer. Double-click on the body keeps selecting the word.
     reply_on_double_click(&bubble, message, actions);
@@ -2004,6 +1996,16 @@ fn bubble_frame(
     if let Some(menu) = menu {
         ui.ctx()
             .data_mut(|data| data.insert_temp(bubble_id.with("menu-rect"), menu.response.rect));
+    }
+    // Keep the target explicit for every menu action, not just the emoji
+    // picker. Paint in the message layer so the menu itself remains above it.
+    if egui::Popup::is_id_open(ui.ctx(), bubble_id.with("popup")) {
+        ui.painter().rect_stroke(
+            inner.response.rect.expand(2.0),
+            12.0,
+            Stroke::new(theme::FOCUS_STROKE_WIDTH, palette.accent),
+            egui::StrokeKind::Outside,
+        );
     }
     if reacting && !egui::Popup::is_id_open(ui.ctx(), bubble_id.with("popup")) {
         actions.push(Action::ClosePicker);
