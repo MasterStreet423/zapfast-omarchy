@@ -184,6 +184,9 @@ pub struct App {
     pub reaction_anchor: Option<egui::Rect>,
     /// Demo/test: keep this message's context menu open.
     pub open_message_menu: Option<String>,
+    /// Demo/test: keep this chat row's context menu open.
+    #[cfg(any(test, feature = "demo"))]
+    pub open_chat_menu: Option<ChatId>,
     /// Emoji-grid header to scroll into view.
     pub emoji_jump: Option<&'static str>,
     /// Attachments pending in the composer.
@@ -407,6 +410,8 @@ impl App {
             reaction_target: None,
             reaction_anchor: None,
             open_message_menu: None,
+            #[cfg(any(test, feature = "demo"))]
+            open_chat_menu: None,
             emoji_jump: None,
             pending: Vec::new(),
             player: Player::new(waker.clone()),

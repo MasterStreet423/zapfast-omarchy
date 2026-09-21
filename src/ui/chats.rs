@@ -953,12 +953,33 @@ fn row(app: &mut App, ui: &mut egui::Ui, chat: &Chat) -> egui::Response {
         app.actions.push(Action::OpenChat(chat.id.clone()));
     }
     let menu_palette = palette;
-    egui::Popup::context_menu(&response)
-        .frame(widgets::menu_frame(&menu_palette))
-        .show(|ui| {
-            ui.set_min_width(190.0);
-            context_menu(app, ui, chat, &menu_palette);
-        });
+    let menu_width = widgets::menu_width(
+        ui,
+        &[
+            "Mark as read",
+            "Pin to top",
+            "Unarchive",
+            "Mute for 8 hours",
+            "Mute for a week",
+            "Mute indefinitely",
+            "Unlock chat",
+            "Copy number",
+        ],
+        true,
+    )
+    .max(190.0);
+    let popup = egui::Popup::context_menu(&response)
+        .width(menu_width)
+        .frame(widgets::menu_frame(&menu_palette));
+    #[cfg(any(test, feature = "demo"))]
+    let popup = if app.open_chat_menu.as_deref() == Some(chat.id.as_str()) {
+        popup
+            .open_memory(Some(egui::SetOpenCommand::Bool(true)))
+            .at_position(response.rect.left_top() + vec2(12.0, 8.0))
+    } else {
+        popup
+    };
+    popup.show(|ui| context_menu(app, ui, chat, &menu_palette));
     response
 }
 
@@ -1038,6 +1059,58 @@ mod tests {
     use super::*;
     use crate::paths::AppDirs;
     use crate::settings::Settings;
+
+    #[test]
+    fn chat_context_menu_stays_compact_in_wide_windows() {
+        for width in [360.0, 1180.0, 2000.0] {
+            let directory = tempfile::tempdir().unwrap();
+            let (mut app, _events) =
+                App::headless(AppDirs::under(directory.path()), Settings::default());
+            let chat = Chat::new("fixture@g.us".into(), "Fixture group".into());
+            let ctx = egui::Context::default();
+            app.attach(&ctx);
+            let mut frame = |events| {
+                let mut response = None;
+                let mut output = ctx.run_ui(
+                    egui::RawInput {
+                        screen_rect: Some(Rect::from_min_size(
+                            egui::Pos2::ZERO,
+                            vec2(width, 800.0),
+                        )),
+                        events,
+                        ..Default::default()
+                    },
+                    |ui| response = Some(row(&mut app, ui, &chat)),
+                );
+                output.textures_delta.clear();
+                response.unwrap()
+            };
+            let response = frame(vec![]);
+            let position = response.rect.left_center() + vec2(20.0, 0.0);
+            for pressed in [true, false] {
+                frame(vec![
+                    egui::Event::PointerMoved(position),
+                    egui::Event::PointerButton {
+                        pos: position,
+                        button: egui::PointerButton::Secondary,
+                        pressed,
+                        modifiers: egui::Modifiers::NONE,
+                    },
+                ]);
+            }
+            for _ in 0..3 {
+                frame(vec![]);
+            }
+            let popup = response.id.with("popup");
+            assert!(egui::Popup::is_id_open(&ctx, popup));
+            let rect = ctx.read_response(popup).expect("chat context menu").rect;
+            assert!(
+                (190.0..=240.0).contains(&rect.width()),
+                "a {width}-point window produced a {}-point menu",
+                rect.width()
+            );
+        }
+    }
 
     #[test]
     fn alt_navigation_scrolls_the_destination_chat_into_view() {

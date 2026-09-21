@@ -832,6 +832,7 @@ pub fn apply_flags(app: &mut App, page: Option<&str>) {
     for part in page.split(',').map(str::trim) {
         match part {
             "chat" | "" => {}
+            "chat-menu" => app.open_chat_menu = Some(app.chats[0].id.clone()),
             "empty" => app.open_chat = None,
             "channel" => {
                 let id = "fixture@newsletter";
@@ -1479,6 +1480,7 @@ mod tests {
             render(&mut app, &ctx);
         }
         for page in [
+            "chat-menu",
             "channel",
             "locked",
             "locked-open",
