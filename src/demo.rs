@@ -851,6 +851,13 @@ pub fn apply_flags(app: &mut App, page: Option<&str>) {
                 app.chats[0].locked = true;
                 app.open_chat = None;
             }
+            "locked-open" => {
+                app.chats[0].locked = true;
+                app.settings.set_chat_lock_code(Some("demo-code"));
+                app.search = "demo-code".into();
+                app.locked_folder = true;
+                app.open_chat = Some(app.chats[0].id.clone());
+            }
             "keyring" => {
                 unlink(app);
                 app.link = LinkStatus::Failed("The archive is encrypted but its OS keyring key is missing. Restore the original keyring; the archive has not been changed".into());
@@ -1430,6 +1437,38 @@ mod tests {
     }
 
     #[test]
+    fn locked_folder_explains_its_read_only_state() {
+        let mut app = app();
+        apply_flags(&mut app, Some("locked-open"));
+        let ctx = egui::Context::default();
+        app.attach(&ctx);
+        ctx.enable_accesskit();
+        assert!(!app.current_chat().unwrap().can_send());
+        let mut output = ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    egui::vec2(1180.0, 780.0),
+                )),
+                ..Default::default()
+            },
+            |ui| app.frame_ui(ui),
+        );
+        output.textures_delta.clear();
+        let tree = output.platform_output.accesskit_update.unwrap();
+        let labels: Vec<_> = tree
+            .nodes
+            .iter()
+            .filter_map(|(_, node)| node.label().or_else(|| node.value()))
+            .collect();
+        assert!(
+            labels.contains(&"Locked chats are read-only in ZapFast"),
+            "{labels:?}"
+        );
+        assert!(!labels.contains(&"admins"));
+    }
+
+    #[test]
     fn every_surface_lays_out() {
         let mut app = app();
         let ctx = egui::Context::default();
@@ -1442,6 +1481,7 @@ mod tests {
         for page in [
             "channel",
             "locked",
+            "locked-open",
             "keyring",
             "empty",
             "rtl",

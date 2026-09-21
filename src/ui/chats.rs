@@ -75,7 +75,9 @@ fn header(app: &mut App, ui: &mut egui::Ui) {
                     .clicked()
                     {
                         app.show_archived = false;
-                        app.locked_folder = false;
+                        if app.locked_folder {
+                            app.actions.push(Action::CloseLockedFolder);
+                        }
                     }
                     theme::text(
                         ui,
@@ -193,7 +195,9 @@ fn macos_header(app: &mut App, ui: &mut egui::Ui) {
                     .clicked()
                     {
                         app.show_archived = false;
-                        app.locked_folder = false;
+                        if app.locked_folder {
+                            app.actions.push(Action::CloseLockedFolder);
+                        }
                     }
                     theme::text(
                         ui,
@@ -297,10 +301,7 @@ fn filter_chips(app: &mut App, ui: &mut egui::Ui) {
 
 fn list(app: &mut App, ui: &mut egui::Ui) {
     let palette = app.palette;
-    if app.locked_folder && !app.secret_code_matched() {
-        app.locked_folder = false;
-    }
-    if app.locked_folder {
+    if app.locked_folder_open() {
         locked_list(app, ui);
         return;
     }
@@ -467,7 +468,7 @@ fn locked_entry(app: &mut App, ui: &mut egui::Ui) {
         .on_hover_cursor(egui::CursorIcon::PointingHand)
         .clicked()
     {
-        app.locked_folder = true;
+        app.actions.push(Action::OpenLockedFolder);
     }
 }
 

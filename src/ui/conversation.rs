@@ -713,6 +713,12 @@ fn composer(app: &mut App, ui: &mut egui::Ui, chat: &Chat) {
                     });
                     return;
                 }
+                if chat.locked {
+                    ui.vertical_centered(|ui| {
+                        theme::text(ui, "Locked chats are read-only in ZapFast", theme::regular(13.5), palette.secondary);
+                    });
+                    return;
+                }
                 ui.vertical_centered(|ui| {
                     ui.add_space(8.0);
                     ui.horizontal(|ui| {

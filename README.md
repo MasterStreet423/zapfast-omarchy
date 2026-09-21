@@ -63,6 +63,8 @@ See **[zapfast.rocks](https://zapfast.rocks)** for downloads and guides.
   and unrecognized attachment formats open their containing folder instead.
 - **Send attachments with captions.** Paste a picture, drop files, or use the
   file picker. They stay in the composer until you send them or press Escape.
+  Pasting a picture uses its image data without adding the source URL or HTML
+  to your caption. Text-only clipboard contents still paste as text.
 - **Mute chats** for eight hours, one week, or indefinitely. The setting also
   applies on your phone and to desktop notifications. Mute changes from your
   phone survive history arriving later, including during initial linking.
@@ -302,8 +304,10 @@ with your phone and other linked devices.
 
 Set a **secret code for locked chats** in Settings, then type the code in the
 search field: a "Locked chats" entry appears below the search. Click it to
-open the folder; leaving it (back button, or changing the search) hides the
-locked chats again until you retype the code.
+open the folder. Leaving it, changing or clearing the code, or closing the
+window hides the locked chats and closes any open locked conversation. Retype
+the code to reveal them again. Revealed locked chats are currently read-only:
+sending messages and forwarding into them remain disabled.
 
 On the first start after upgrading, chats wait for WhatsApp's lock-state
 recovery before appearing. Failed recovery retries while keeping chats hidden.
@@ -314,7 +318,8 @@ logging. Panic logs record the source location without the panic payload.
 Pairing signature failures and rate limits retain a diagnostic category.
 
 Offline previews for these states use `--demo --demo-page channel`,
-`--demo --demo-page locked`, and `--demo --demo-page keyring`.
+`--demo --demo-page locked`, `--demo --demo-page locked-open`, and
+`--demo --demo-page keyring`. The open locked-folder preview uses `demo-code`.
 
 The protocol dependency includes the upstream WhatsApp Business pairing fix.
 Device-store migration waits until an updated window is acknowledged, preserving
@@ -410,6 +415,8 @@ ZAPFAST_GIPHY_KEY=your-key cargo build --release
 The earlier `FASTSAPP_GIPHY_KEY` build variable remains supported as a fallback.
 
 `AGENTS.md` describes the architecture and the rules for changes.
+CI checks the complete lockfile against RustSec advisories with `cargo audit`.
+For the manual checks before a release, see [Release testing](RELEASE_TESTING.md).
 
 ### Recording a demo
 

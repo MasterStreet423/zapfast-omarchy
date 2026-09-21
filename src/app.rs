@@ -169,6 +169,8 @@ pub struct App {
     avatar_full_requests: HashSet<String>,
     /// Whether files are being dragged over the window.
     pub dropping: bool,
+    /// A text paste already handled the clipboard before the shortcut release.
+    paste_before_release: bool,
     /// Open emoji, GIF, or sticker picker tab.
     pub picker: Option<PickerTab>,
     /// Picker anchor at the composer button.
@@ -397,6 +399,7 @@ impl App {
             avatars_full: HashMap::new(),
             avatar_full_requests: HashSet::new(),
             dropping: false,
+            paste_before_release: false,
             picker: None,
             picker_anchor: None,
             picker_search: String::new(),
@@ -474,6 +477,11 @@ impl App {
 
     /// Updates the linked app while no window exists.
     pub fn window_gone(&mut self) {
+        if self.locked_folder || self.secret_code_matched() {
+            self.close_locked_folder();
+            self.search.clear();
+            self.search_hits.clear();
+        }
         self.window_hidden = true;
         self.window_focused = false;
         self.hide_intent = false;
@@ -603,6 +611,7 @@ impl App {
         self.applied_dark = None;
         self.zoom_applied = false;
         self.window_hidden = false;
+        self.paste_before_release = false;
         self.hide_intent = false;
         self.wants_show = false;
         self.refocus_composer(ctx);
@@ -634,7 +643,10 @@ impl App {
     }
 
     pub fn current_chat(&self) -> Option<&Chat> {
-        self.open_chat.as_deref().and_then(|id| self.chat(id))
+        self.open_chat
+            .as_deref()
+            .and_then(|id| self.chat(id))
+            .filter(|chat| !chat.locked || self.locked_folder_open())
     }
 
     /// Resolves an address-book, push, phone-number, or fallback name.
@@ -1366,6 +1378,16 @@ impl App {
         }
         self.chats
             .sort_by_key(|chat| std::cmp::Reverse(chat.last_activity));
+    }
+
+    fn close_locked_folder(&mut self) {
+        self.locked_folder = false;
+        self.chat_lock_check.borrow_mut().take();
+        if let Some(id) = self.open_chat.clone()
+            && self.chat(&id).is_some_and(|chat| chat.locked)
+        {
+            self.hide_locked_chat(&id);
+        }
     }
 
     fn hide_locked_chat(&mut self, id: &str) {
@@ -2514,7 +2536,7 @@ impl App {
                 // Editing the search away from the secret code hides the
                 // locked folder again, like leaving the phone's home screen.
                 if !self.secret_code_matched() {
-                    self.locked_folder = false;
+                    self.close_locked_folder();
                 }
                 if query.is_empty() {
                     self.search_hits.clear();
@@ -2575,6 +2597,23 @@ impl App {
             }
             Action::DismissChatLockHint => {
                 self.settings.chat_lock_hint_dismissed = true;
+                self.mark_settings_dirty();
+            }
+            Action::OpenLockedFolder => {
+                if self.secret_code_matched() {
+                    self.locked_folder = true;
+                }
+            }
+            Action::CloseLockedFolder => {
+                self.close_locked_folder();
+                self.search.clear();
+                self.search_hits.clear();
+            }
+            Action::SetChatLockCode(code) => {
+                self.settings.set_chat_lock_code(code.as_deref());
+                self.close_locked_folder();
+                self.search.clear();
+                self.search_hits.clear();
                 self.mark_settings_dirty();
             }
             Action::SettingsChanged => self.mark_settings_dirty(),
@@ -2654,8 +2693,7 @@ impl App {
         }
         self.handle_tray();
         #[cfg(target_os = "macos")]
-        self.actions
-            .extend(crate::macos::drain(ctx, self.window_hidden));
+        self.actions.extend(crate::macos::drain(self.window_hidden));
         self.handle_control_commands();
         self.poll_custom_themes();
         self.handle_notification_opens();
@@ -2817,7 +2855,7 @@ impl App {
 
     /// Handles dropped files and pasted images for the open chat.
     fn take_drops_and_pastes(&mut self, ctx: &egui::Context) {
-        let (dropped, hovering, paste) = ctx.input(|input| {
+        let (dropped, hovering) = ctx.input(|input| {
             let dropped: Vec<PathBuf> = input
                 .raw
                 .dropped_files
@@ -2825,25 +2863,76 @@ impl App {
                 .map(|file| file.path().to_path_buf())
                 .collect();
             let hovering = !input.raw.hovered_files.is_empty();
-            (dropped, hovering, wants_paste(input))
+            (dropped, hovering)
         });
         self.dropping = hovering && self.open_chat.is_some();
         if !dropped.is_empty() {
             self.actions.push(Action::SendFiles(dropped));
         }
+        self.take_image_paste(ctx, clipboard_image);
+    }
+
+    fn take_image_paste(
+        &mut self,
+        ctx: &egui::Context,
+        read_image: impl FnOnce() -> Option<(usize, usize, Vec<u8>)>,
+    ) {
+        let (paste, text, released, focused, command) = ctx.input(|input| {
+            (
+                wants_paste(input),
+                input
+                    .events
+                    .iter()
+                    .any(|event| matches!(event, egui::Event::Paste(_))),
+                input.events.iter().any(|event| {
+                    matches!(
+                        event,
+                        egui::Event::Key {
+                            key: egui::Key::V,
+                            pressed: false,
+                            ..
+                        }
+                    )
+                }),
+                input.focused,
+                input.modifiers.command,
+            )
+        });
+        let requested = paste && (text || !self.paste_before_release);
+        if released || !focused {
+            self.paste_before_release = false;
+        } else if text {
+            // A menu paste has no key release to wait for.
+            self.paste_before_release = command;
+        }
         // Handle image paste only when the composer or no field has focus.
         let composing = ctx.memory(|memory| {
             memory.has_focus(egui::Id::new("composer-text")) || memory.focused().is_none()
         });
-        if paste && composing && self.open_chat.is_some() {
-            // egui handles text paste; the app handles clipboard images.
-            if let Some(image) = clipboard_image() {
-                self.actions.push(Action::PasteImage {
-                    width: image.0,
-                    height: image.1,
-                    rgba: image.2,
-                });
-            }
+        if requested
+            && focused
+            && composing
+            && self.page == Page::Chats
+            && self.dialog.is_none()
+            && self
+                .open_chat
+                .as_deref()
+                .and_then(|id| self.chat(id))
+                .is_some_and(Chat::can_send)
+            && let Some((width, height, rgba)) = read_image()
+        {
+            // A browser can offer both pixels and its source URL. Consume the
+            // text before the composer sees it, keeping any existing caption.
+            ctx.input_mut(|input| {
+                input
+                    .events
+                    .retain(|event| !matches!(event, egui::Event::Paste(_)))
+            });
+            self.actions.push(Action::PasteImage {
+                width,
+                height,
+                rgba,
+            });
         }
     }
 
@@ -3012,15 +3101,16 @@ fn mention_refs(ids: &[String]) -> Vec<crate::model::MentionRef> {
 
 pub fn wants_paste(input: &egui::InputState) -> bool {
     input.events.iter().any(|event| {
-        matches!(
-            event,
-            egui::Event::Key {
-                key: egui::Key::V,
-                pressed: false,
-                modifiers,
-                ..
-            } if modifiers.command
-        )
+        matches!(event, egui::Event::Paste(_))
+            || matches!(
+                event,
+                egui::Event::Key {
+                    key: egui::Key::V,
+                    pressed: false,
+                    modifiers,
+                    ..
+                } if modifiers.command
+            )
     })
 }
 
@@ -3049,6 +3139,174 @@ mod tests {
     fn app() -> App {
         let root = std::env::temp_dir().join(format!("zapfast-app-{}", std::process::id()));
         App::headless(AppDirs::under(&root), Settings::default()).0
+    }
+
+    fn paste_release() -> egui::Event {
+        egui::Event::Key {
+            key: egui::Key::V,
+            physical_key: None,
+            pressed: false,
+            repeat: false,
+            modifiers: egui::Modifiers::COMMAND,
+        }
+    }
+
+    fn clipboard_frame(
+        app: &mut App,
+        ctx: &egui::Context,
+        mut events: Vec<egui::Event>,
+        image: bool,
+    ) -> usize {
+        let mut reads = 0;
+        events.insert(0, egui::Event::ModifiersChanged(egui::Modifiers::COMMAND));
+        let mut output = ctx.run_ui(
+            egui::RawInput {
+                events,
+                ..Default::default()
+            },
+            |ui| {
+                app.take_image_paste(ui.ctx(), || {
+                    reads += 1;
+                    image.then(|| (2, 2, vec![200; 16]))
+                });
+                ui.add(
+                    egui::TextEdit::singleline(&mut app.composer)
+                        .id(egui::Id::new("composer-text")),
+                );
+                app.apply_actions(ui.ctx());
+            },
+        );
+        output.textures_delta.clear();
+        reads
+    }
+
+    fn clipboard_app() -> (App, egui::Context) {
+        let mut app = app();
+        app.open_chat = Some("fixture".into());
+        app.chats
+            .push(Chat::new("fixture".into(), "Fixture".into()));
+        app.composer = "caption".into();
+        let ctx = egui::Context::default();
+        ctx.memory_mut(|memory| memory.request_focus(egui::Id::new("composer-text")));
+        clipboard_frame(&mut app, &ctx, vec![], false);
+        (app, ctx)
+    }
+
+    #[test]
+    fn image_paste_consumes_source_text_and_stages_once_across_frames() {
+        let (mut app, ctx) = clipboard_app();
+        let reads = clipboard_frame(
+            &mut app,
+            &ctx,
+            vec![egui::Event::Paste("https://example.org/picture.png".into())],
+            true,
+        );
+        assert_eq!(reads, 1);
+        assert_eq!(app.pending.len(), 1);
+        assert_eq!(app.composer, "caption");
+        assert_eq!(
+            clipboard_frame(&mut app, &ctx, vec![paste_release()], true),
+            0
+        );
+        assert_eq!(
+            app.pending.len(),
+            1,
+            "release must not duplicate the picture"
+        );
+        assert_eq!(
+            clipboard_frame(&mut app, &ctx, vec![paste_release()], true),
+            1
+        );
+        assert_eq!(app.pending.len(), 2, "a later image-only paste still works");
+    }
+
+    #[test]
+    fn a_menu_paste_does_not_suppress_a_later_image_only_shortcut() {
+        let (mut app, ctx) = clipboard_app();
+        let mut output = ctx.run_ui(
+            egui::RawInput {
+                events: vec![
+                    egui::Event::ModifiersChanged(egui::Modifiers::NONE),
+                    egui::Event::Paste("fixture URL".into()),
+                ],
+                ..Default::default()
+            },
+            |ui| {
+                app.take_image_paste(ui.ctx(), || Some((2, 2, vec![200; 16])));
+                app.apply_actions(ui.ctx());
+            },
+        );
+        output.textures_delta.clear();
+        assert_eq!(app.pending.len(), 1);
+        clipboard_frame(&mut app, &ctx, vec![paste_release()], true);
+        assert_eq!(app.pending.len(), 2);
+    }
+
+    #[test]
+    fn image_paste_handles_press_and_release_in_one_frame() {
+        let (mut app, ctx) = clipboard_app();
+        clipboard_frame(
+            &mut app,
+            &ctx,
+            vec![
+                egui::Event::Paste("<img src='fixture'>".into()),
+                paste_release(),
+            ],
+            true,
+        );
+        assert_eq!(app.pending.len(), 1);
+        assert_eq!(app.composer, "caption");
+        clipboard_frame(&mut app, &ctx, vec![paste_release()], true);
+        assert_eq!(app.pending.len(), 2);
+    }
+
+    #[test]
+    fn text_paste_is_preserved_when_the_clipboard_has_no_image() {
+        let (mut app, ctx) = clipboard_app();
+        clipboard_frame(
+            &mut app,
+            &ctx,
+            vec![egui::Event::Paste("plain text".into())],
+            false,
+        );
+        assert!(app.composer.contains("plain text"));
+        assert!(app.pending.is_empty());
+        assert_eq!(
+            clipboard_frame(&mut app, &ctx, vec![paste_release()], true),
+            0,
+            "a clipboard change before release must not stage an unrelated image"
+        );
+        assert!(app.pending.is_empty());
+    }
+
+    #[test]
+    fn image_paste_only_reads_the_clipboard_for_a_writable_composer() {
+        for state in ["search", "dialog", "settings", "read-only", "closed"] {
+            let (mut app, ctx) = clipboard_app();
+            match state {
+                "search" => ctx.memory_mut(|memory| memory.request_focus(egui::Id::new("search"))),
+                "dialog" => app.dialog = Some(Dialog::NewContact),
+                "settings" => app.page = Page::Settings,
+                "read-only" => app.chats[0].read_only = true,
+                "closed" => app.open_chat = None,
+                _ => unreachable!(),
+            }
+            let reads = clipboard_frame(
+                &mut app,
+                &ctx,
+                vec![egui::Event::Paste("fixture".into())],
+                true,
+            );
+            assert_eq!(reads, 0, "{state}");
+            assert!(app.pending.is_empty(), "{state}");
+            assert!(
+                ctx.input(|input| input
+                    .events
+                    .iter()
+                    .any(|event| matches!(event, egui::Event::Paste(_)))),
+                "{state}"
+            );
+        }
     }
 
     #[test]
@@ -3500,6 +3758,58 @@ mod tests {
         app.apply(Action::KeepUnread("2@s.whatsapp.net".into()), &ctx);
         app.apply(Action::SetChatFilter(ChatFilter::Unread), &ctx);
         assert!(app.visible_chats().is_empty());
+    }
+
+    #[test]
+    fn leaving_the_locked_folder_closes_its_open_conversation() {
+        let mut app = app();
+        let ctx = egui::Context::default();
+        let mut chat = Chat::new("fixture".into(), "Fixture".into());
+        chat.locked = true;
+        app.chats.push(chat);
+        app.settings.set_chat_lock_code(Some("fixture-code"));
+        app.search = "fixture-code".into();
+        app.locked_folder = true;
+        app.open_chat("fixture".into());
+        assert!(app.current_chat().is_some());
+        app.composer = "fixture draft".into();
+        app.reply_to = Some("fixture-message".into());
+        app.apply(Action::Search(String::new()), &ctx);
+        assert!(app.current_chat().is_none());
+        assert!(app.open_chat.is_none());
+        assert!(app.composer.is_empty());
+        assert!(app.reply_to.is_none());
+        assert_eq!(app.drafts["fixture"], "fixture draft");
+    }
+
+    #[test]
+    fn locked_conversations_close_on_back_code_changes_and_window_close() {
+        for exit in ["back", "change-code", "clear-code", "window"] {
+            let mut app = app();
+            let ctx = egui::Context::default();
+            let mut chat = Chat::new("fixture".into(), "Fixture".into());
+            chat.locked = true;
+            app.chats.push(chat);
+            app.settings.set_chat_lock_code(Some("fixture-code"));
+            app.search = "wrong-code".into();
+            app.apply(Action::OpenLockedFolder, &ctx);
+            assert!(!app.locked_folder);
+            app.search = "fixture-code".into();
+            app.apply(Action::OpenLockedFolder, &ctx);
+            app.open_chat("fixture".into());
+            assert!(app.current_chat().is_some());
+            match exit {
+                "back" => app.apply(Action::CloseLockedFolder, &ctx),
+                "change-code" => app.apply(Action::SetChatLockCode(Some("new-code".into())), &ctx),
+                "clear-code" => app.apply(Action::SetChatLockCode(None), &ctx),
+                "window" => app.window_gone(),
+                _ => unreachable!(),
+            }
+            assert!(!app.locked_folder, "{exit}");
+            assert!(app.current_chat().is_none(), "{exit}");
+            assert!(app.open_chat.is_none(), "{exit}");
+            assert!(app.search.is_empty(), "{exit}");
+        }
     }
 
     #[test]

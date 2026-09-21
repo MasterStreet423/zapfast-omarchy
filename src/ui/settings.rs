@@ -144,15 +144,13 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
                                 );
                                 if response.changed() {
                                     let trimmed = code.trim().to_owned();
-                                    app.settings.set_chat_lock_code(Some(&trimmed));
-                                    app.actions.push(Action::SettingsChanged);
+                                    app.actions.push(Action::SetChatLockCode(Some(trimmed)));
                                 }
                                 if app.settings.chat_lock_code_hash.is_some()
                                     && ui.small_button("Clear").clicked()
                                 {
                                     code.clear();
-                                    app.settings.set_chat_lock_code(None);
-                                    app.actions.push(Action::SettingsChanged);
+                                    app.actions.push(Action::SetChatLockCode(None));
                                 }
                                 ui.data_mut(|data| data.insert_temp(code_id, code));
                             },

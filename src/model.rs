@@ -727,6 +727,9 @@ pub enum Action {
     FocusComposer,
     HideShortcutHints,
     DismissChatLockHint,
+    OpenLockedFolder,
+    CloseLockedFolder,
+    SetChatLockCode(Option<String>),
     ScrollToBottom,
     /// Scrolls the open chat to a message.
     ScrollTo(String),
