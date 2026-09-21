@@ -96,7 +96,7 @@
             # them in the fixed-output dependency tree, unlike cargoLock alone.
             cargoDeps = pkgs.rustPlatform.fetchCargoVendor {
               inherit pname version src;
-              hash = "sha256-h3Pqilaz6lpzKBgPuCWmcawAJljnHhsAmR0CrxW17BI=";
+              hash = "sha256-KdRJ5VEiEMs+aL3npQYfB1WTTWD4i8Yufbv/e+lIdx4=";
             };
 
             nativeBuildInputs = with pkgs; [
