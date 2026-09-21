@@ -13,9 +13,11 @@ Screenshots and recordings for release notes must use the offline demo.
 - **Locked chats, phone plus desktop.** Lock a test chat on the phone and confirm
   it disappears from the normal list, search, unread totals, notifications and
   forwarding destinations. Repeat while the chat is open, then restart ZapFast.
-  Set a local code in Settings: a wrong code must reveal nothing; the correct
-  code should reveal the locked folder. Leave the folder and clear search:
-  messages must become hidden again. Close the window while viewing a locked
+  Open Locked beside the filters and set a local code: a wrong code must reveal
+  nothing; the correct code should open the folder, including archived locked
+  chats. Search within it, then choose All: messages must become hidden again.
+  With no locked chats, the Locked chip should disappear. Filters stay on one
+  row, scrolling horizontally if needed. Close the window while viewing a locked
   chat, then reopen from the tray: the code must be required again. Change or
   remove the local code and check that the old code stops working. Unlock on
   the phone and confirm the chat returns. The local code is separate from the
@@ -44,6 +46,20 @@ Screenshots and recordings for release notes must use the offline demo.
 - **Keyboard focus.** Use Tab and Shift+Tab through chat rows, filters, Settings
   and a dialog. The focused control must be visible, outlined and scrolled into
   view. Enter or Space should activate it; mouse input should hide the outline.
+  The message input keeps an outline while active, and the voice button gets a
+  circular ring. Continue past it into message controls: no invisible targets,
+  and the conversation must reveal focused messages instead of snapping down.
+  `?` opens help outside text fields but types normally in the composer and search.
+- **New chat and group names.** Use the pencil or Ctrl+N (Command+N on macOS),
+  Message yourself, contact search and Add contact. Confirm the self-chat is not
+  duplicated. An unnamed group with repeated first names should use the same
+  counted summary in its title and subtitle, including after restart. Check a
+  group deliberately named "Group" still keeps its real name after metadata sync.
+- **Reactions.** Open a message menu, then +. The menu must stay visible beside
+  the emoji picker, with the target highlighted and previewed. Scroll over the
+  conversation: it must stay still; scrolling the emoji grid still works. Escape,
+  outside click and choosing a reaction close both. Repeated choices should rise
+  in quick reactions and survive restart; removing a reaction does not raise usage.
 - **Messaging.** Send text and a captioned picture in a direct chat and a group.
   Reply with a double-click, react with an emoji outside the quick list, edit a
   message, and verify the results on the phone. Check sent/delivered/read states

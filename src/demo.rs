@@ -852,6 +852,45 @@ pub fn apply_flags(app: &mut App, page: Option<&str>) {
                 app.chats[0].locked = true;
                 app.open_chat = None;
             }
+            "locked-prompt" => {
+                app.chats[0].locked = true;
+                app.settings.set_chat_lock_code(Some("demo-code"));
+                app.dialog = Some(crate::model::Dialog::UnlockLockedChats);
+                app.open_chat = None;
+            }
+            "locked-setup" => app.dialog = Some(crate::model::Dialog::UnlockLockedChats),
+            "new-chat" => app.dialog = Some(crate::model::Dialog::NewChat),
+            "unnamed-group" => {
+                app.typing.clear();
+                let mut ids = Vec::new();
+                for (index, name) in [
+                    "Andrea North",
+                    "Andrea South",
+                    "Andrea West",
+                    "Giacomo East",
+                ]
+                .iter()
+                .enumerate()
+                {
+                    let id = format!("1555000000{index}@s.whatsapp.net");
+                    app.contacts.insert(
+                        id.clone(),
+                        Contact {
+                            id: id.clone(),
+                            full_name: Some((*name).to_owned()),
+                            push_name: None,
+                        },
+                    );
+                    ids.push(id);
+                }
+                ids.push(ME.to_owned());
+                if let Some(chat) = app.chats.iter_mut().find(|chat| chat.is_group()) {
+                    chat.name = "Group".to_owned();
+                    chat.group_subject_known = false;
+                    chat.participants = ids;
+                    app.open_chat = Some(chat.id.clone());
+                }
+            }
             "locked-open" => {
                 app.chats[0].locked = true;
                 app.settings.set_chat_lock_code(Some("demo-code"));
@@ -1234,6 +1273,8 @@ pub fn apply_flags(app: &mut App, page: Option<&str>) {
             "react-picker" => {
                 let chat = SAMPLES[0].id.to_owned();
                 app.reaction_target = Some((chat, "ada-link".into()));
+                app.scroll_to_bottom = false;
+                app.scroll_anchor = Some("ada-link".into());
                 app.picker_focus = true;
                 app.settings.recent_emoji = vec![
                     "👍".into(),
@@ -1243,10 +1284,18 @@ pub fn apply_flags(app: &mut App, page: Option<&str>) {
                     "🎉".into(),
                     "🔥".into(),
                 ];
+                app.settings.reaction_emoji = app
+                    .settings
+                    .recent_emoji
+                    .iter()
+                    .map(|emoji| (emoji.clone(), 1))
+                    .collect();
             }
             "react-picker-empty" => {
                 let chat = SAMPLES[0].id.to_owned();
                 app.reaction_target = Some((chat, "ada-link".into()));
+                app.scroll_to_bottom = false;
+                app.scroll_anchor = Some("ada-link".into());
                 app.picker_focus = true;
                 app.settings.recent_emoji.clear();
             }
@@ -1484,6 +1533,10 @@ mod tests {
             "channel",
             "locked",
             "locked-open",
+            "locked-prompt",
+            "locked-setup",
+            "new-chat",
+            "unnamed-group",
             "keyring",
             "empty",
             "rtl",
@@ -1929,6 +1982,66 @@ mod tests {
             "switching chats must drop the previous reaction target"
         );
         assert!(app.reaction_anchor.is_none());
+    }
+
+    #[test]
+    fn reaction_picker_keeps_its_menu_and_target_visible_and_freezes_the_chat() {
+        let mut app = app();
+        let ctx = egui::Context::default();
+        app.attach(&ctx);
+        render(&mut app, &ctx);
+        apply_flags(&mut app, Some("react-picker"));
+        for _ in 0..3 {
+            render(&mut app, &ctx);
+        }
+        let id = crate::ui::conversation::bubble_id(sample_ids()[0], "ada-link");
+        let menu = ctx
+            .data(|data| data.get_temp::<egui::Rect>(id.with("menu-rect")))
+            .unwrap();
+        let picker = ctx
+            .data(|data| data.get_temp::<egui::Rect>(egui::Id::new("reaction-picker-rect")))
+            .unwrap();
+        assert!(egui::Popup::is_id_open(&ctx, id.with("popup")));
+        assert!(
+            !menu.intersects(picker),
+            "menu {menu:?} overlaps picker {picker:?}"
+        );
+        let before = ctx
+            .data(|data| data.get_temp::<egui::Rect>(id.with("rect")))
+            .unwrap();
+        assert!(before.intersects(ctx.content_rect()), "target is visible");
+        frame_with(
+            &mut app,
+            &ctx,
+            vec![
+                egui::Event::PointerMoved(egui::pos2(1150.0, 400.0)),
+                egui::Event::MouseWheel {
+                    unit: egui::MouseWheelUnit::Point,
+                    phase: egui::TouchPhase::Move,
+                    delta: egui::vec2(0.0, 180.0),
+                    modifiers: egui::Modifiers::NONE,
+                },
+            ],
+        );
+        render(&mut app, &ctx);
+        let after = ctx
+            .data(|data| data.get_temp::<egui::Rect>(id.with("rect")))
+            .unwrap();
+        assert_eq!(before, after, "wheel does not move the target conversation");
+        frame_with(
+            &mut app,
+            &ctx,
+            vec![egui::Event::Key {
+                key: egui::Key::Escape,
+                physical_key: None,
+                pressed: true,
+                repeat: false,
+                modifiers: egui::Modifiers::NONE,
+            }],
+        );
+        render(&mut app, &ctx);
+        assert!(app.reaction_target.is_none());
+        assert!(!egui::Popup::is_id_open(&ctx, id.with("popup")));
     }
 
     #[test]
@@ -2805,6 +2918,190 @@ mod tests {
             ],
         );
         assert_eq!(ring(&ctx), None, "the pointer hides the outline");
+    }
+
+    #[test]
+    fn composer_focus_uses_the_whole_field_and_tab_uses_a_circular_record_ring() {
+        let mut app = app();
+        app.settings.show_shortcut_hints = true;
+        let ctx = egui::Context::default();
+        app.attach(&ctx);
+        render(&mut app, &ctx);
+        let input = egui::Id::new("composer-text");
+        ctx.memory_mut(|memory| memory.request_focus(input));
+        frame_sized(&mut app, &ctx, 780.0, Vec::new());
+        let field = ctx
+            .data(|data| data.get_temp::<crate::theme::FocusOutline>(input.with("focus-outline")))
+            .unwrap();
+        let text = ctx.read_response(input).unwrap();
+        assert!(field.rect.contains_rect(text.rect));
+        assert!(field.rect.width() > text.rect.width());
+        assert_eq!(
+            ring(&ctx),
+            Some(field.rect),
+            "input focus stays inside the field"
+        );
+        assert_eq!(
+            ctx.data(
+                |data| data.get_temp::<egui::LayerId>(crate::ui::focus_ring_id().with("layer"))
+            ),
+            Some(text.layer_id)
+        );
+        frame_sized(&mut app, &ctx, 780.0, tab());
+        frame_sized(&mut app, &ctx, 780.0, Vec::new());
+        let focused = ctx.memory(|memory| memory.focused()).unwrap();
+        let record = ctx
+            .data(|data| data.get_temp::<crate::theme::FocusOutline>(focused.with("focus-outline")))
+            .unwrap();
+        assert!((record.radius * 2.0 - record.rect.width()).abs() < 0.01);
+        assert_eq!(record.rect.width(), record.rect.height());
+        assert_eq!(ring(&ctx), Some(record.rect.expand(2.0)));
+        // Continue past record, including hints, message controls and search.
+        for _ in 0..30 {
+            frame_sized(&mut app, &ctx, 780.0, tab());
+            for _ in 0..3 {
+                frame_sized(&mut app, &ctx, 780.0, Vec::new());
+            }
+            if let Some(id) = ctx.memory(|memory| memory.focused()) {
+                let response = ctx.read_response(id).expect("focused target is rendered");
+                assert!(
+                    ring(&ctx).is_some(),
+                    "missing outline for {id:?}: {:?}",
+                    response.rect
+                );
+                assert!(
+                    response.interact_rect.is_positive(),
+                    "focus is visible: {id:?} {:?} {:?}",
+                    response.rect,
+                    response.interact_rect
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn filters_stay_on_one_line_and_locked_is_only_shown_when_needed() {
+        let mut app = app();
+        for chat in &mut app.chats {
+            chat.locked = false;
+        }
+        app.open_chat = None;
+        let ctx = egui::Context::default();
+        app.attach(&ctx);
+        render(&mut app, &ctx);
+        let locked_id = egui::Id::new("locked-chip");
+        assert!(
+            ctx.data(|data| data.get_temp::<egui::Rect>(locked_id))
+                .is_none()
+        );
+        app.chats[0].locked = true;
+        render(&mut app, &ctx);
+        let locked = ctx
+            .data(|data| data.get_temp::<egui::Rect>(locked_id))
+            .unwrap();
+        for filter in crate::model::ChatFilter::EVERY {
+            let rect = ctx
+                .data(|data| data.get_temp::<egui::Rect>(crate::ui::chats::filter_chip_id(filter)))
+                .unwrap();
+            assert!((rect.top() - locked.top()).abs() < 0.1);
+        }
+    }
+
+    #[test]
+    fn tab_after_record_does_not_focus_a_group_sender_or_passive_message() {
+        let mut app = app();
+        let group = app
+            .chats
+            .iter()
+            .find(|chat| chat.is_group())
+            .unwrap()
+            .id
+            .clone();
+        let sender = "15550000123@s.whatsapp.net";
+        app.contacts.insert(
+            sender.into(),
+            Contact {
+                id: sender.into(),
+                full_name: Some("Alex Fixture".into()),
+                push_name: None,
+            },
+        );
+        let mut row = message(
+            &group,
+            "plain-group-message",
+            false,
+            crate::util::now(),
+            Content::text("A synthetic message"),
+        );
+        row.sender = sender.into();
+        app.conversations.get_mut(&group).unwrap().messages = vec![row];
+        app.open_chat = Some(group.clone());
+        app.settings.show_shortcut_hints = false;
+        app.focus_composer = true;
+        let ctx = egui::Context::default();
+        app.attach(&ctx);
+        render(&mut app, &ctx);
+        let bubble = crate::ui::conversation::bubble_id(&group, "plain-group-message");
+        assert!(!ctx.read_response(bubble).unwrap().sense.is_focusable());
+        for _ in 0..2 {
+            frame_sized(&mut app, &ctx, 780.0, tab());
+            render(&mut app, &ctx);
+        }
+        let focused = ctx
+            .memory(|memory| memory.focused())
+            .and_then(|id| ctx.read_response(id))
+            .unwrap();
+        assert!(
+            focused.rect.center().x < app.settings.sidebar_width || focused.rect.center().y < 150.0,
+            "Tab returns to navigation, not the group sender: {:?}",
+            focused.rect
+        );
+        assert!(ring(&ctx).is_some());
+        frame_with(
+            &mut app,
+            &ctx,
+            vec![egui::Event::Key {
+                key: egui::Key::Enter,
+                physical_key: None,
+                pressed: true,
+                repeat: false,
+                modifiers: egui::Modifiers::NONE,
+            }],
+        );
+        assert_ne!(
+            app.dialog,
+            Some(crate::model::Dialog::ChatInfo(sender.into()))
+        );
+    }
+
+    #[test]
+    fn question_mark_opens_help_but_never_steals_it_from_text_fields() {
+        let mut app = app();
+        let ctx = egui::Context::default();
+        app.attach(&ctx);
+        render(&mut app, &ctx);
+        let input = egui::Id::new("composer-text");
+        ctx.memory_mut(|memory| memory.request_focus(input));
+        frame_sized(&mut app, &ctx, 780.0, Vec::new());
+        let events = || {
+            vec![
+                egui::Event::Key {
+                    key: egui::Key::Questionmark,
+                    physical_key: None,
+                    pressed: true,
+                    repeat: false,
+                    modifiers: egui::Modifiers::SHIFT,
+                },
+                egui::Event::Text("?".into()),
+            ]
+        };
+        frame_sized(&mut app, &ctx, 780.0, events());
+        assert_eq!(app.composer, "?");
+        assert!(app.dialog.is_none());
+        ctx.memory_mut(|memory| memory.surrender_focus(input));
+        frame_sized(&mut app, &ctx, 780.0, Vec::new());
+        frame_sized(&mut app, &ctx, 780.0, events());
+        assert_eq!(app.dialog, Some(crate::model::Dialog::Shortcuts));
     }
 
     /// The profile picture in the chat-list header is the first control Tab

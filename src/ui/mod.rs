@@ -89,38 +89,55 @@ fn track_keyboard_focus(ctx: &egui::Context) {
 }
 
 /// Outlines the focused widget after keyboard navigation. Custom widgets
-/// paint themselves and never showed focus; drawing the ring here covers all
-/// of them. Text fields are left out: their caret already shows focus.
+/// paint themselves; a shared fallback covers them while shaped controls and
+/// frameless editors register their visible bounds.
 fn focus_ring(app: &App, ctx: &egui::Context) {
     let keyboard = ctx.data(|data| {
         data.get_temp::<bool>(theme::keyboard_focus_id())
             .unwrap_or(false)
     });
-    if !keyboard || ctx.text_edit_focused() {
-        return;
-    }
     let Some(response) = ctx
         .memory(|memory| memory.focused())
         .and_then(|id| ctx.read_response(id))
     else {
         return;
     };
-    let rect = response.interact_rect;
+    // Keep the message input visibly active even when reached by clicking or
+    // a shortcut. A caret alone is easy to lose in a large conversation.
+    if !keyboard && response.id != egui::Id::new("composer-text") {
+        return;
+    }
+    let custom = ctx
+        .data(|data| data.get_temp::<theme::FocusOutline>(response.id.with("focus-outline")))
+        .filter(|outline| outline.frame == ctx.cumulative_frame_nr());
+    let rect = custom.map_or(response.interact_rect, |outline| outline.rect);
     if !rect.is_positive() {
         return;
     }
-    let ring = rect.expand(2.0);
-    ctx.layer_painter(egui::LayerId::new(
-        egui::Order::Tooltip,
-        egui::Id::new("focus-ring-layer"),
-    ))
-    .rect_stroke(
-        ring,
-        CornerRadius::same(theme::RADIUS_SMALL + 2),
-        Stroke::new(2.0, app.palette.accent),
-        egui::StrokeKind::Outside,
-    );
+    let composer = response.id == egui::Id::new("composer-text");
+    let ring = if composer { rect } else { rect.expand(2.0) };
+    let radius = custom.map_or(f32::from(theme::RADIUS_SMALL), |outline| outline.radius);
+    let clip = custom.map_or(response.interact_rect.expand(4.0), |outline| outline.clip);
+    // Paint in the control's own layer. A global Tooltip layer would put
+    // focus above dialogs, menus, and even toast notifications.
+    ctx.layer_painter(response.layer_id)
+        .with_clip_rect(clip)
+        .rect_stroke(
+            ring,
+            if composer { radius } else { radius + 2.0 },
+            if composer {
+                Stroke::new(1.0, app.palette.accent.gamma_multiply(0.65))
+            } else {
+                Stroke::new(2.0, app.palette.accent)
+            },
+            if composer {
+                egui::StrokeKind::Inside
+            } else {
+                egui::StrokeKind::Outside
+            },
+        );
     ctx.data_mut(|data| data.insert_temp(focus_ring_id(), ring));
+    ctx.data_mut(|data| data.insert_temp(focus_ring_id().with("layer"), response.layer_id));
 }
 
 /// Shows where dragged files will be sent.

@@ -94,7 +94,7 @@ pub fn selectable_rich_text(
 ) -> egui::Response {
     let width = ui.available_width().max(1.0);
     let line = line(ui, text, font, color, width, 1);
-    let (rect, response) = ui.allocate_exact_size(line.size(), Sense::click_and_drag());
+    let (rect, response) = ui.allocate_exact_size(line.size(), Sense::CLICK | Sense::DRAG);
     response
         .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Label, ui.is_enabled(), text));
     // Register emoji placements so copied text restores the original sequences.
@@ -157,6 +157,7 @@ pub fn clickable_avatar(
 ) -> egui::Response {
     let (rect, response) = ui.allocate_exact_size(Vec2::splat(size), Sense::click());
     theme::reveal_focus(&response);
+    theme::focus_outline(ui, response.id, rect, size / 2.0);
     response.widget_info(|| {
         egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), label)
     });
@@ -435,6 +436,7 @@ pub fn search_field(
             .desired_width(field_rect.width())
             .vertical_align(Align::Center),
     );
+    theme::focus_outline(ui, response.id, rect, height / 2.0);
     ui.ctx()
         .accesskit_node_builder(response.id, |node| node.set_label(hint));
     if !text.is_empty() {
@@ -568,8 +570,9 @@ pub fn filter_chip(
         (count > 0).then(|| painter.layout_no_wrap(count.to_string(), theme::regular(11.5), color));
     let gap = 5.0;
     let width = text.size().x + number.as_ref().map_or(0.0, |number| gap + number.size().x);
-    let (rect, response) = ui.allocate_exact_size(vec2(width + 22.0, 28.0), Sense::click());
+    let (rect, response) = ui.allocate_exact_size(vec2(width + 18.0, 28.0), Sense::click());
     theme::reveal_focus(&response);
+    theme::focus_outline(ui, response.id, rect, rect.height() / 2.0);
     if ui.is_rect_visible(rect) {
         let radius = rect.height() / 2.0;
         if selected {
@@ -586,7 +589,7 @@ pub fn filter_chip(
                 egui::StrokeKind::Inside,
             );
         }
-        let mut pos = pos2(rect.left() + 11.0, rect.center().y - text.size().y / 2.0);
+        let mut pos = pos2(rect.left() + 9.0, rect.center().y - text.size().y / 2.0);
         let advance = text.size().x + gap;
         ui.painter().galley(pos, text, color);
         if let Some(number) = number {

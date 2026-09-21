@@ -331,9 +331,32 @@ fn reaction_picker(app: &mut App, ctx: &egui::Context) {
     };
     let palette = app.palette;
     let screen = ctx.content_rect();
-    let outer_width = WIDTH + f32::from(FRAME_MARGIN) * 2.0;
+    let menu = ctx
+        .data(|data| {
+            data.get_temp::<Rect>(conversation::bubble_id(&chat, &message).with("menu-rect"))
+        })
+        .or(app.reaction_anchor);
+    let width = menu.map_or(WIDTH, |menu| {
+        (screen.right() - menu.right() - 32.0).clamp(260.0, WIDTH)
+    });
+    let outer_width = width + f32::from(FRAME_MARGIN) * 2.0;
     let outer_height = HEIGHT + f32::from(FRAME_MARGIN) * 2.0;
-    let pos = place_picker(screen, app.reaction_anchor, outer_width, outer_height);
+    let pos = if let Some(menu) = menu
+        && menu.right() + outer_width + 16.0 <= screen.right()
+    {
+        pos2(
+            menu.right() + 8.0,
+            menu.top()
+                .min((screen.bottom() - outer_height - 8.0).max(screen.top() + 8.0)),
+        )
+    } else {
+        place_picker(screen, menu, outer_width, outer_height)
+    };
+    let preview = app
+        .conversations
+        .get(&chat)
+        .and_then(|conversation| conversation.message(&message))
+        .map(|message| (app.display_name(&message.sender), message.content.summary()));
     let area = egui::Area::new(egui::Id::new("reaction-picker"))
         .fixed_pos(pos)
         .order(egui::Order::Foreground)
@@ -355,12 +378,49 @@ fn reaction_picker(app: &mut App, ctx: &egui::Context) {
                             color: palette.shadow,
                         })
                         .show(ui, |ui| {
-                            ui.set_width(WIDTH);
+                            ui.set_width(width);
                             ui.set_height(HEIGHT);
                             ui.spacing_mut().item_spacing.y = 6.0;
-                            let body_height = HEIGHT - 44.0;
+                            ui.horizontal(|ui| {
+                                theme::text(
+                                    ui,
+                                    "React to message",
+                                    theme::semibold(13.0),
+                                    palette.text,
+                                );
+                                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                                    if theme::icon_button(
+                                        ui,
+                                        Icon::X,
+                                        14.0,
+                                        palette.secondary,
+                                        palette.text,
+                                        "Close reactions",
+                                    )
+                                    .clicked()
+                                    {
+                                        app.actions.push(Action::ClosePicker);
+                                    }
+                                });
+                            });
+                            if let Some((name, summary)) = &preview {
+                                let line = widgets::line(
+                                    ui,
+                                    &format!("{name}: {summary}"),
+                                    theme::regular(12.0),
+                                    palette.secondary,
+                                    width,
+                                    1,
+                                );
+                                let (rect, _) = ui.allocate_exact_size(
+                                    vec2(width, line.size().y),
+                                    Sense::hover(),
+                                );
+                                line.paint(ui, rect.min, palette.secondary);
+                            }
+                            let body_height = HEIGHT - 100.0;
                             ui.allocate_ui_with_layout(
-                                vec2(WIDTH, body_height),
+                                vec2(width, body_height),
                                 Layout::top_down(Align::Min),
                                 |ui| {
                                     if let Some(emoji) = emoji_grid(
@@ -392,12 +452,12 @@ fn reaction_picker(app: &mut App, ctx: &egui::Context) {
             );
         });
     let rect = area.response.rect;
+    ctx.data_mut(|data| data.insert_temp(egui::Id::new("reaction-picker-rect"), rect));
     let clicked_outside = ctx.input(|input| {
         input.pointer.any_pressed()
-            && input
-                .pointer
-                .interact_pos()
-                .is_some_and(|pos| !rect.contains(pos))
+            && input.pointer.interact_pos().is_some_and(|pos| {
+                !rect.contains(pos) && !menu.is_some_and(|menu| menu.contains(pos))
+            })
     });
     if clicked_outside {
         app.actions.push(Action::ClosePicker);
@@ -405,7 +465,11 @@ fn reaction_picker(app: &mut App, ctx: &egui::Context) {
 }
 
 fn category_tabs(app: &mut App, ui: &mut egui::Ui, palette: &Palette) {
-    let has_recent = !usable_recent(&app.settings.recent_emoji).is_empty();
+    let has_recent = app
+        .settings
+        .reaction_emoji
+        .iter()
+        .any(|(emoji, _)| emojis::get(emoji).is_some());
     let tabs: Vec<_> = category_entries(has_recent).collect();
     let default = tabs.first().map(|(_, _, label)| *label);
     let current = visible_category(ui, "reaction-emoji-grid", &app.picker_search)
@@ -510,12 +574,18 @@ fn emoji_grid(
     let width = ui.available_width() - 6.0;
     let columns = ((width / CELL).floor() as usize).max(1);
     let cell = width / columns as f32;
-    let rows = rows_for(
-        &app.picker_search,
-        &app.settings.recent_emoji,
-        columns,
-        recent_label,
-    );
+    let frequent: Vec<_> = app
+        .settings
+        .reaction_emoji
+        .iter()
+        .map(|(emoji, _)| emoji.clone())
+        .collect();
+    let recent = if app.reaction_target.is_some() {
+        &frequent
+    } else {
+        &app.settings.recent_emoji
+    };
+    let rows = rows_for(&app.picker_search, recent, columns, recent_label);
     let emoji_count = rows
         .iter()
         .map(|row| match row {

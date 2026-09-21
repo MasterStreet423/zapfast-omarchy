@@ -132,7 +132,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
                             ui,
                             &palette,
                             "Secret code for locked chats",
-                            "Set a local ZapFast code, separate from your phone's secret code. Type it in the search field to reveal the locked-chats folder. Locked chats are hidden from the list, search, and notifications. Keep it empty to disable the code.",
+                            "Open the Locked tab in the chat list and enter this local ZapFast code, separate from your phone's code. Leaving the tab or closing the window locks it again. Locked chats are hidden from ordinary search and notifications. This is a local visibility control, not an extra encryption layer. Keep it empty to remove the code.",
                             |ui| {
                                 let response = ui.add(
                                     egui::TextEdit::singleline(&mut code)

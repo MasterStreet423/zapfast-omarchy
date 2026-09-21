@@ -30,6 +30,9 @@ See **[zapfast.rocks](https://zapfast.rocks)** for downloads and guides.
   Pinned chats stay in pin order (most recently pinned first), regardless of
   new messages. Chat and contact name searches ignore accents, so `Angel`
   finds `Ángel`.
+  The filters stay on one row and scroll horizontally in narrow sidebars.
+  Unnamed groups use a shared participant summary for their title and subtitle;
+  repeated first names appear as `Andrea ×3`, with your own entry shown as `You`.
   Typing indicators show other participants, excluding your own linked devices.
   Newsletter channels are read-only; publishing channel posts is not supported.
 - **Read state across devices.** Reading a chat syncs its unread badge with
@@ -56,8 +59,12 @@ See **[zapfast.rocks](https://zapfast.rocks)** for downloads and guides.
   accessibility services. Custom buttons, chat rows, settings switches and
   message text include readable labels. Windows NVDA navigation still needs
   platform verification; keyboard and screen-reader support is not complete.
-  After Tab, the focused control is outlined and scrolled into view; using
-  the mouse hides the outline again.
+  After Tab, the focused control is outlined and scrolled into view. Outlines
+  follow the control shape, including circular voice buttons and the whole
+  message input. The input uses a thin inset border while active; other outlines
+  hide when you use the mouse. Focus stays below menus, dialogs, and toasts.
+  Message text and sender names are not Tab stops. Keyboard navigation to message
+  controls releases conversation auto-scroll.
 - **Safer desktop opening.** Links open only web pages or email addresses.
   Common documents and media open in their default apps; executable, script,
   and unrecognized attachment formats open their containing folder instead.
@@ -84,6 +91,10 @@ See **[zapfast.rocks](https://zapfast.rocks)** for downloads and guides.
   an emoji without leaving the composer, or `@` in a group to mention a member.
   Reply, react with any emoji, edit, forward, delete, and check when a message was sent,
   delivered, or read.
+  The full reaction picker stays beside the message menu, highlights its target,
+  and shows a preview. The conversation stays still while you choose; the emoji
+  grid can scroll. Quick reactions learn from usage on this computer, independently
+  of inserted emoji. These preferences do not sync from the phone.
 - **Disappearing-message timers.** Outgoing messages use the chat's known
   timer, including replies, attachments, edits, and forwards. Forwarded copies
   use the destination chat's timer. Received messages remain in the local archive
@@ -151,7 +162,8 @@ See **[zapfast.rocks](https://zapfast.rocks)** for downloads and guides.
   selectable.
 - **Keyboard shortcuts.** `Ctrl+K` searches, `Alt+↑/↓` switches chats and
   keeps the active chat visible in the list, `Esc` cancels the current action,
-  `Ctrl+L` focuses the message input, and `Ctrl+/` lists all shortcuts (use
+  `Ctrl+L` focuses the message input, `Ctrl+N` opens New chat, and `?` (outside
+  text fields) or `Ctrl+/` opens Keyboard shortcuts (use
   Command instead of Ctrl on macOS). The × at the left of the shortcut hints
   hides the bar; restore it with **Show shortcut hints** in Settings.
 - **Local storage.** Messages, contacts and sticker metadata are stored in a
@@ -291,7 +303,9 @@ stay on the same network.
 Right-click a chat or message to open its menu. Double-click beside a message,
 or on its edge, to reply to it (a double-click on its text still selects the
 word). Open Settings from the gear or
-with `Ctrl+,`. Use the pencil to message a new number or save a contact. You
+with `Ctrl+,`. The pencil opens **New chat**, with **Message yourself** and
+**+ Add contact** at the top, followed by searchable contacts. Add contact also
+lets you message a new number without saving it. You
 can also open a group member's contact card. Saved names sync through WhatsApp
 to your phone and linked devices.
 
@@ -302,11 +316,14 @@ folder: it disappears from the chat list, search, and the unread badge, and
 its messages never raise a desktop notification. The lock state syncs
 with your phone and other linked devices.
 
-Set a **secret code for locked chats** in Settings, then type the code in the
-search field: a "Locked chats" entry appears below the search. Click it to
-open the folder. Leaving it, changing or clearing the code, or closing the
-window hides the locked chats and closes any open locked conversation. Retype
-the code to reveal them again. Revealed locked chats are currently read-only:
+Choose **Locked** beside the other chat filters and enter your local code.
+The tab appears when locked chats exist, without a count or names before opening.
+If no local code exists, it offers to set one up. The local code is separate
+from your phone's code and is a visibility control, not an extra encryption layer.
+Search inside the open tab filters its chats. Leaving it, changing or clearing
+the code in Settings, or closing the window hides the locked chats and closes
+any open locked conversation. Typing the code into ordinary search remains
+an alternative way in. Revealed locked chats are currently read-only:
 sending messages and forwarding into them remain disabled.
 
 On the first start after upgrading, chats wait for WhatsApp's lock-state
@@ -320,6 +337,8 @@ Pairing signature failures and rate limits retain a diagnostic category.
 Offline previews for these states use `--demo --demo-page channel`,
 `--demo --demo-page locked`, `--demo --demo-page locked-open`, and
 `--demo --demo-page keyring`. The open locked-folder preview uses `demo-code`.
+Use `--demo-page locked-prompt`, `locked-setup`, `new-chat`, `unnamed-group`,
+or `react-picker` for the new dialogs, shared group summaries, and reactions.
 
 The protocol dependency includes the upstream WhatsApp Business pairing fix.
 Device-store migration waits until an updated window is acknowledged, preserving

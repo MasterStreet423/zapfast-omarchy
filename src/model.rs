@@ -68,6 +68,8 @@ pub struct Chat {
     pub id: ChatId,
     /// Best known address-book, push, or phone-number name.
     pub name: String,
+    /// Distinguishes an actual subject "Group" from older cached placeholders.
+    pub group_subject_known: bool,
     pub kind: ChatKind,
     /// Latest-message Unix timestamp used for ordering.
     pub last_activity: i64,
@@ -106,6 +108,7 @@ impl Chat {
         Self {
             id,
             name,
+            group_subject_known: false,
             kind,
             last_activity: 0,
             unread: 0,
@@ -538,8 +541,12 @@ pub enum Dialog {
     ConfirmUnlink,
     /// Phone number used for pairing-code linking.
     PairWithPhone,
+    /// Contacts and the self-chat shortcut.
+    NewChat,
     /// Manually entered number for messaging or saving a contact.
     NewContact,
+    UnlockLockedChats,
+    ConfirmLockChat(ChatId),
     ChatInfo(ChatId),
     /// Chooses a destination for an archived message.
     Forward {
@@ -728,6 +735,9 @@ pub enum Action {
     HideShortcutHints,
     DismissChatLockHint,
     OpenLockedFolder,
+    UnlockLockedFolder(String),
+    CreateChatLockCode(String),
+    MessageYourself,
     CloseLockedFolder,
     SetChatLockCode(Option<String>),
     ScrollToBottom,

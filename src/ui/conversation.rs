@@ -77,7 +77,7 @@ fn empty(app: &mut App, ui: &mut egui::Ui) {
         ui.painter().text(
             center + vec2(0.0, 56.0),
             Align2::CENTER_CENTER,
-            "Ctrl+K to search · Ctrl+/ for shortcuts",
+            super::keys::label("Ctrl+K to search · ? for keyboard shortcuts"),
             theme::regular(12.5),
             palette.dim,
         );
@@ -852,7 +852,7 @@ fn composer(app: &mut App, ui: &mut egui::Ui, chat: &Chat) {
                     }
                 }
                 let field_width = (ui.available_width() - button_width - 10.0).max(0.0);
-                Frame::new()
+                let field = Frame::new()
                     .fill(palette.surface)
                     .corner_radius(CornerRadius::same(theme::RADIUS + 4))
                     .inner_margin(Margin::symmetric(12, 7))
@@ -986,6 +986,7 @@ fn composer(app: &mut App, ui: &mut egui::Ui, chat: &Chat) {
                                 }
                             });
                     });
+                theme::focus_outline(ui, id, field.response.rect, f32::from(theme::RADIUS + 4));
                 let ready = !app.composer.trim().is_empty() || !app.pending.is_empty();
                 let (fill, hover, icon) = if ready {
                     (palette.accent, palette.accent_hover, palette.on_accent)
@@ -1170,6 +1171,9 @@ struct View<'a> {
     anchor: Option<&'a str>,
     /// Demo/test: keep this message's context menu open.
     open_menu: Option<&'a str>,
+    reaction: Option<&'a str>,
+    reaction_emoji: &'a [(String, u32)],
+    keyboard_navigation: &'a std::cell::Cell<bool>,
     /// Resolves a name with the message's stored name as fallback.
     names_or: &'a dyn Fn(&str, Option<&str>) -> String,
     /// Resolves mention names without replacing our name with "You".
@@ -1202,6 +1206,7 @@ fn messages(app: &mut App, ui: &mut egui::Ui, chat: &Chat) {
     }
     let names_or = |id: &str, hint: Option<&str>| app.display_name_or(id, hint);
     let mention_names = |id: &str| app.mention_name(id);
+    let keyboard_navigation = std::cell::Cell::new(false);
     let view = View {
         palette,
         chat,
@@ -1216,6 +1221,13 @@ fn messages(app: &mut App, ui: &mut egui::Ui, chat: &Chat) {
             app.scroll_anchor.as_deref()
         },
         open_menu: app.open_message_menu.as_deref(),
+        reaction: app
+            .reaction_target
+            .as_ref()
+            .filter(|(id, _)| id == &chat.id)
+            .map(|(_, message)| message.as_str()),
+        reaction_emoji: &app.settings.reaction_emoji,
+        keyboard_navigation: &keyboard_navigation,
         names_or: &names_or,
         mention_names: &mention_names,
         avatars: &avatars,
@@ -1233,7 +1245,12 @@ fn messages(app: &mut App, ui: &mut egui::Ui, chat: &Chat) {
     let output = egui::ScrollArea::vertical()
         .id_salt(("messages", &chat.id))
         .auto_shrink([false, false])
-        .stick_to_bottom(true)
+        .stick_to_bottom(view.reaction.is_none())
+        .scroll_source(if view.reaction.is_some() {
+            egui::scroll_area::ScrollSource::NONE
+        } else {
+            Default::default()
+        })
         .animated(false)
         .show(ui, |ui| {
             // Scroll while selecting near an edge. `scroll_with_delta` also
@@ -1246,7 +1263,10 @@ fn messages(app: &mut App, ui: &mut egui::Ui, chat: &Chat) {
                         viewport.contains(origin) && origin.x < viewport.right() - 16.0
                     })
             });
-            if held_inside && let Some(pointer) = ui.input(|input| input.pointer.latest_pos()) {
+            if view.reaction.is_none()
+                && held_inside
+                && let Some(pointer) = ui.input(|input| input.pointer.latest_pos())
+            {
                 let delta = edge_scroll(pointer.y, viewport.top(), viewport.bottom());
                 if delta != 0.0 {
                     if delta < 0.0 {
@@ -1301,7 +1321,7 @@ fn messages(app: &mut App, ui: &mut egui::Ui, chat: &Chat) {
                         typing_bubble(ui, &view, &typing);
                     }
                     ui.add_space(4.0);
-                    if scroll_to_bottom {
+                    if scroll_to_bottom && !keyboard_navigation.get() && view.reaction.is_none() {
                         ui.scroll_to_rect_animation(
                             Rect::from_min_size(ui.cursor().min, Vec2::ZERO),
                             None,
@@ -1338,7 +1358,7 @@ fn messages(app: &mut App, ui: &mut egui::Ui, chat: &Chat) {
     app.conversations
         .insert(chat.id.clone(), std::mem::take(&mut conversation));
     app.at_bottom = at_bottom;
-    if app.scroll_to_bottom && reader_scrolled {
+    if app.scroll_to_bottom && (reader_scrolled || keyboard_navigation.get()) {
         app.scroll_to_bottom = false;
     }
     if anchored {
@@ -1542,7 +1562,7 @@ fn bubble(
     let previous = ui.ctx().data(|data| data.get_temp::<Rect>(id.with("rect")));
     if let Some(rect) = previous {
         let strip = Rect::from_x_y_ranges(ui.max_rect().x_range(), rect.y_range());
-        let strip = ui.interact(strip, id.with("row"), Sense::click());
+        let strip = ui.interact(strip, id.with("row"), Sense::CLICK);
         reply_on_double_click(&strip, message, actions);
     }
     let mut response = None;
@@ -1551,8 +1571,15 @@ fn bubble(
         |ui| {
             if with_avatar {
                 ui.horizontal_top(|ui| {
-                    let (rect, avatar) =
-                        ui.allocate_exact_size(Vec2::splat(SENDER_AVATAR), Sense::click());
+                    let (rect, avatar) = ui.allocate_exact_size(
+                        Vec2::splat(SENDER_AVATAR),
+                        if show_sender {
+                            Sense::CLICK
+                        } else {
+                            Sense::hover()
+                        },
+                    );
+                    theme::focus_outline(ui, avatar.id, rect, SENDER_AVATAR / 2.0);
                     if show_sender
                         && avatar
                             .on_hover_cursor(egui::CursorIcon::PointingHand)
@@ -1801,7 +1828,7 @@ fn bubble_frame(
     // the first frame's rect.
     let rect_id = bubble_id.with("rect");
     let previous = ui.ctx().data(|data| data.get_temp::<Rect>(rect_id));
-    let early = previous.map(|rect| ui.interact(rect, bubble_id, Sense::click()));
+    let early = previous.map(|rect| ui.interact(rect, bubble_id, Sense::CLICK));
     let inner = Frame::new()
         .fill(fill)
         .corner_radius(CornerRadius::same(10))
@@ -1826,7 +1853,7 @@ fn bubble_frame(
                     .interact(
                         response.rect,
                         ui.id().with(("sender", &message.id)),
-                        Sense::click(),
+                        Sense::CLICK,
                     )
                     .on_hover_cursor(egui::CursorIcon::PointingHand);
                 if response.clicked() {
@@ -1871,8 +1898,35 @@ fn bubble_frame(
         });
     ui.ctx()
         .data_mut(|data| data.insert_temp(rect_id, inner.response.rect));
-    let bubble =
-        early.unwrap_or_else(|| ui.interact(inner.response.rect, bubble_id, Sense::click()));
+    let bubble = early.unwrap_or_else(|| ui.interact(inner.response.rect, bubble_id, Sense::CLICK));
+    theme::reveal_focus(&bubble);
+    theme::focus_outline(ui, bubble.id, inner.response.rect, 10.0);
+    if ui.ctx().data(|data| {
+        data.get_temp::<bool>(theme::keyboard_focus_id())
+            .unwrap_or(false)
+    }) && let Some(focused) = ui
+        .memory(|memory| memory.focused())
+        .and_then(|id| ui.ctx().read_response(id))
+        && (focused.id == bubble.id || inner.response.rect.contains(focused.rect.center()))
+    {
+        view.keyboard_navigation.set(true);
+        if focused.gained_focus() && !ui.clip_rect().contains_rect(focused.rect) {
+            ui.scroll_to_rect_animation(
+                inner.response.rect.expand(4.0),
+                None,
+                egui::style::ScrollAnimation::none(),
+            );
+        }
+    }
+    let reacting = view.reaction == Some(message.id.as_str());
+    if reacting {
+        ui.painter().rect_stroke(
+            inner.response.rect.expand(2.0),
+            12.0,
+            Stroke::new(2.0, palette.accent),
+            egui::StrokeKind::Outside,
+        );
+    }
     // Inner widgets own their clicks, so this fires only on the bubble's padding
     // and footer. Double-click on the body keeps selecting the word.
     reply_on_double_click(&bubble, message, actions);
@@ -1892,7 +1946,7 @@ fn bubble_frame(
                 .is_none_or(|layer| layer == bubble.layer_id)
         });
     let force_menu = view.open_menu == Some(message.id.as_str());
-    let quick = quick_reactions(message).len() as f32 + 1.0;
+    let quick = quick_reactions(message, view.reaction_emoji).len() as f32 + 1.0;
     let width = widgets::menu_width(
         ui,
         &[
@@ -1903,7 +1957,9 @@ fn bubble_frame(
         true,
     )
     .max(quick * 36.0 + 12.0);
-    let open = if right_clicked || force_menu {
+    let keyboard_clicked =
+        bubble.clicked() && bubble.has_focus() && !ui.input(|input| input.pointer.any_click());
+    let open = if right_clicked || force_menu || reacting || keyboard_clicked {
         Some(egui::SetOpenCommand::Bool(true))
     } else if bubble.clicked() {
         Some(egui::SetOpenCommand::Bool(false))
@@ -1912,16 +1968,41 @@ fn bubble_frame(
     };
     let popup = egui::Popup::menu(&bubble)
         .open_memory(open)
+        .close_behavior(if reacting {
+            egui::PopupCloseBehavior::IgnoreClicks
+        } else {
+            egui::PopupCloseBehavior::CloseOnClickOutside
+        })
         .width(width)
         .frame(widgets::menu_frame(&palette));
-    let popup = if force_menu {
+    let popup = if reacting {
+        // Keep the menu next to the picker, anchored to this message rather
+        // than whichever pointer position happened to open the emoji grid.
+        let screen = ui.ctx().content_rect();
+        let menu = ui
+            .ctx()
+            .data(|data| data.get_temp::<Rect>(bubble_id.with("menu-rect")))
+            .unwrap_or(bubble.rect);
+        let x = menu.left().clamp(
+            screen.left() + 8.0,
+            (screen.right() - width - 468.0).max(screen.left() + 8.0),
+        );
+        popup.at_position(pos2(x, menu.top()))
+    } else if force_menu || keyboard_clicked {
         popup.at_position(bubble.rect.left_top() + vec2(12.0, 8.0))
     } else {
         popup.at_pointer_fixed()
     };
-    popup.show(|ui| {
+    let menu = popup.show(|ui| {
         context_menu(ui, view, message, actions);
     });
+    if let Some(menu) = menu {
+        ui.ctx()
+            .data_mut(|data| data.insert_temp(bubble_id.with("menu-rect"), menu.response.rect));
+    }
+    if reacting && !egui::Popup::is_id_open(ui.ctx(), bubble_id.with("popup")) {
+        actions.push(Action::ClosePicker);
+    }
     // Store this frame's final rect for later scrolling.
     inner.response
 }
@@ -2222,8 +2303,20 @@ pub(crate) fn reaction_choice(current: Option<&str>, emoji: &str) -> String {
 }
 
 /// Quick reactions plus our current reaction when needed.
-fn quick_reactions(message: &Message) -> Vec<&str> {
-    let mut list = QUICK_REACTIONS.to_vec();
+fn quick_reactions<'a>(message: &'a Message, preferred: &'a [(String, u32)]) -> Vec<&'a str> {
+    let mut list = Vec::new();
+    for emoji in preferred
+        .iter()
+        .map(|(emoji, _)| emoji.as_str())
+        .chain(QUICK_REACTIONS.iter().copied())
+    {
+        if emojis::get(emoji).is_some() && !list.contains(&emoji) {
+            list.push(emoji);
+        }
+        if list.len() == QUICK_REACTIONS.len() {
+            break;
+        }
+    }
     if let Some(mine) = own_reaction(message)
         && !list.contains(&mine)
     {
@@ -2241,10 +2334,11 @@ fn context_menu(ui: &mut egui::Ui, view: &View<'_>, message: &Message, actions: 
         Layout::left_to_right(Align::Center),
         |ui| {
             ui.spacing_mut().item_spacing.x = 2.0;
-            for emoji in quick_reactions(message) {
+            for emoji in quick_reactions(message, view.reaction_emoji) {
                 let chosen = mine == Some(emoji);
                 let line = widgets::line(ui, emoji, theme::regular(20.0), palette.text, 40.0, 1);
                 let (rect, response) = ui.allocate_exact_size(Vec2::splat(34.0), Sense::click());
+                theme::focus_outline(ui, response.id, rect, 17.0);
                 if chosen {
                     ui.painter()
                         .circle_filled(rect.center(), 17.0, palette.surface_active);
@@ -2275,6 +2369,7 @@ fn context_menu(ui: &mut egui::Ui, view: &View<'_>, message: &Message, actions: 
                 }
             }
             let (rect, response) = ui.allocate_exact_size(Vec2::splat(34.0), Sense::click());
+            theme::focus_outline(ui, response.id, rect, 17.0);
             if ui.is_rect_visible(rect) {
                 let hovered = response.hovered();
                 ui.painter().circle_filled(
@@ -2299,7 +2394,6 @@ fn context_menu(ui: &mut egui::Ui, view: &View<'_>, message: &Message, actions: 
                     chat: chat.clone(),
                     message: message.id.clone(),
                 });
-                ui.close();
             }
         },
     );
@@ -2728,7 +2822,9 @@ fn rich_body(
             laid.placements().to_vec(),
         ));
     // Click links and drag to select text.
-    let (rect, response) = ui.allocate_exact_size(allocation, Sense::click_and_drag());
+    // Text selection and pointer links do not need a sequential Tab stop.
+    // The surrounding transcript remains available to accessibility readers.
+    let (rect, response) = ui.allocate_exact_size(allocation, Sense::CLICK | Sense::DRAG);
     // Store the body rect for selection tests.
     ui.ctx().data_mut(|data| {
         data.insert_temp(bubble_id(&view.chat.id, &message.id).with("body"), rect);
@@ -3790,7 +3886,7 @@ mod reaction_tests {
     fn only_our_own_reaction_counts_as_chosen() {
         let message = with_reactions(vec![reaction(false, "😂"), reaction(true, "❤️")]);
         assert_eq!(own_reaction(&message), Some("❤️"));
-        assert_eq!(quick_reactions(&message), QUICK_REACTIONS.to_vec());
+        assert_eq!(quick_reactions(&message, &[]), QUICK_REACTIONS.to_vec());
         assert_eq!(
             own_reaction(&with_reactions(vec![reaction(false, "😂")])),
             None
@@ -3798,9 +3894,19 @@ mod reaction_tests {
     }
 
     #[test]
+    fn quick_reactions_start_with_preferences_and_fill_with_unique_defaults() {
+        let message = with_reactions(Vec::new());
+        let preferred = vec![("🦀".into(), 5), ("👍".into(), 2), ("invalid".into(), 1)];
+        let quick = quick_reactions(&message, &preferred);
+        assert_eq!(&quick[..2], &["🦀", "👍"]);
+        assert_eq!(quick.len(), 6);
+        assert_eq!(quick.iter().filter(|&&emoji| emoji == "👍").count(), 1);
+    }
+
+    #[test]
     fn an_unusual_reaction_of_ours_joins_the_quick_row() {
         let message = with_reactions(vec![reaction(true, "🦀")]);
-        let quick = quick_reactions(&message);
+        let quick = quick_reactions(&message, &[]);
         assert_eq!(quick.len(), QUICK_REACTIONS.len() + 1);
         assert_eq!(quick.last(), Some(&"🦀"));
     }
@@ -3819,7 +3925,7 @@ mod reaction_tests {
         assert_eq!(own_reaction(&message), None);
         assert_eq!(message.reactions[0].emoji, "🏆");
         assert!(!message.reactions[0].from_me);
-        assert_eq!(quick_reactions(&message), QUICK_REACTIONS.to_vec());
+        assert_eq!(quick_reactions(&message, &[]), QUICK_REACTIONS.to_vec());
     }
 }
 

@@ -60,7 +60,7 @@ fn build_menu() -> tray_icon::menu::Result<Menu> {
     ])?;
     let file = Submenu::new("File", true);
     file.append_items(&[
-        &item("new", "New Contact…", Some("Super+KeyN")),
+        &item("new", "New Chat…", Some("Super+KeyN")),
         &Native::separator(),
         &item("close", "Close Window", Some("Super+KeyW")),
     ])?;
@@ -217,7 +217,7 @@ fn action(id: &str, hidden: bool) -> Option<Action> {
     Some(match id {
         "about" => Action::ShowDialog(Dialog::About),
         "settings" => Action::Open(Page::Settings),
-        "new" => Action::ShowDialog(Dialog::NewContact),
+        "new" => Action::ShowDialog(Dialog::NewChat),
         "close" => Action::CloseWindow,
         "quit" => Action::Quit,
         "search" => Action::FocusSearch,

@@ -32,6 +32,8 @@ pub fn show(app: &mut App, ctx: &egui::Context) {
                 Dialog::ConfirmUnlink => 380.0,
                 Dialog::PairWithPhone => 380.0,
                 Dialog::NewContact => 380.0,
+                Dialog::NewChat => 420.0,
+                Dialog::UnlockLockedChats | Dialog::ConfirmLockChat(_) => 380.0,
                 Dialog::ChatInfo(_) => 360.0,
                 Dialog::Forward { .. } => 420.0,
                 Dialog::CreatePoll(_) => 420.0,
@@ -44,6 +46,9 @@ pub fn show(app: &mut App, ctx: &egui::Context) {
                 Dialog::ConfirmUnlink => confirm_unlink(app, ui),
                 Dialog::PairWithPhone => pair_with_phone(app, ui),
                 Dialog::NewContact => new_contact(app, ui),
+                Dialog::NewChat => new_chat(app, ui),
+                Dialog::UnlockLockedChats => unlock_locked_chats(app, ui),
+                Dialog::ConfirmLockChat(id) => confirm_lock_chat(app, ui, &id),
                 Dialog::ChatInfo(id) => chat_info(app, ui, &id),
                 Dialog::Forward { chat, message } => forward(app, ui, &chat, &message),
             }
@@ -51,6 +56,194 @@ pub fn show(app: &mut App, ctx: &egui::Context) {
     if response.should_close() {
         app.actions.push(Action::CloseDialog);
     }
+}
+
+fn unlock_locked_chats(app: &mut App, ui: &mut egui::Ui) {
+    let palette = app.palette;
+    let setup = app.settings.chat_lock_code_hash.is_none();
+    title(
+        ui,
+        app,
+        if setup {
+            "Set up locked chats"
+        } else {
+            "Locked chats"
+        },
+    );
+    theme::paragraph(
+        ui,
+        if setup {
+            "Choose a local code to open the Locked tab. It is separate from your phone's code. This hides chats in ZapFast, it does not add another encryption layer."
+        } else {
+            "Enter your local ZapFast code. Leaving the Locked tab or closing the window locks it again."
+        },
+        theme::regular(13.0),
+        palette.secondary,
+    );
+    let entry = ui.add(
+        egui::TextEdit::singleline(&mut app.chat_lock_entry)
+            .id_salt("locked-code")
+            .password(true)
+            .hint_text("Local code")
+            .desired_width(f32::INFINITY),
+    );
+    if ui.memory(|memory| memory.focused().is_none()) {
+        entry.request_focus();
+    }
+    let mut submit = entry.lost_focus() && ui.input(|input| input.key_pressed(egui::Key::Enter));
+    if setup {
+        let confirm = ui.add(
+            egui::TextEdit::singleline(&mut app.chat_lock_confirm)
+                .id_salt("locked-code-confirm")
+                .password(true)
+                .hint_text("Confirm code")
+                .desired_width(f32::INFINITY),
+        );
+        submit |= confirm.lost_focus() && ui.input(|input| input.key_pressed(egui::Key::Enter));
+    }
+    if app.chat_lock_error {
+        theme::paragraph(
+            ui,
+            "That code did not match. Try again.",
+            theme::regular(13.0),
+            palette.danger,
+        );
+    }
+    let ready = !app.chat_lock_entry.trim().is_empty()
+        && (!setup || app.chat_lock_entry.trim() == app.chat_lock_confirm.trim());
+    ui.horizontal(|ui| {
+        submit |= ui
+            .add_enabled_ui(ready, |ui| {
+                theme::pill_button(
+                    ui,
+                    &palette,
+                    if setup {
+                        "Set code and open"
+                    } else {
+                        "Open locked chats"
+                    },
+                    true,
+                )
+            })
+            .inner
+            .clicked();
+        if theme::pill_button(ui, &palette, "Cancel", false).clicked() {
+            app.actions.push(Action::CloseDialog);
+        }
+    });
+    if submit && ready {
+        let code = std::mem::take(&mut app.chat_lock_entry);
+        app.actions.push(if setup {
+            Action::CreateChatLockCode(code)
+        } else {
+            Action::UnlockLockedFolder(code)
+        });
+    }
+}
+
+fn confirm_lock_chat(app: &mut App, ui: &mut egui::Ui, id: &str) {
+    let palette = app.palette;
+    title(ui, app, "Lock this chat?");
+    theme::paragraph(
+        ui,
+        "This moves the chat to the Locked tab, hiding it from the normal chat list, search, unread badges, and notifications. The lock status also syncs to your phone. Open Locked with a separate local ZapFast code to read it. Sending from locked chats is not supported yet.",
+        theme::regular(13.0),
+        palette.secondary,
+    );
+    ui.horizontal(|ui| {
+        if theme::pill_button(ui, &palette, "Lock chat", true).clicked() {
+            app.actions.push(Action::SetLocked(id.to_owned(), true));
+            app.actions.push(Action::CloseDialog);
+            if app.settings.chat_lock_code_hash.is_none() {
+                app.actions.push(Action::OpenLockedFolder);
+            }
+        }
+        if theme::pill_button(ui, &palette, "Cancel", false).clicked() {
+            app.actions.push(Action::CloseDialog);
+        }
+    });
+}
+
+fn new_chat(app: &mut App, ui: &mut egui::Ui) {
+    let palette = app.palette;
+    title(ui, app, "New chat");
+    ui.horizontal_wrapped(|ui| {
+        if ui
+            .add_enabled_ui(app.me.is_some(), |ui| {
+                theme::soft_button(
+                    ui,
+                    &palette,
+                    Some(Icon::MessageCircle),
+                    "Message yourself",
+                    false,
+                )
+            })
+            .inner
+            .clicked()
+        {
+            app.actions.push(Action::MessageYourself);
+        }
+        if theme::soft_button(ui, &palette, Some(Icon::Plus), "Add contact", false).clicked() {
+            app.actions.push(Action::ShowDialog(Dialog::NewContact));
+        }
+    });
+    let width = ui.available_width();
+    let search = super::widgets::search_field(
+        ui,
+        &palette,
+        egui::Id::new("new-chat-search"),
+        &mut app.new_chat_search,
+        "Search contacts",
+        width,
+    );
+    if ui.memory(|memory| memory.focused().is_none()) {
+        search.request_focus();
+    }
+    let needle = crate::util::search_key(app.new_chat_search.trim());
+    let mut contacts = app.contacts.clone();
+    for chat in &app.chats {
+        if chat.kind == crate::model::ChatKind::Direct {
+            contacts
+                .entry(chat.id.clone())
+                .or_insert_with(|| crate::model::Contact {
+                    id: chat.id.clone(),
+                    full_name: Some(app.chat_title(chat)),
+                    ..Default::default()
+                });
+        }
+    }
+    let mut contacts: Vec<_> = contacts
+        .into_values()
+        .filter(|contact| {
+            crate::model::phone_of(&contact.id).is_some()
+                && app.me.as_deref() != Some(contact.id.as_str())
+                && !app.chat(&contact.id).is_some_and(|chat| chat.locked)
+                && (needle.is_empty()
+                    || crate::util::search_key(&app.display_name(&contact.id)).contains(&needle)
+                    || crate::model::phone_of(&contact.id)
+                        .is_some_and(|phone| phone.contains(&needle)))
+        })
+        .collect();
+    contacts.sort_by_key(|contact| crate::util::search_key(&app.display_name(&contact.id)));
+    egui::ScrollArea::vertical()
+        .id_salt("new-chat-contacts")
+        .max_height((ui.ctx().content_rect().height() - 280.0).clamp(100.0, 420.0))
+        .auto_shrink([false, true])
+        .show(ui, |ui| {
+            if contacts.is_empty() {
+                theme::text(
+                    ui,
+                    "No matching contacts",
+                    theme::regular(13.0),
+                    palette.secondary,
+                );
+            }
+            for contact in contacts {
+                ui.push_id(&contact.id, |ui| {
+                    super::chats::contact_row(app, ui, &contact)
+                });
+            }
+        });
 }
 
 fn forward(app: &mut App, ui: &mut egui::Ui, from_chat: &str, message: &str) {

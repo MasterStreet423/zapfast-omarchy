@@ -560,6 +560,7 @@ pub fn circle_button(
 ) -> Response {
     let (rect, response) = ui.allocate_exact_size(Vec2::splat(diameter), Sense::click());
     reveal_focus(&response);
+    focus_outline(ui, response.id, rect, diameter / 2.0);
     response.widget_info(|| {
         egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), tooltip)
     });
@@ -608,6 +609,7 @@ pub fn pill_button(ui: &mut egui::Ui, palette: &Palette, label: &str, primary: b
     let size = galley.size() + padding * 2.0;
     let (rect, response) = ui.allocate_exact_size(size, Sense::click());
     reveal_focus(&response);
+    focus_outline(ui, response.id, rect, rect.height() / 2.0);
     response.widget_info(|| {
         egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), label)
     });
@@ -653,6 +655,7 @@ pub fn soft_button(
     let size = Vec2::new(galley.size().x + icon_width, galley.size().y) + padding * 2.0;
     let (rect, response) = ui.allocate_exact_size(size, Sense::click());
     reveal_focus(&response);
+    focus_outline(ui, response.id, rect, rect.height() / 2.0);
     if ui.is_rect_visible(rect) {
         let hovered = response.hovered();
         let fill = if active {
@@ -692,6 +695,27 @@ pub fn keyboard_focus_id() -> egui::Id {
     egui::Id::new("keyboard-focus")
 }
 
+/// The visible control may be larger than its text editor, or circular rather
+/// than rectangular. Keep its outline geometry with the current frame only.
+#[derive(Clone, Copy, Debug)]
+pub struct FocusOutline {
+    pub rect: egui::Rect,
+    pub radius: f32,
+    pub clip: egui::Rect,
+    pub frame: u64,
+}
+
+pub fn focus_outline(ui: &egui::Ui, id: egui::Id, rect: egui::Rect, radius: f32) {
+    let outline = FocusOutline {
+        rect,
+        radius,
+        clip: ui.clip_rect(),
+        frame: ui.ctx().cumulative_frame_nr(),
+    };
+    ui.ctx()
+        .data_mut(|data| data.insert_temp(id.with("focus-outline"), outline));
+}
+
 /// Scrolls a widget that keyboard focus reached into view. egui does not do
 /// this itself, and a scroll target only counts when set while the widget's
 /// scroll area is being laid out, so each focusable widget calls this.
@@ -703,7 +727,11 @@ pub fn reveal_focus(response: &Response) {
     // would overshoot.
     if keyboard && response.gained_focus() && response.interact_rect != response.rect {
         // Jump rather than glide: the focus should be visible at once.
-        response.scroll_to_me_animation(None, egui::style::ScrollAnimation::none());
+        // A small margin avoids subpixel clipping when scroll offsets round to
+        // device pixels, and leaves room for the focus stroke.
+        let mut target = response.clone();
+        target.rect = target.rect.expand(4.0);
+        target.scroll_to_me_animation(None, egui::style::ScrollAnimation::none());
     }
 }
 

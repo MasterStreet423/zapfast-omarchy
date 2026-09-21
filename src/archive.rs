@@ -104,7 +104,7 @@ END;
 const CHAT_COLUMNS: &str =
     "c.id, c.name, c.kind, c.last_activity, c.unread, c.archived, c.pinned, c.muted_until,
                     m.from_me, m.sender_name, m.content, m.status, m.sender, c.participants, c.read_only,
-                    c.pinned_at, c.ephemeral_expiration, c.locked";
+                    c.pinned_at, c.ephemeral_expiration, c.locked, c.group_subject_known";
 
 /// Adds columns introduced after the initial schema when missing.
 const MIGRATIONS: &[(&str, &str, &str)] = &[
@@ -124,6 +124,7 @@ const MIGRATIONS: &[(&str, &str, &str)] = &[
     ("chats", "mute_updated_at", "INTEGER"),
     ("chats", "locked", "INTEGER NOT NULL DEFAULT 0"),
     ("chats", "lock_updated_at", "INTEGER"),
+    ("chats", "group_subject_known", "INTEGER NOT NULL DEFAULT 0"),
 ];
 const CHAT_JOIN: &str = "FROM chats c
              LEFT JOIN messages m ON m.chat = c.id AND m.rowid = (
@@ -152,6 +153,7 @@ fn chat_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Chat> {
     Ok(Chat {
         id: row.get(0)?,
         name: row.get(1)?,
+        group_subject_known: row.get(18)?,
         kind: kind_from_name(&kind),
         last_activity: row.get(3)?,
         unread: row.get(4)?,
@@ -255,10 +257,11 @@ impl Archive {
     /// Creates a chat or replaces a phone-number title with a better name.
     pub fn upsert_chat(&self, chat: &Chat) -> Result<()> {
         self.connection.execute(
-            "INSERT INTO chats (id, name, kind, last_activity, unread, archived, pinned, muted_until, pinned_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+            "INSERT INTO chats (id, name, kind, last_activity, unread, archived, pinned, muted_until, pinned_at, group_subject_known)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
              ON CONFLICT(id) DO UPDATE SET
                 name = excluded.name,
+                group_subject_known = excluded.group_subject_known,
                 last_activity = MAX(last_activity, excluded.last_activity),
                 archived = excluded.archived,
                 pinned = CASE WHEN pin_updated_at IS NULL THEN excluded.pinned ELSE pinned END,
@@ -274,6 +277,7 @@ impl Archive {
                 chat.pinned,
                 chat.muted_until,
                 chat.pinned_at,
+                chat.group_subject_known,
             ],
         )?;
         Ok(())
@@ -297,7 +301,9 @@ impl Archive {
         read_only: bool,
     ) -> Result<()> {
         self.connection.execute(
-            "UPDATE chats SET name = COALESCE(?2, name), participants = ?3, read_only = ?4 WHERE id = ?1",
+            "UPDATE chats SET name = COALESCE(?2, name), participants = ?3, read_only = ?4,
+                group_subject_known = CASE WHEN ?2 IS NOT NULL THEN 1 ELSE group_subject_known END
+             WHERE id = ?1",
             params![
                 id,
                 name,
@@ -310,7 +316,7 @@ impl Archive {
 
     pub fn rename_chat(&self, id: &str, name: &str) -> Result<()> {
         self.connection.execute(
-            "UPDATE chats SET name = ?2 WHERE id = ?1",
+            "UPDATE chats SET name = ?2, group_subject_known = 1 WHERE id = ?1",
             params![id, name],
         )?;
         Ok(())
@@ -1347,6 +1353,10 @@ pub(crate) mod tests {
         assert!(chats[0].participants.is_empty());
         assert!(!chats[0].read_only);
         assert!(!chats[0].locked, "the lock column migrates in unset");
+        assert!(
+            !chats[0].group_subject_known,
+            "legacy group placeholders remain identifiable"
+        );
         let mut with_thumbnail = message("1@s.whatsapp.net", "m1", 1, false);
         with_thumbnail.thumbnail = Some(vec![1, 2, 3]);
         archive
@@ -1422,6 +1432,26 @@ pub(crate) mod tests {
             archive.chat(chat).expect("chat").expect("exists").name,
             "Rust Berlin"
         );
+    }
+
+    #[test]
+    fn empty_subjects_replace_placeholders_and_real_group_subjects_remain_distinct() {
+        let archive = Archive::in_memory().unwrap();
+        let id = "fixture@g.us";
+        archive.ensure_chat(id, "Group").unwrap();
+        assert!(!archive.chat(id).unwrap().unwrap().group_subject_known);
+        archive
+            .set_group_info(id, Some(""), &["1@s.whatsapp.net".into()], false)
+            .unwrap();
+        let row = archive.chat(id).unwrap().unwrap();
+        assert!(row.name.is_empty());
+        assert!(row.group_subject_known);
+        archive.rename_chat(id, "Group").unwrap();
+        let row = archive.chat(id).unwrap().unwrap();
+        assert_eq!(row.name, "Group");
+        assert!(row.group_subject_known);
+        archive.set_group_info(id, None, &[], false).unwrap();
+        assert!(archive.chat(id).unwrap().unwrap().group_subject_known);
     }
 
     #[test]

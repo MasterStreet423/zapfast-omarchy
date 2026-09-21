@@ -942,7 +942,9 @@ impl Worker {
             self.group_info_requested.remove(id);
         } else {
             let known = self.archive.chat(id).ok().flatten().is_some_and(|chat| {
-                chat.name != fallback_name(id) && !chat.participants.is_empty()
+                // Older archives used "Group" as an unknown placeholder.
+                // Fetch it once to distinguish that from a real subject.
+                (chat.group_subject_known || chat.name != "Group") && !chat.participants.is_empty()
             });
             if known {
                 return;
@@ -1054,7 +1056,9 @@ impl Worker {
                     }
                     let _ = commands.send(Command::GroupInfo {
                         chat,
-                        name: (!metadata.subject.is_empty()).then(|| metadata.subject.clone()),
+                        // An empty subject is authoritative too: the UI uses
+                        // the same participant summary as the group subtitle.
+                        name: Some(metadata.subject.clone()),
                         participants,
                         read_only: metadata.is_announcement && !admin,
                         // GroupEphemeralSettings carries a trigger mode, not a
@@ -2200,9 +2204,13 @@ impl Worker {
             }
             let existing = self.archive.chat(&id).ok().flatten();
             if metadata || existing.is_none() {
-                let name = match chat.name.filter(|name| !name.is_empty()) {
+                let subject_known = chat.name.is_some()
+                    || existing
+                        .as_ref()
+                        .is_some_and(|chat| chat.group_subject_known);
+                let name = match chat.name {
                     Some(name) if ChatKind::from_id(&id) == ChatKind::Group => name,
-                    Some(name) => {
+                    Some(name) if !name.is_empty() => {
                         // Prefer the phone's address-book name for direct chats.
                         let contact = self.contacts.entry(id.clone()).or_insert_with(|| Contact {
                             id: id.clone(),
@@ -2221,9 +2229,12 @@ impl Worker {
                         }
                         self.chat_name(&id, None)
                     }
-                    None => self.chat_name(&id, None),
+                    _ => existing
+                        .as_ref()
+                        .map_or_else(|| self.chat_name(&id, None), |chat| chat.name.clone()),
                 };
                 let mut row = Chat::new(id.clone(), name);
+                row.group_subject_known = subject_known;
                 row.last_activity = chat.last_activity;
                 row.unread = existing.as_ref().map_or(0, |existing| existing.unread);
                 row.archived = chat.archived;
@@ -4513,7 +4524,7 @@ fn forwarded_row(
 fn fallback_name(id: &str) -> String {
     match crate::model::phone_of(id) {
         Some(digits) => crate::util::phone(digits),
-        None if ChatKind::from_id(id) == ChatKind::Group => "Group".to_owned(),
+        None if ChatKind::from_id(id) == ChatKind::Group => String::new(),
         None => id.split('@').next().unwrap_or(id).to_owned(),
     }
 }
@@ -5660,7 +5671,7 @@ mod tests {
             fallback_name("393331234567@s.whatsapp.net"),
             "+39 333 123 456 7"
         );
-        assert_eq!(fallback_name("1-2@g.us"), "Group");
+        assert_eq!(fallback_name("1-2@g.us"), "");
         assert_eq!(fallback_name("42@lid"), "42");
     }
 
