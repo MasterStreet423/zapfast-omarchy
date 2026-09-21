@@ -43,12 +43,16 @@ Screenshots and recordings for release notes must use the offline demo.
 
 ## New features and platform coverage
 
-- **Keyboard focus.** Use Tab and Shift+Tab through chat rows, filters, Settings
-  and a dialog. The focused control must be visible, outlined and scrolled into
-  view. Enter or Space should activate it; mouse input should hide the outline.
-  The message input keeps an outline while active, and the voice button gets a
-  circular ring. Continue past it into message controls: no invisible targets,
-  and the conversation must reveal focused messages instead of snapping down.
+- **Keyboard focus.** Tab through input, send/voice, attachments, polls, emoji,
+  profile, sidebar toggle, New chat, Settings, search, and filters, then back to
+  input. Shift+Tab must reverse the cycle. No messages, reactions, chat rows or
+  invisible targets should intercept it, and the conversation must not scroll.
+  Test a narrow sidebar, hidden sidebar, read-only chat, and search results.
+  Every focus border must be one pixel, unclipped, and follow the control shape:
+  circular for voice, pill-shaped for search, with no duplicate search outline.
+  Check normal Tab navigation in Settings, menus and dialogs, including controls
+  initially out of view. Enter or Space activates buttons. Mouse input hides
+  outlines except on active text fields. Toasts and dialogs stay above focus.
   `?` opens help outside text fields but types normally in the composer and search.
 - **New chat and group names.** Use the pencil or Ctrl+N (Command+N on macOS),
   Message yourself, contact search and Add contact. Confirm the self-chat is not

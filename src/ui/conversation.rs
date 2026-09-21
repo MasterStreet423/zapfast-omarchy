@@ -19,6 +19,7 @@ use crate::model::{
 };
 use crate::theme::{self, Icon, Palette};
 
+use super::focus::{Stop, TabStop};
 use super::widgets;
 
 /// Maximum automatic attachment download size.
@@ -117,6 +118,7 @@ fn header(app: &mut App, ui: &mut egui::Ui, chat: &Chat) {
                         palette.text,
                         "Show the chat list (Ctrl+B)",
                     )
+                    .tab_stop(Stop::Sidebar)
                     .clicked()
                 {
                     app.actions.push(Action::ToggleSidebar);
@@ -826,11 +828,12 @@ fn composer(app: &mut App, ui: &mut egui::Ui, chat: &Chat) {
                         palette.text,
                         "Send files (or drop them on the window)",
                     )
+                    .tab_stop(Stop::Attach)
                     .clicked()
                 {
                     app.actions.push(Action::Attach);
                 }
-                if app.editing.is_none() && theme::icon_button(ui, Icon::ListChecks, 20.0, palette.secondary, palette.text, "Create poll").clicked() {
+                if app.editing.is_none() && theme::icon_button(ui, Icon::ListChecks, 20.0, palette.secondary, palette.text, "Create poll").tab_stop(Stop::Poll).clicked() {
                     app.actions.push(Action::ShowDialog(Dialog::CreatePoll(chat.id.clone())));
                 }
                 if app.editing.is_none() {
@@ -845,7 +848,7 @@ fn composer(app: &mut App, ui: &mut egui::Ui, chat: &Chat) {
                         },
                         palette.text,
                         "Emoji, GIFs, and stickers",
-                    );
+                    ).tab_stop(Stop::Emoji);
                     app.picker_anchor = Some(smile.rect);
                     if smile.clicked() {
                         app.actions.push(Action::TogglePicker(PickerTab::Emoji));
@@ -927,7 +930,7 @@ fn composer(app: &mut App, ui: &mut egui::Ui, chat: &Chat) {
                                     .translate(output.galley_pos.to_vec2());
                                     crate::emoji::paint_cluster(ui, cluster, rect);
                                 }
-                                let response = &output.response.response;
+                                let response = output.response.response.clone().tab_stop(Stop::Composer);
                                 ui.ctx().accesskit_node_builder(response.id, |node| node.set_label("Message"));
                                 if response.changed() {
                                     app.actions.push(Action::Composing {
@@ -1004,6 +1007,7 @@ fn composer(app: &mut App, ui: &mut egui::Ui, chat: &Chat) {
                         palette.secondary,
                         "Record a voice message",
                     )
+                    .tab_stop(Stop::Send)
                     .clicked()
                     {
                         app.actions.push(Action::StartRecording);
@@ -1015,6 +1019,7 @@ fn composer(app: &mut App, ui: &mut egui::Ui, chat: &Chat) {
                         Icon::Send
                     };
                     if theme::circle_button(ui, icon_kind, button_width, fill, hover, icon, "Send")
+                        .tab_stop(Stop::Send)
                         .clicked()
                     {
                         send_click = true;

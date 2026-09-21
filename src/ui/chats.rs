@@ -6,6 +6,7 @@ use crate::app::App;
 use crate::model::{Action, Chat, ChatFilter, Contact, Dialog, Message, Page};
 use crate::theme::{self, Icon, Palette};
 
+use super::focus::{Stop, TabStop};
 use super::widgets;
 
 pub fn show(app: &mut App, ui: &mut egui::Ui) {
@@ -62,6 +63,7 @@ fn header(app: &mut App, ui: &mut egui::Ui) {
                         palette.text,
                         "Back to chats",
                     )
+                    .tab_stop(Stop::Back)
                     .clicked()
                     {
                         app.show_archived = false;
@@ -96,6 +98,7 @@ fn header(app: &mut App, ui: &mut egui::Ui) {
                         picture.as_deref(),
                         "Your profile and settings",
                     )
+                    .tab_stop(Stop::Profile)
                     .on_hover_text(tooltip)
                     .on_hover_cursor(egui::CursorIcon::PointingHand);
                     if response.clicked() {
@@ -113,6 +116,7 @@ fn header(app: &mut App, ui: &mut egui::Ui) {
                         palette.text,
                         "Settings (Ctrl+,)",
                     )
+                    .tab_stop(Stop::Settings)
                     .clicked()
                     {
                         app.actions.push(Action::Open(Page::Settings));
@@ -125,6 +129,7 @@ fn header(app: &mut App, ui: &mut egui::Ui) {
                         palette.text,
                         "New chat",
                     )
+                    .tab_stop(Stop::NewChat)
                     .clicked()
                     {
                         app.actions
@@ -138,6 +143,7 @@ fn header(app: &mut App, ui: &mut egui::Ui) {
                         palette.text,
                         "Hide the chat list (Ctrl+B)",
                     )
+                    .tab_stop(Stop::Sidebar)
                     .clicked()
                     {
                         app.actions.push(Action::ToggleSidebar);
@@ -148,7 +154,8 @@ fn header(app: &mut App, ui: &mut egui::Ui) {
             let id = egui::Id::new("chat-search");
             let width = ui.available_width();
             let mut text = app.search.clone();
-            let response = widgets::search_field(ui, &palette, id, &mut text, "Search", width);
+            let response = widgets::search_field(ui, &palette, id, &mut text, "Search", width)
+                .tab_stop(Stop::Search);
             if text != app.search {
                 app.actions.push(Action::Search(text));
             }
@@ -182,6 +189,7 @@ fn macos_header(app: &mut App, ui: &mut egui::Ui) {
                         palette.text,
                         "Back to chats",
                     )
+                    .tab_stop(Stop::Back)
                     .clicked()
                     {
                         app.show_archived = false;
@@ -211,6 +219,7 @@ fn macos_header(app: &mut App, ui: &mut egui::Ui) {
                         palette.text,
                         "New chat (⌘N)",
                     )
+                    .tab_stop(Stop::NewChat)
                     .clicked()
                     {
                         app.actions.push(Action::ShowDialog(Dialog::NewChat));
@@ -223,6 +232,7 @@ fn macos_header(app: &mut App, ui: &mut egui::Ui) {
                         palette.text,
                         "Hide the chat list (⌘B)",
                     )
+                    .tab_stop(Stop::Sidebar)
                     .clicked()
                     {
                         app.actions.push(Action::ToggleSidebar);
@@ -238,7 +248,8 @@ fn macos_header(app: &mut App, ui: &mut egui::Ui) {
                 &mut text,
                 "Search",
                 ui.available_width(),
-            );
+            )
+            .tab_stop(Stop::Search);
             if text != app.search {
                 app.actions.push(Action::Search(text));
             }
@@ -270,6 +281,7 @@ fn filter_chips(app: &mut App, ui: &mut egui::Ui) {
     ui.add_space(8.0);
     egui::ScrollArea::horizontal()
         .id_salt("chat-filters")
+        .animated(false)
         .auto_shrink([false, true])
         .show(ui, |ui| {
             ui.horizontal(|ui| {
@@ -280,7 +292,13 @@ fn filter_chips(app: &mut App, ui: &mut egui::Ui) {
                         _ => app.unread_chats(filter),
                     };
                     let selected = !app.locked_folder_open() && app.chat_filter == filter;
-                    let chip = widgets::filter_chip(ui, &palette, filter.label(), count, selected);
+                    let chip = widgets::filter_chip(ui, &palette, filter.label(), count, selected)
+                        .tab_stop(match filter {
+                            ChatFilter::All => Stop::All,
+                            ChatFilter::Unread => Stop::Unread,
+                            ChatFilter::Private => Stop::Private,
+                            ChatFilter::Groups => Stop::Groups,
+                        });
                     // Store the chip rect for interaction tests.
                     ui.ctx()
                         .data_mut(|data| data.insert_temp(filter_chip_id(filter), chip.rect));
@@ -293,6 +311,7 @@ fn filter_chips(app: &mut App, ui: &mut egui::Ui) {
                 if app.locked_count() > 0 || app.locked_folder_open() {
                     let selected = app.locked_folder_open();
                     let chip = widgets::filter_chip(ui, &palette, "Locked", 0, selected)
+                        .tab_stop(Stop::Locked)
                         .on_hover_text("Open locked chats with your local code");
                     ui.ctx()
                         .data_mut(|data| data.insert_temp(egui::Id::new("locked-chip"), chip.rect));
@@ -389,6 +408,10 @@ fn list(app: &mut App, ui: &mut egui::Ui) {
             // Store the row rect for interaction tests.
             ui.ctx()
                 .data_mut(|data| data.insert_temp(chat_row_id(&chat.id), response.rect));
+            #[cfg(test)]
+            ui.ctx().data_mut(|data| {
+                data.insert_temp(chat_row_id(&chat.id).with("widget"), response.id);
+            });
             if response.clicked() && !app.show_archived {
                 app.actions.push(Action::KeepUnread(chat.id.clone()));
             }

@@ -878,7 +878,7 @@ fn gif_tab(app: &mut App, ui: &mut egui::Ui, palette: &Palette) {
                 .push(Action::OpenUrl("https://developers.giphy.com/".to_owned()));
         }
         ui.add_space(6.0);
-        Frame::new()
+        let field = Frame::new()
             .fill(palette.surface)
             .corner_radius(CornerRadius::same(theme::RADIUS))
             .inner_margin(Margin::symmetric(10, 6))
@@ -901,7 +901,14 @@ fn gif_tab(app: &mut App, ui: &mut egui::Ui, palette: &Palette) {
                 if response.lost_focus() && !app.settings.giphy_key.trim().is_empty() {
                     app.actions.push(Action::SearchGifs(String::new()));
                 }
+                response
             });
+        theme::focus_outline(
+            ui,
+            field.inner.id,
+            field.response.rect,
+            f32::from(theme::RADIUS),
+        );
         return;
     }
     let mut query = app.picker_search.clone();
@@ -1096,8 +1103,14 @@ fn import_row(app: &mut App, ui: &mut egui::Ui, palette: &Palette) {
                         .frame(Frame::NONE)
                         .desired_width(ui.available_width() - buttons - 26.0),
                 )
-            })
-            .inner;
+            });
+        theme::focus_outline(
+            ui,
+            field.inner.id,
+            field.response.rect,
+            f32::from(theme::RADIUS),
+        );
+        let field = field.inner;
         let pasted = field.changed()
             && crate::backend::sticker_import::looks_like_signal_url(app.sticker_link.trim());
         let submitted = field.lost_focus()

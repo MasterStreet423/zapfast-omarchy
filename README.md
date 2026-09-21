@@ -59,12 +59,15 @@ See **[zapfast.rocks](https://zapfast.rocks)** for downloads and guides.
   accessibility services. Custom buttons, chat rows, settings switches and
   message text include readable labels. Windows NVDA navigation still needs
   platform verification; keyboard and screen-reader support is not complete.
-  After Tab, the focused control is outlined and scrolled into view. Outlines
-  follow the control shape, including circular voice buttons and the whole
-  message input. The input uses a thin inset border while active; other outlines
-  hide when you use the mouse. Focus stays below menus, dialogs, and toasts.
-  Message text and sender names are not Tab stops. Keyboard navigation to message
-  controls releases conversation auto-scroll.
+  In the chat view, Tab cycles through the message input, send/voice button,
+  attachments, polls, emoji, profile, sidebar toggle, New chat, Settings, search,
+  and chat filters, then returns to the input. Shift+Tab reverses that order;
+  hidden controls are skipped. Messages, reactions and chat rows are not stops
+  in this cycle; Alt+Up/Down switches conversations. Menus, dialogs and Settings
+  keep their own Tab navigation. Every focus border is a single one-pixel inset
+  outline following the control's shape, including circular voice buttons.
+  Text fields stay outlined while active; other outlines hide when you use the
+  mouse. Focus stays below menus, dialogs, and toasts.
 - **Safer desktop opening.** Links open only web pages or email addresses.
   Common documents and media open in their default apps; executable, script,
   and unrecognized attachment formats open their containing folder instead.

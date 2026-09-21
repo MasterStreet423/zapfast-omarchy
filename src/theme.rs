@@ -142,6 +142,7 @@ fn hsl(hue: f32, saturation: f32, lightness: f32) -> Color32 {
 
 pub const RADIUS: u8 = 8;
 pub const RADIUS_SMALL: u8 = 4;
+pub const FOCUS_STROKE_WIDTH: f32 = 1.0;
 pub const ROW_HEIGHT: f32 = 68.0;
 pub const TOP_BAR_HEIGHT: f32 = 60.0;
 
@@ -191,7 +192,7 @@ pub fn apply(ctx: &egui::Context, palette: &Palette) {
     visuals.weak_text_color = Some(palette.secondary);
     visuals.hyperlink_color = palette.link;
     visuals.selection.bg_fill = palette.accent.gamma_multiply(0.35);
-    visuals.selection.stroke = Stroke::new(1.0, palette.accent);
+    visuals.selection.stroke = Stroke::new(FOCUS_STROKE_WIDTH, palette.accent);
     visuals.window_stroke = Stroke::new(1.0, palette.outline);
     visuals.window_corner_radius = CornerRadius::same(RADIUS + 2);
     visuals.menu_corner_radius = CornerRadius::same(RADIUS);
@@ -560,7 +561,7 @@ pub fn circle_button(
 ) -> Response {
     let (rect, response) = ui.allocate_exact_size(Vec2::splat(diameter), Sense::click());
     reveal_focus(&response);
-    focus_outline(ui, response.id, rect, diameter / 2.0);
+    focus_outline_on_fill(ui, response.id, rect, diameter / 2.0, fill);
     response.widget_info(|| {
         egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), tooltip)
     });
@@ -609,7 +610,17 @@ pub fn pill_button(ui: &mut egui::Ui, palette: &Palette, label: &str, primary: b
     let size = galley.size() + padding * 2.0;
     let (rect, response) = ui.allocate_exact_size(size, Sense::click());
     reveal_focus(&response);
-    focus_outline(ui, response.id, rect, rect.height() / 2.0);
+    focus_outline_on_fill(
+        ui,
+        response.id,
+        rect,
+        rect.height() / 2.0,
+        if primary {
+            palette.accent
+        } else {
+            Color32::TRANSPARENT
+        },
+    );
     response.widget_info(|| {
         egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), label)
     });
@@ -703,14 +714,26 @@ pub struct FocusOutline {
     pub radius: f32,
     pub clip: egui::Rect,
     pub frame: u64,
+    pub fill: Color32,
 }
 
 pub fn focus_outline(ui: &egui::Ui, id: egui::Id, rect: egui::Rect, radius: f32) {
+    focus_outline_on_fill(ui, id, rect, radius, Color32::TRANSPARENT);
+}
+
+fn focus_outline_on_fill(
+    ui: &egui::Ui,
+    id: egui::Id,
+    rect: egui::Rect,
+    radius: f32,
+    fill: Color32,
+) {
     let outline = FocusOutline {
         rect,
         radius,
         clip: ui.clip_rect(),
         frame: ui.ctx().cumulative_frame_nr(),
+        fill,
     };
     ui.ctx()
         .data_mut(|data| data.insert_temp(id.with("focus-outline"), outline));

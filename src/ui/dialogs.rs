@@ -495,7 +495,7 @@ fn pair_with_phone(app: &mut App, ui: &mut egui::Ui) {
     let id = egui::Id::new("pair-phone");
     let submit = ui.memory(|memory| memory.has_focus(id))
         && ui.input_mut(|input| input.consume_key(egui::Modifiers::NONE, egui::Key::Enter));
-    Frame::new()
+    let field = Frame::new()
         .fill(palette.surface)
         .corner_radius(CornerRadius::same(theme::RADIUS))
         .inner_margin(Margin::symmetric(12, 8))
@@ -526,6 +526,7 @@ fn pair_with_phone(app: &mut App, ui: &mut egui::Ui) {
                 }
             });
         });
+    theme::focus_outline(ui, id, field.response.rect, f32::from(theme::RADIUS));
     ui.add_space(8.0);
     ui.horizontal(|ui| {
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
@@ -554,7 +555,7 @@ fn new_contact(app: &mut App, ui: &mut egui::Ui) {
     ui.add_space(4.0);
     let boxed =
         |ui: &mut egui::Ui, plus: bool, inner: &mut dyn FnMut(&mut egui::Ui) -> egui::Response| {
-            Frame::new()
+            let field = Frame::new()
                 .fill(palette.surface)
                 .corner_radius(CornerRadius::same(theme::RADIUS))
                 .inner_margin(Margin::symmetric(12, 8))
@@ -572,8 +573,14 @@ fn new_contact(app: &mut App, ui: &mut egui::Ui) {
                         inner(ui)
                     })
                     .inner
-                })
-                .inner
+                });
+            theme::focus_outline(
+                ui,
+                field.inner.id,
+                field.response.rect,
+                f32::from(theme::RADIUS),
+            );
+            field.inner
         };
     macro_rules! edit {
         ($buffer:expr, $salt:literal, $hint:literal, $width:expr) => {
@@ -698,7 +705,7 @@ fn chat_info(app: &mut App, ui: &mut egui::Ui, id: &str) {
             ui.horizontal(|ui| {
                 ui.add_space((ui.available_width() - 288.0).max(0.0) / 2.0);
                 let name_field = |ui: &mut egui::Ui, buffer: &mut String, salt: &str, hint| {
-                    Frame::new()
+                    let field = Frame::new()
                         .fill(palette.surface)
                         .corner_radius(CornerRadius::same(theme::RADIUS))
                         .inner_margin(Margin::symmetric(10, 5))
@@ -716,8 +723,14 @@ fn chat_info(app: &mut App, ui: &mut egui::Ui, id: &str) {
                                     .frame(Frame::NONE)
                                     .desired_width(108.0),
                             )
-                        })
-                        .inner
+                        });
+                    theme::focus_outline(
+                        ui,
+                        field.inner.id,
+                        field.response.rect,
+                        f32::from(theme::RADIUS),
+                    );
+                    field.inner
                 };
                 let first_field = name_field(ui, first, "contact-first", "First name");
                 let last_field = name_field(ui, last, "contact-last", "Surname");

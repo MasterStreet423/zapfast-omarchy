@@ -3,6 +3,7 @@
 pub mod chats;
 pub mod conversation;
 pub mod dialogs;
+pub(crate) mod focus;
 pub mod keys;
 pub mod login;
 pub mod picker;
@@ -17,12 +18,24 @@ use crate::app::App;
 use crate::backend::LinkStatus;
 use crate::model::{Action, Page, ToastKind};
 use crate::theme::{self, Icon};
+use focus::{Stop, TabStop};
 
 pub fn show(app: &mut App, ui: &mut egui::Ui) {
     let ctx = ui.ctx().clone();
     let ctx = &ctx;
     track_keyboard_focus(ctx);
     keys::handle(app, ctx);
+    let main_navigation = app.is_linked()
+        && app.page == Page::Chats
+        && app.dialog.is_none()
+        && !app.show_update
+        && app.picker.is_none()
+        && app.reaction_target.is_none()
+        && app.recording.is_none()
+        && app.emoji_start.is_none()
+        && app.mention_start.is_none()
+        && !egui::Popup::is_any_open(ctx);
+    focus::begin(ctx, main_navigation);
     titlebar_strip(app, ui);
     if !app.is_linked() {
         login::show(app, ui);
@@ -46,6 +59,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
             Page::Settings => settings::show(app, ui),
             Page::Chats => conversation::show(app, ui),
         });
+    focus::finish(ctx, main_navigation);
     update::show(app, ctx);
     picker::show(app, ctx);
     dialogs::show(app, ctx);
@@ -102,40 +116,41 @@ fn focus_ring(app: &App, ctx: &egui::Context) {
     else {
         return;
     };
-    // Keep the message input visibly active even when reached by clicking or
+    // Keep text fields visibly active even when reached by clicking or
     // a shortcut. A caret alone is easy to lose in a large conversation.
-    if !keyboard && response.id != egui::Id::new("composer-text") {
-        return;
-    }
     let custom = ctx
         .data(|data| data.get_temp::<theme::FocusOutline>(response.id.with("focus-outline")))
         .filter(|outline| outline.frame == ctx.cumulative_frame_nr());
-    let rect = custom.map_or(response.interact_rect, |outline| outline.rect);
+    if !keyboard && !ctx.text_edit_focused() {
+        return;
+    }
+    let rect = custom.map_or(response.rect, |outline| outline.rect);
     if !rect.is_positive() {
         return;
     }
-    let composer = response.id == egui::Id::new("composer-text");
-    let ring = if composer { rect } else { rect.expand(2.0) };
+    let ring = rect;
     let radius = custom.map_or(f32::from(theme::RADIUS_SMALL), |outline| outline.radius);
-    let clip = custom.map_or(response.interact_rect.expand(4.0), |outline| outline.clip);
-    // Paint in the control's own layer. A global Tooltip layer would put
-    // focus above dialogs, menus, and even toast notifications.
-    ctx.layer_painter(response.layer_id)
-        .with_clip_rect(clip)
-        .rect_stroke(
-            ring,
-            if composer { radius } else { radius + 2.0 },
-            if composer {
-                Stroke::new(1.0, app.palette.accent.gamma_multiply(0.65))
-            } else {
-                Stroke::new(2.0, app.palette.accent)
-            },
-            if composer {
-                egui::StrokeKind::Inside
-            } else {
-                egui::StrokeKind::Outside
-            },
-        );
+    let clip = custom.map_or(response.interact_rect, |outline| outline.clip);
+    // An inset accent border would disappear on a filled primary button.
+    let color = if custom.is_some_and(|outline| outline.fill == app.palette.accent) {
+        app.palette.on_accent
+    } else {
+        app.palette.accent
+    };
+    // Standard egui editors already paint the theme's one-point focus stroke.
+    // Frameless editors register their enclosing field above. Never double up.
+    if custom.is_some() || !ctx.text_edit_focused() {
+        // Paint in the control's own layer. A global Tooltip layer would put
+        // focus above dialogs, menus, and even toast notifications.
+        ctx.layer_painter(response.layer_id)
+            .with_clip_rect(clip)
+            .rect_stroke(
+                ring,
+                radius,
+                Stroke::new(theme::FOCUS_STROKE_WIDTH, color),
+                egui::StrokeKind::Inside,
+            );
+    }
     ctx.data_mut(|data| data.insert_temp(focus_ring_id(), ring));
     ctx.data_mut(|data| data.insert_temp(focus_ring_id().with("layer"), response.layer_id));
 }
@@ -401,6 +416,7 @@ pub fn standalone_header(app: &mut App, ui: &mut egui::Ui) {
                     palette.text,
                     &keys::label("Show the chat list (Ctrl+B)"),
                 )
+                .tab_stop(Stop::Sidebar)
                 .clicked()
                 {
                     app.actions.push(Action::ToggleSidebar);

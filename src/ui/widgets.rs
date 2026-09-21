@@ -400,14 +400,6 @@ pub fn search_field(
         palette.surface
     };
     ui.painter().rect_filled(rect, height / 2.0, fill);
-    if has_focus {
-        ui.painter().rect_stroke(
-            rect,
-            height / 2.0,
-            Stroke::new(1.5, palette.accent),
-            egui::StrokeKind::Inside,
-        );
-    }
     let icon_rect =
         Rect::from_center_size(pos2(rect.left() + 18.0, rect.center().y), Vec2::splat(16.0));
     Icon::Search

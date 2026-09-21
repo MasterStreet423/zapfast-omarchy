@@ -2849,7 +2849,12 @@ mod tests {
     }
 
     /// Runs one frame of the given height with these input events.
-    fn frame_sized(app: &mut App, ctx: &egui::Context, height: f32, events: Vec<egui::Event>) {
+    fn frame_sized(
+        app: &mut App,
+        ctx: &egui::Context,
+        height: f32,
+        events: Vec<egui::Event>,
+    ) -> Vec<egui::epaint::ClippedShape> {
         let mut output = ctx.run_ui(
             egui::RawInput {
                 screen_rect: Some(egui::Rect::from_min_size(
@@ -2866,6 +2871,7 @@ mod tests {
             },
         );
         output.textures_delta.clear();
+        output.shapes
     }
 
     fn tab() -> Vec<egui::Event> {
@@ -2955,8 +2961,8 @@ mod tests {
             .unwrap();
         assert!((record.radius * 2.0 - record.rect.width()).abs() < 0.01);
         assert_eq!(record.rect.width(), record.rect.height());
-        assert_eq!(ring(&ctx), Some(record.rect.expand(2.0)));
-        // Continue past record, including hints, message controls and search.
+        assert_eq!(ring(&ctx), Some(record.rect));
+        // Continue through the primary controls, never the message contents.
         for _ in 0..30 {
             frame_sized(&mut app, &ctx, 780.0, tab());
             for _ in 0..3 {
@@ -3047,16 +3053,10 @@ mod tests {
             frame_sized(&mut app, &ctx, 780.0, tab());
             render(&mut app, &ctx);
         }
-        let focused = ctx
-            .memory(|memory| memory.focused())
-            .and_then(|id| ctx.read_response(id))
-            .unwrap();
-        assert!(
-            focused.rect.center().x < app.settings.sidebar_width || focused.rect.center().y < 150.0,
-            "Tab returns to navigation, not the group sender: {:?}",
-            focused.rect
-        );
+        assert_eq!(focused_stop(&ctx), Some(crate::ui::focus::Stop::Attach));
         assert!(ring(&ctx).is_some());
+        frame_sized(&mut app, &ctx, 780.0, tab());
+        assert_eq!(focused_stop(&ctx), Some(crate::ui::focus::Stop::Poll));
         frame_with(
             &mut app,
             &ctx,
@@ -3068,10 +3068,290 @@ mod tests {
                 modifiers: egui::Modifiers::NONE,
             }],
         );
-        assert_ne!(
-            app.dialog,
-            Some(crate::model::Dialog::ChatInfo(sender.into()))
-        );
+        assert_eq!(app.dialog, Some(crate::model::Dialog::CreatePoll(group)));
+    }
+
+    fn focused_stop(ctx: &egui::Context) -> Option<crate::ui::focus::Stop> {
+        let focused = ctx.memory(|memory| memory.focused());
+        crate::ui::focus::stops(ctx)
+            .into_iter()
+            .find(|(_, id)| Some(*id) == focused)
+            .map(|(stop, _)| stop)
+    }
+
+    fn assert_single_focus_border(
+        app: &App,
+        ctx: &egui::Context,
+        shapes: &[egui::epaint::ClippedShape],
+    ) {
+        let rect = ring(ctx).expect("a visible focus border at every stop");
+        let outline = ctx.memory(|memory| memory.focused()).and_then(|id| {
+            ctx.data(|data| data.get_temp::<crate::theme::FocusOutline>(id.with("focus-outline")))
+        });
+        let color = if outline.is_some_and(|outline| outline.fill == app.palette.accent) {
+            app.palette.on_accent
+        } else {
+            app.palette.accent
+        };
+        fn borders(shape: &egui::Shape, rect: egui::Rect, accent: egui::Color32) -> usize {
+            match shape {
+                egui::Shape::Vec(shapes) => shapes
+                    .iter()
+                    .map(|shape| borders(shape, rect, accent))
+                    .sum(),
+                egui::Shape::Rect(shape)
+                    if shape.stroke.color == accent
+                        && shape.rect.intersects(rect)
+                        && shape.stroke.width > 0.0 =>
+                {
+                    assert_eq!(shape.rect, rect, "no second inner or outer border");
+                    assert_eq!(shape.stroke.width, 1.0, "every focus border is one point");
+                    assert_eq!(shape.stroke_kind, egui::StrokeKind::Inside);
+                    1
+                }
+                _ => 0,
+            }
+        }
+        let mut count = 0;
+        for shape in shapes {
+            let found = borders(&shape.shape, rect, color);
+            if found > 0 {
+                assert!(
+                    shape.clip_rect.contains_rect(rect),
+                    "unclipped border: {rect:?} in {:?}, stop {:?}",
+                    shape.clip_rect,
+                    focused_stop(ctx)
+                );
+            }
+            count += found;
+        }
+        assert_eq!(count, 1, "exactly one focus border");
+    }
+
+    #[test]
+    fn main_tab_cycle_skips_rich_messages_and_chat_rows_in_both_directions() {
+        use crate::ui::focus::Stop;
+        for (hints, ready, macos) in [
+            (false, false, false),
+            (true, false, false),
+            (false, true, false),
+            (false, false, true),
+        ] {
+            let mut app = app();
+            app.settings.show_shortcut_hints = hints;
+            if ready {
+                app.composer = "A synthetic draft".into();
+            }
+            app.settings.sidebar_width = 280.0;
+            // Keep all the sample images, replies and reactions, but render
+            // them as group messages too, including clickable sender avatars.
+            let direct = app.open_chat.clone().unwrap();
+            let group = app
+                .chats
+                .iter()
+                .find(|chat| chat.is_group())
+                .unwrap()
+                .id
+                .clone();
+            let messages = app.conversations[&direct].messages.clone();
+            assert!(
+                messages
+                    .iter()
+                    .any(|message| matches!(message.content, Content::Image { .. }))
+            );
+            assert!(messages.iter().any(|message| !message.reactions.is_empty()));
+            assert!(messages.iter().any(|message| message.quoted.is_some()));
+            app.conversations.get_mut(&group).unwrap().messages = messages;
+            app.open_chat = Some(group.clone());
+            app.focus_composer = true;
+            let ctx = egui::Context::default();
+            app.attach(&ctx);
+            if macos {
+                crate::theme::preview_macos(&ctx);
+            }
+            render(&mut app, &ctx);
+            // Let media decoding and the initial bottom-scroll settle before
+            // measuring whether keyboard navigation moves the transcript.
+            for _ in 0..20 {
+                frame_sized(&mut app, &ctx, 780.0, Vec::new());
+            }
+            let expected: Vec<_> = [
+                Stop::Composer,
+                Stop::Send,
+                Stop::Attach,
+                Stop::Poll,
+                Stop::Emoji,
+                Stop::Profile,
+                Stop::Sidebar,
+                Stop::NewChat,
+                Stop::Settings,
+                Stop::Search,
+                Stop::All,
+                Stop::Unread,
+                Stop::Private,
+                Stop::Groups,
+                Stop::Locked,
+            ]
+            .into_iter()
+            .filter(|stop| {
+                !crate::theme::macos_chrome(&ctx) || !matches!(stop, Stop::Profile | Stop::Settings)
+            })
+            .collect();
+            assert_eq!(
+                crate::ui::focus::stops(&ctx)
+                    .iter()
+                    .map(|(stop, _)| *stop)
+                    .collect::<Vec<_>>(),
+                expected
+            );
+            let last = &app.conversations[&group].messages.last().unwrap().id;
+            let bubble_rect = crate::ui::conversation::bubble_id(&group, last).with("rect");
+            let initial_rect = ctx
+                .data(|data| data.get_temp::<egui::Rect>(bubble_rect))
+                .unwrap();
+            for backwards in [false, true] {
+                ctx.memory_mut(|memory| memory.request_focus(egui::Id::new("composer-text")));
+                for step in 1..=expected.len() * 2 {
+                    let modifiers = if backwards {
+                        egui::Modifiers::SHIFT
+                    } else {
+                        egui::Modifiers::NONE
+                    };
+                    frame_sized(&mut app, &ctx, 780.0, vec![key(egui::Key::Tab, modifiers)]);
+                    let shapes = frame_sized(&mut app, &ctx, 780.0, Vec::new());
+                    let index = if backwards {
+                        (expected.len() - step % expected.len()) % expected.len()
+                    } else {
+                        step % expected.len()
+                    };
+                    assert_eq!(
+                        focused_stop(&ctx),
+                        Some(expected[index]),
+                        "step {step}, backwards {backwards}"
+                    );
+                    assert_single_focus_border(&app, &ctx, &shapes);
+                    assert_eq!(
+                        ctx.data(|data| data.get_temp::<egui::Rect>(bubble_rect)),
+                        Some(initial_rect),
+                        "Tab never scrolls the conversation: step {step}, backwards {backwards}"
+                    );
+                }
+            }
+            // Pointer/accessibility focus on a chat row must not trap Tab
+            // within the list. Both directions rejoin the primary cycle.
+            let row = ctx
+                .data(|data| {
+                    data.get_temp::<egui::Id>(crate::ui::chats::chat_row_id(&direct).with("widget"))
+                })
+                .unwrap();
+            assert!(ctx.read_response(row).unwrap().sense.is_focusable());
+            for (modifiers, expected_stop) in [
+                (egui::Modifiers::NONE, Stop::Composer),
+                (egui::Modifiers::SHIFT, Stop::Locked),
+            ] {
+                ctx.memory_mut(|memory| memory.request_focus(row));
+                frame_sized(&mut app, &ctx, 780.0, vec![key(egui::Key::Tab, modifiers)]);
+                assert_eq!(focused_stop(&ctx), Some(expected_stop));
+            }
+        }
+    }
+
+    #[test]
+    fn main_tab_cycle_tracks_hidden_and_read_only_controls() {
+        use crate::ui::focus::Stop;
+        for page in ["nosidebar", "empty", "channel", "search", "chat"] {
+            let mut app = app();
+            apply_flags(&mut app, Some(page));
+            let ctx = egui::Context::default();
+            app.attach(&ctx);
+            render(&mut app, &ctx);
+            let controls = crate::ui::focus::stops(&ctx);
+            assert!(!controls.is_empty());
+            assert_eq!(
+                controls.iter().any(|(stop, _)| *stop == Stop::Composer),
+                !matches!(page, "empty" | "channel")
+            );
+            if page == "nosidebar" {
+                assert_eq!(
+                    controls.iter().map(|(stop, _)| *stop).collect::<Vec<_>>(),
+                    [
+                        Stop::Composer,
+                        Stop::Send,
+                        Stop::Attach,
+                        Stop::Poll,
+                        Stop::Emoji,
+                        Stop::Sidebar
+                    ]
+                );
+            }
+            for backwards in [false, true] {
+                ctx.memory_mut(|memory| memory.request_focus(controls[0].1));
+                for step in 1..=controls.len() {
+                    let modifiers = if backwards {
+                        egui::Modifiers::SHIFT
+                    } else {
+                        egui::Modifiers::NONE
+                    };
+                    frame_sized(&mut app, &ctx, 780.0, vec![key(egui::Key::Tab, modifiers)]);
+                    let index = if backwards {
+                        (controls.len() - step % controls.len()) % controls.len()
+                    } else {
+                        step % controls.len()
+                    };
+                    assert_eq!(
+                        ctx.memory(|memory| memory.focused()),
+                        Some(controls[index].1),
+                        "{page}, step {step}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn dialogs_keep_local_navigation_and_single_focus_borders() {
+        for page in ["locked-setup", "poll-create", "new-chat"] {
+            let mut app = app();
+            apply_flags(&mut app, Some(page));
+            let ctx = egui::Context::default();
+            app.attach(&ctx);
+            // Let the dialog's opening opacity animation finish.
+            for _ in 0..8 {
+                render(&mut app, &ctx);
+            }
+            for _ in 0..8 {
+                frame_sized(&mut app, &ctx, 780.0, tab());
+                // egui's local order transfers focus at the end of a pass,
+                // then reveals off-screen dialog rows on subsequent frames.
+                render(&mut app, &ctx);
+                let shapes = frame_sized(&mut app, &ctx, 780.0, Vec::new());
+                if let Some(id) = ctx.memory(|memory| memory.focused()) {
+                    assert!(
+                        ctx.read_response(id).unwrap().layer_id.order >= egui::Order::Foreground,
+                        "{page}: focus stays in the dialog"
+                    );
+                    assert_single_focus_border(&app, &ctx, &shapes);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn tab_still_completes_emoji_and_mentions_before_leaving_the_input() {
+        for page in ["emoji-complete", "mention"] {
+            let mut app = app();
+            apply_flags(&mut app, Some(page));
+            let before = app.composer.clone();
+            let ctx = egui::Context::default();
+            app.attach(&ctx);
+            render(&mut app, &ctx);
+            frame_sized(&mut app, &ctx, 780.0, tab());
+            render(&mut app, &ctx);
+            assert_ne!(app.composer, before);
+            assert!(app.emoji_start.is_none());
+            assert!(app.mention_start.is_none());
+            assert_eq!(focused_stop(&ctx), Some(crate::ui::focus::Stop::Composer));
+        }
     }
 
     #[test]
