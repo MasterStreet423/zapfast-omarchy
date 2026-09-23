@@ -79,7 +79,7 @@ fn chat_search(app: &mut App, ui: &mut egui::Ui) {
                     &palette,
                     id,
                     &mut text,
-                    "Search in this chat",
+                    &crate::i18n::gettext(app.locale, "Search in this chat"),
                     width,
                 );
                 if text != app.chat_search {
@@ -104,7 +104,7 @@ fn chat_search(app: &mut App, ui: &mut egui::Ui) {
                     16.0,
                     palette.secondary,
                     palette.text,
-                    "Previous match (Shift+Enter)",
+                    &crate::i18n::gettext(app.locale, "Previous match (Shift+Enter)"),
                 )
                 .clicked()
                 {
@@ -116,7 +116,7 @@ fn chat_search(app: &mut App, ui: &mut egui::Ui) {
                     16.0,
                     palette.secondary,
                     palette.text,
-                    "Next match (Enter)",
+                    &crate::i18n::gettext(app.locale, "Next match (Enter)"),
                 )
                 .clicked()
                 {
@@ -147,10 +147,10 @@ fn empty(app: &mut App, ui: &mut egui::Ui) {
     ui.painter().text(
         center + vec2(0.0, 30.0),
         Align2::CENTER_CENTER,
-        if app.chats.is_empty() {
-            "Your chats appear on the left as they load."
+        &*if app.chats.is_empty() {
+            crate::i18n::gettext(app.locale, "Your chats appear on the left as they load.")
         } else {
-            "Select a chat on the left."
+            crate::i18n::gettext(app.locale, "Select a chat on the left.")
         },
         theme::regular(14.0),
         palette.secondary,
@@ -203,7 +203,7 @@ fn header(app: &mut App, ui: &mut egui::Ui, chat: &Chat) {
                         18.0,
                         palette.secondary,
                         palette.text,
-                        "Show the chat list (Ctrl+B)",
+                        &crate::i18n::gettext(app.locale, "Show the chat list (Ctrl+B)"),
                     )
                     .tab_stop(Stop::Sidebar)
                     .clicked()
@@ -302,16 +302,16 @@ fn header(app: &mut App, ui: &mut egui::Ui, chat: &Chat) {
                         18.0,
                         palette.secondary,
                         palette.text,
-                        "More",
+                        &crate::i18n::gettext(app.locale, "More"),
                     );
                     let width = widgets::menu_width(
                         ui,
                         &[
-                            "Info",
-                            "Pin to top",
-                            "Unarchive",
-                            "Copy number",
-                            "Close chat",
+                            &crate::i18n::gettext(app.locale, "Info"),
+                            &crate::i18n::gettext(app.locale, "Pin to top"),
+                            &crate::i18n::gettext(app.locale, "Unarchive"),
+                            &crate::i18n::gettext(app.locale, "Copy number"),
+                            &crate::i18n::gettext(app.locale, "Close chat"),
                         ],
                         true,
                     );
@@ -319,7 +319,12 @@ fn header(app: &mut App, ui: &mut egui::Ui, chat: &Chat) {
                         .width(width)
                         .frame(widgets::menu_frame(&palette))
                         .show(|ui| {
-                            if widgets::menu_item(ui, &palette, Some(Icon::Info), "Info") {
+                            if widgets::menu_item(
+                                ui,
+                                &palette,
+                                Some(Icon::Info),
+                                &crate::i18n::gettext(app.locale, "Info"),
+                            ) {
                                 app.actions
                                     .push(Action::ShowDialog(Dialog::ChatInfo(chat.id.clone())));
                             }
@@ -327,7 +332,11 @@ fn header(app: &mut App, ui: &mut egui::Ui, chat: &Chat) {
                                 ui,
                                 &palette,
                                 Some(if chat.pinned { Icon::PinOff } else { Icon::Pin }),
-                                if chat.pinned { "Unpin" } else { "Pin to top" },
+                                &if chat.pinned {
+                                    crate::i18n::gettext(app.locale, "Unpin")
+                                } else {
+                                    crate::i18n::gettext(app.locale, "Pin to top")
+                                },
                             ) {
                                 app.actions
                                     .push(Action::SetPinned(chat.id.clone(), !chat.pinned));
@@ -336,10 +345,10 @@ fn header(app: &mut App, ui: &mut egui::Ui, chat: &Chat) {
                                 ui,
                                 &palette,
                                 Some(Icon::Archive),
-                                if chat.archived {
-                                    "Unarchive"
+                                &if chat.archived {
+                                    crate::i18n::gettext(app.locale, "Unarchive")
                                 } else {
-                                    "Archive"
+                                    crate::i18n::gettext(app.locale, "Archive")
                                 },
                             ) {
                                 app.actions
@@ -347,11 +356,21 @@ fn header(app: &mut App, ui: &mut egui::Ui, chat: &Chat) {
                             }
                             widgets::menu_separator(ui, &palette);
                             if let Some(phone) = chat.phone()
-                                && widgets::menu_item(ui, &palette, Some(Icon::Copy), "Copy number")
+                                && widgets::menu_item(
+                                    ui,
+                                    &palette,
+                                    Some(Icon::Copy),
+                                    &crate::i18n::gettext(app.locale, "Copy number"),
+                                )
                             {
                                 app.actions.push(Action::CopyText(format!("+{phone}")));
                             }
-                            if widgets::menu_item(ui, &palette, Some(Icon::X), "Close chat") {
+                            if widgets::menu_item(
+                                ui,
+                                &palette,
+                                Some(Icon::X),
+                                &crate::i18n::gettext(app.locale, "Close chat"),
+                            ) {
                                 app.actions.push(Action::CloseChat);
                             }
                         });
@@ -369,11 +388,17 @@ fn subtitle(app: &App, chat: &Chat) -> (String, Color32) {
             let names: Vec<&str> = typing.iter().map(|(_, name)| name.as_str()).collect();
             match names.as_slice() {
                 [] => String::new(),
-                [one] => format!("{one} is typing…"),
-                [rest @ .., last] => format!("{} and {last} are typing…", rest.join(", ")),
+                [one] => crate::i18n::gettext(crate::i18n_extra::locale(), "{one} is typing…")
+                    .replace("{one}", one),
+                [rest @ .., last] => crate::i18n::gettext(
+                    crate::i18n_extra::locale(),
+                    "{names} and {last} are typing…",
+                )
+                .replace("{names}", &rest.join(", "))
+                .replace("{last}", last),
             }
         } else {
-            "typing…".to_owned()
+            crate::i18n::gettext(app.locale, "typing…").into_owned()
         };
         return (text, palette.accent);
     }
@@ -381,7 +406,7 @@ fn subtitle(app: &App, chat: &Chat) -> (String, Color32) {
         let names = app.participant_names(chat);
         return (
             if names.is_empty() {
-                "Group".to_owned()
+                crate::i18n::gettext(app.locale, "Group").into_owned()
             } else {
                 names
             },
@@ -390,13 +415,16 @@ fn subtitle(app: &App, chat: &Chat) -> (String, Color32) {
     }
     if let Some(presence) = app.presence.get(&chat.id) {
         if presence.online {
-            return ("online".to_owned(), palette.accent);
+            return (
+                crate::i18n::gettext(app.locale, "online").into_owned(),
+                palette.accent,
+            );
         }
         if let Some(seen) = presence.last_seen {
             return (
-                format!(
-                    "last seen {}",
-                    crate::util::chat_stamp(app.locale, seen).to_lowercase()
+                crate::i18n::gettext(app.locale, "last seen {}").replace(
+                    "{}",
+                    &crate::util::chat_stamp(app.locale, seen).to_lowercase(),
                 ),
                 palette.secondary,
             );
@@ -839,13 +867,13 @@ fn composer(app: &mut App, ui: &mut egui::Ui, chat: &Chat) {
             if !chat.can_send() {
                 if chat.kind == crate::model::ChatKind::Broadcast {
                     ui.vertical_centered(|ui| {
-                        theme::text(ui, "Channels are read-only in ZapFast", theme::regular(13.5), palette.secondary);
+                        theme::text(ui, &*crate::i18n::gettext(app.locale, "Channels are read-only in ZapFast"), theme::regular(13.5), palette.secondary);
                     });
                     return;
                 }
                 if chat.locked {
                     ui.vertical_centered(|ui| {
-                        theme::text(ui, "Locked chats are read-only in ZapFast", theme::regular(13.5), palette.secondary);
+                        theme::text(ui, &*crate::i18n::gettext(app.locale, "Locked chats are read-only in ZapFast"), theme::regular(13.5), palette.secondary);
                     });
                     return;
                 }
@@ -854,11 +882,11 @@ fn composer(app: &mut App, ui: &mut egui::Ui, chat: &Chat) {
                     ui.horizontal(|ui| {
                         let width = 230.0;
                         ui.add_space((ui.available_width() - width).max(0.0) / 2.0);
-                        theme::text(ui, "Only", theme::regular(13.5), palette.secondary);
-                        theme::text(ui, "admins", theme::semibold(13.5), palette.accent);
+                        theme::text(ui, &*crate::i18n::gettext(app.locale, "Only"), theme::regular(13.5), palette.secondary);
+                        theme::text(ui, &*crate::i18n::gettext(app.locale, "admins"), theme::semibold(13.5), palette.accent);
                         theme::text(
                             ui,
-                            "can send messages",
+                            &*crate::i18n::gettext(app.locale, "can send messages"),
                             theme::regular(13.5),
                             palette.secondary,
                         );
@@ -954,14 +982,14 @@ fn composer(app: &mut App, ui: &mut egui::Ui, chat: &Chat) {
                         20.0,
                         palette.secondary,
                         palette.text,
-                        "Send files (or drop them on the window)",
+                        &crate::i18n::gettext(app.locale, "Send files (or drop them on the window)"),
                     )
                     .tab_stop(Stop::Attach)
                     .clicked()
                 {
                     app.actions.push(Action::Attach);
                 }
-                if app.editing.is_none() && theme::icon_button(ui, Icon::ListChecks, 20.0, palette.secondary, palette.text, "Create poll").tab_stop(Stop::Poll).clicked() {
+                if app.editing.is_none() && theme::icon_button(ui, Icon::ListChecks, 20.0, palette.secondary, palette.text, &crate::i18n::gettext(app.locale, "Create poll")).tab_stop(Stop::Poll).clicked() {
                     app.actions.push(Action::ShowDialog(Dialog::CreatePoll(chat.id.clone())));
                 }
                 if app.editing.is_none() {
@@ -975,7 +1003,7 @@ fn composer(app: &mut App, ui: &mut egui::Ui, chat: &Chat) {
                             palette.secondary
                         },
                         palette.text,
-                        "Emoji, GIFs, and stickers",
+                        &crate::i18n::gettext(app.locale, "Emoji, GIFs, and stickers"),
                     ).tab_stop(Stop::Emoji);
                     app.picker_anchor = Some(smile.rect);
                     if smile.clicked() {
@@ -1064,7 +1092,7 @@ fn composer(app: &mut App, ui: &mut egui::Ui, chat: &Chat) {
                                     crate::emoji::paint_cluster(ui, cluster, rect);
                                 }
                                 let response = output.response.response.clone().tab_stop(Stop::Composer);
-                                ui.ctx().accesskit_node_builder(response.id, |node| node.set_label("Message"));
+                                ui.ctx().accesskit_node_builder(response.id, |node| node.set_label(&*crate::i18n::gettext(app.locale, "Message")));
                                 if response.changed() {
                                     app.actions.push(Action::Composing {
                                         chat: chat.id.clone(),
@@ -1140,7 +1168,7 @@ fn composer(app: &mut App, ui: &mut egui::Ui, chat: &Chat) {
                         fill,
                         hover,
                         palette.secondary,
-                        "Record a voice message",
+                        &crate::i18n::gettext(app.locale, "Record a voice message"),
                     )
                     .tab_stop(Stop::Send)
                     .clicked()
@@ -1153,7 +1181,7 @@ fn composer(app: &mut App, ui: &mut egui::Ui, chat: &Chat) {
                     } else {
                         Icon::Send
                     };
-                    if theme::circle_button(ui, icon_kind, button_width, fill, hover, icon, "Send")
+                    if theme::circle_button(ui, icon_kind, button_width, fill, hover, icon, &crate::i18n::gettext(app.locale, "Send"))
                         .tab_stop(Stop::Send)
                         .clicked()
                     {
@@ -1236,7 +1264,12 @@ fn edit_strip(app: &mut App, ui: &mut egui::Ui) {
             ui.set_width(ui.available_width());
             ui.horizontal(|ui| {
                 theme::icon(ui, Icon::Pencil, 16.0, palette.accent);
-                theme::text(ui, "Editing message", theme::semibold(12.5), palette.accent);
+                theme::text(
+                    ui,
+                    &*crate::i18n::gettext(app.locale, "Editing message"),
+                    theme::semibold(12.5),
+                    palette.accent,
+                );
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                     if theme::icon_button(
                         ui,
@@ -1244,7 +1277,7 @@ fn edit_strip(app: &mut App, ui: &mut egui::Ui) {
                         16.0,
                         palette.secondary,
                         palette.text,
-                        "Stop editing (Esc)",
+                        &crate::i18n::gettext(app.locale, "Stop editing (Esc)"),
                     )
                     .clicked()
                     {
@@ -1259,11 +1292,14 @@ fn edit_strip(app: &mut App, ui: &mut egui::Ui) {
 fn reply_strip(app: &mut App, ui: &mut egui::Ui, quoted: &Message) {
     let palette = app.palette;
     let who = if quoted.from_me {
-        "You".to_owned()
+        crate::i18n::gettext(app.locale, "You").into_owned()
     } else {
         app.display_name_or(&quoted.sender, quoted.sender_name.as_deref())
     };
-    let summary = markup::plain(&quoted.summary(), &app.mention_list(quoted));
+    let summary = markup::plain(
+        &crate::i18n_extra::summary(&quoted.summary()),
+        &app.mention_list(quoted),
+    );
     Frame::new()
         .fill(palette.surface)
         .corner_radius(CornerRadius::same(theme::RADIUS))
@@ -1278,7 +1314,8 @@ fn reply_strip(app: &mut App, ui: &mut egui::Ui, quoted: &Message) {
                     ui.set_max_width((ui.available_width() - 40.0).max(0.0));
                     widgets::rich_text(
                         ui,
-                        &format!("Replying to {who}"),
+                        &crate::i18n::gettext(crate::i18n_extra::locale(), "Replying to {who}")
+                            .replace("{who}", &who.to_string()),
                         theme::semibold(12.5),
                         palette.accent,
                     );
@@ -1291,7 +1328,7 @@ fn reply_strip(app: &mut App, ui: &mut egui::Ui, quoted: &Message) {
                         16.0,
                         palette.secondary,
                         palette.text,
-                        "Cancel reply (Esc)",
+                        &crate::i18n::gettext(app.locale, "Cancel reply (Esc)"),
                     )
                     .clicked()
                     {
@@ -1641,7 +1678,7 @@ fn messages(app: &mut App, ui: &mut egui::Ui, chat: &Chat) {
             palette.overlay,
             palette.surface_hover,
             palette.text,
-            "Newest message",
+            &crate::i18n::gettext(app.locale, "Newest message"),
         )
         .clicked()
         {
@@ -1681,7 +1718,10 @@ fn top_of_history(
                 theme::spinner(ui, 16.0, palette.accent);
                 theme::text(
                     ui,
-                    "Loading older messages from your phone…",
+                    &*crate::i18n::gettext(
+                        crate::i18n_extra::locale(),
+                        "Loading older messages from your phone…",
+                    ),
                     theme::regular(12.5),
                     palette.secondary,
                 );
@@ -1689,9 +1729,20 @@ fn top_of_history(
         } else if conversation.messages.is_empty() {
             ui.add_space(24.0);
             if conversation.fetching_phone {
-                widgets::chip(ui, palette, "Loading messages from your phone…");
+                widgets::chip(
+                    ui,
+                    palette,
+                    &crate::i18n::gettext(
+                        crate::i18n_extra::locale(),
+                        "Loading messages from your phone…",
+                    ),
+                );
             } else {
-                widgets::chip(ui, palette, "No messages here yet");
+                widgets::chip(
+                    ui,
+                    palette,
+                    &crate::i18n::gettext(crate::i18n_extra::locale(), "No messages here yet"),
+                );
             }
         } else {
             ui.add_space(6.0);
@@ -1815,9 +1866,10 @@ fn open_reaction_picker_action(chat: &str, message: &str) -> Action {
 /// a user can tell the controls apart. The visual tooltip stays a short "React".
 fn reaction_button_label(from_me: bool, sender: &str) -> String {
     if from_me {
-        "React to your message".to_owned()
+        crate::i18n::gettext(crate::i18n_extra::locale(), "React to your message").into_owned()
     } else {
-        format!("React to {sender}'s message")
+        crate::i18n::gettext(crate::i18n_extra::locale(), "React to {sender}'s message")
+            .replace("{sender}", sender)
     }
 }
 
@@ -1908,7 +1960,7 @@ fn reaction_affordance(
     }
     if response
         .on_hover_cursor(egui::CursorIcon::PointingHand)
-        .on_hover_text("React")
+        .on_hover_text(&*crate::i18n::gettext(view.locale, "React"))
         .clicked()
     {
         actions.push(open_reaction_picker_action(&view.chat.id, &message.id));
@@ -1918,7 +1970,11 @@ fn reaction_affordance(
     }
     let reply = ui.interact(reply_rect, bubble.id.with("reply"), Sense::click());
     reply.widget_info(|| {
-        egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), "Reply")
+        egui::WidgetInfo::labeled(
+            egui::WidgetType::Button,
+            ui.is_enabled(),
+            crate::i18n::gettext(view.locale, "Reply"),
+        )
     });
     theme::reveal_focus(&reply);
     if ui.is_rect_visible(reply_rect) && (reply.has_focus() || (uncovered && revealed)) {
@@ -1945,7 +2001,7 @@ fn reaction_affordance(
     }
     if reply
         .on_hover_cursor(egui::CursorIcon::PointingHand)
-        .on_hover_text("Reply")
+        .on_hover_text(&*crate::i18n::gettext(view.locale, "Reply"))
         .clicked()
     {
         actions.push(Action::Reply(message.id.clone()));
@@ -2265,7 +2321,8 @@ fn speed_pill(
             egui::WidgetType::Button,
             ui.is_enabled(),
             active,
-            format!("Playback speed {label}"),
+            crate::i18n::gettext(crate::i18n_extra::locale(), "Playback speed {label}")
+                .replace("{label}", &label.to_string()),
         )
     });
     theme::reveal_focus(&response);
@@ -2418,10 +2475,13 @@ fn bubble_frame(
                     |ui| {
                         ui.add(
                             egui::Label::new(
-                                egui::RichText::new("Forwarded")
-                                    .font(theme::regular(12.5))
-                                    .italics()
-                                    .color(palette.dim),
+                                egui::RichText::new(&*crate::i18n::gettext(
+                                    view.locale,
+                                    "Forwarded",
+                                ))
+                                .font(theme::regular(12.5))
+                                .italics()
+                                .color(palette.dim),
                             )
                             .selectable(false),
                         );
@@ -2510,8 +2570,8 @@ fn bubble_frame(
     let width = widgets::menu_width(
         ui,
         &[
-            "Delete for everyone",
-            "Show in folder",
+            &crate::i18n::gettext(view.locale, "Delete for everyone"),
+            &crate::i18n::gettext(view.locale, "Show in folder"),
             if crate::util::twelve_hour_clock() {
                 "Delivered Yesterday at 11:59 PM"
             } else {
@@ -2675,11 +2735,14 @@ fn quote_block(
 ) {
     let palette = view.palette;
     let who = if view.me == Some(quoted.sender.as_str()) {
-        "You".to_owned()
+        crate::i18n::gettext(view.locale, "You").into_owned()
     } else {
         (view.names_or)(&quoted.sender, quoted.sender_name.as_deref())
     };
-    let summary = markup::plain(&quoted.summary, &quote_mentions(view, quoted));
+    let summary = markup::plain(
+        &crate::i18n_extra::summary(&quoted.summary),
+        &quote_mentions(view, quoted),
+    );
     let response = Frame::new()
         .fill(palette.window.gamma_multiply(0.35))
         .corner_radius(CornerRadius::same(6))
@@ -2768,7 +2831,11 @@ fn footer_width(ui: &egui::Ui, message: &Message) -> f32 {
         .x;
     let edited = if message.edited {
         ui.painter()
-            .layout_no_wrap("edited".to_owned(), font, Color32::WHITE)
+            .layout_no_wrap(
+                crate::i18n::gettext(crate::i18n_extra::locale(), "edited").into_owned(),
+                font,
+                Color32::WHITE,
+            )
             .size()
             .x
             + 4.0
@@ -2777,7 +2844,11 @@ fn footer_width(ui: &egui::Ui, message: &Message) -> f32 {
     };
     let not_sent = if not_sent(message) {
         ui.painter()
-            .layout_no_wrap(NOT_SENT.to_owned(), theme::medium(11.0), Color32::WHITE)
+            .layout_no_wrap(
+                crate::i18n_extra::tr(NOT_SENT).into_owned(),
+                theme::medium(11.0),
+                Color32::WHITE,
+            )
             .size()
             .x
             + 6.0
@@ -2800,15 +2871,21 @@ fn footer(ui: &mut egui::Ui, palette: &Palette, message: &Message, slot: Option<
         palette.secondary,
     );
     let edited = message.edited.then(|| {
-        ui.painter()
-            .layout_no_wrap("edited".to_owned(), font, palette.dim)
+        ui.painter().layout_no_wrap(
+            crate::i18n::gettext(crate::i18n_extra::locale(), "edited").into_owned(),
+            font,
+            palette.dim,
+        )
     });
     // A red dot alone does not say what went wrong or what to do. The word
     // uses the text colour: the danger red on an outgoing bubble is too faint
     // to read, and the red icon beside it already carries the alarm.
     let failed = not_sent(message).then(|| {
-        ui.painter()
-            .layout_no_wrap(NOT_SENT.to_owned(), theme::medium(11.0), palette.text)
+        ui.painter().layout_no_wrap(
+            crate::i18n_extra::tr(NOT_SENT).into_owned(),
+            theme::medium(11.0),
+            palette.text,
+        )
     });
     let tick_width = if message.from_me { 19.0 } else { 0.0 };
     let width = time.size().x
@@ -2859,9 +2936,13 @@ fn footer(ui: &mut egui::Ui, palette: &Palette, message: &Message, slot: Option<
             Sense::hover(),
         );
         response.widget_info(|| {
-            egui::WidgetInfo::labeled(egui::WidgetType::Label, true, NOT_SENT_HINT)
+            egui::WidgetInfo::labeled(
+                egui::WidgetType::Label,
+                true,
+                &*crate::i18n_extra::tr(NOT_SENT_HINT),
+            )
         });
-        response.on_hover_text(NOT_SENT_HINT);
+        response.on_hover_text(&*crate::i18n_extra::tr(NOT_SENT_HINT));
     }
 }
 
@@ -2870,7 +2951,7 @@ fn reactions(ui: &mut egui::Ui, view: &View<'_>, message: &Message, actions: &mu
     let mut counts: Vec<(String, u32, bool, Vec<String>)> = Vec::new();
     for reaction in &message.reactions {
         let who = if reaction.from_me {
-            "You".to_owned()
+            crate::i18n::gettext(view.locale, "You").into_owned()
         } else {
             (view.names_or)(&reaction.sender, None)
         };
@@ -2993,7 +3074,8 @@ fn context_menu(ui: &mut egui::Ui, view: &View<'_>, message: &Message, actions: 
                 line.paint(ui, rect.center() - line.size() / 2.0, palette.text);
                 let response = response.on_hover_cursor(egui::CursorIcon::PointingHand);
                 let response = if chosen {
-                    response.on_hover_text("Remove your reaction")
+                    response
+                        .on_hover_text(&*crate::i18n::gettext(view.locale, "Remove your reaction"))
                 } else {
                     response
                 };
@@ -3026,7 +3108,7 @@ fn context_menu(ui: &mut egui::Ui, view: &View<'_>, message: &Message, actions: 
             }
             if response
                 .on_hover_cursor(egui::CursorIcon::PointingHand)
-                .on_hover_text("React with any emoji")
+                .on_hover_text(&*crate::i18n::gettext(view.locale, "React with any emoji"))
                 .clicked()
             {
                 actions.push(Action::OpenReactionPicker {
@@ -3039,7 +3121,12 @@ fn context_menu(ui: &mut egui::Ui, view: &View<'_>, message: &Message, actions: 
     );
     widgets::menu_separator(ui, &palette);
     if !matches!(message.content, Content::Revoked)
-        && widgets::menu_item(ui, &palette, Some(Icon::Reply), "Reply")
+        && widgets::menu_item(
+            ui,
+            &palette,
+            Some(Icon::Reply),
+            &crate::i18n::gettext(view.locale, "Reply"),
+        )
     {
         actions.push(Action::Reply(message.id.clone()));
     }
@@ -3050,14 +3137,23 @@ fn context_menu(ui: &mut egui::Ui, view: &View<'_>, message: &Message, actions: 
             | Content::PhoneOnly { .. }
             | Content::Poll { .. }
             | Content::Interactive { .. }
-    ) && widgets::menu_item(ui, &palette, Some(Icon::Forward), "Forward")
-    {
+    ) && widgets::menu_item(
+        ui,
+        &palette,
+        Some(Icon::Forward),
+        &crate::i18n::gettext(view.locale, "Forward"),
+    ) {
         actions.push(Action::ShowDialog(Dialog::Forward {
             chat: chat.clone(),
             messages: vec![message.id.clone()],
         }));
     }
-    if widgets::menu_item(ui, &palette, Some(Icon::Check), "Select") {
+    if widgets::menu_item(
+        ui,
+        &palette,
+        Some(Icon::Check),
+        &crate::i18n::gettext(view.locale, "Select"),
+    ) {
         actions.push(Action::SelectMessage(message.id.clone()));
     }
     let text = match &message.content {
@@ -3079,7 +3175,12 @@ fn context_menu(ui: &mut egui::Ui, view: &View<'_>, message: &Message, actions: 
         _ => None,
     };
     if let Some(text) = text
-        && widgets::menu_item(ui, &palette, Some(Icon::Copy), "Copy text")
+        && widgets::menu_item(
+            ui,
+            &palette,
+            Some(Icon::Copy),
+            &crate::i18n::gettext(view.locale, "Copy text"),
+        )
     {
         let mentions = mentions_of(view, message);
         actions.push(Action::CopyText(markup::plain(&text, &mentions)));
@@ -3091,13 +3192,32 @@ fn context_menu(ui: &mut egui::Ui, view: &View<'_>, message: &Message, actions: 
     let can_revoke = message.from_me
         && !matches!(message.content, Content::Revoked)
         && age <= crate::app::REVOKE_WINDOW.as_secs() as i64;
-    if can_edit && widgets::menu_item(ui, &palette, Some(Icon::Pencil), "Edit") {
+    if can_edit
+        && widgets::menu_item(
+            ui,
+            &palette,
+            Some(Icon::Pencil),
+            &crate::i18n::gettext(view.locale, "Edit"),
+        )
+    {
         actions.push(Action::Edit(message.id.clone()));
     }
-    if can_revoke && widgets::menu_item(ui, &palette, Some(Icon::Trash), "Delete for everyone") {
+    if can_revoke
+        && widgets::menu_item(
+            ui,
+            &palette,
+            Some(Icon::Trash),
+            &crate::i18n::gettext(view.locale, "Delete for everyone"),
+        )
+    {
         actions.push(Action::DeleteForEveryone(message.id.clone()));
     }
-    if widgets::menu_item(ui, &palette, Some(Icon::EyeOff), "Delete for me") {
+    if widgets::menu_item(
+        ui,
+        &palette,
+        Some(Icon::EyeOff),
+        &crate::i18n::gettext(view.locale, "Delete for me"),
+    ) {
         actions.push(Action::DeleteForMe(message.id.clone()));
     }
     if let Content::Sticker { media, .. } = &message.content
@@ -3117,19 +3237,29 @@ fn context_menu(ui: &mut egui::Ui, view: &View<'_>, message: &Message, actions: 
                 let open = if matches!(message.content, Content::Video { gif: false, .. }) {
                     crate::i18n::gettext(view.locale, "Open in system player")
                 } else {
-                    "Open file".into()
+                    crate::i18n::gettext(view.locale, "Open file")
                 };
                 if widgets::menu_item(ui, &palette, Some(Icon::ExternalLink), &open) {
                     actions.push(Action::OpenFile(path.clone()));
                 }
-                if widgets::menu_item(ui, &palette, Some(Icon::Download), "Save as…") {
+                if widgets::menu_item(
+                    ui,
+                    &palette,
+                    Some(Icon::Download),
+                    &crate::i18n::gettext(view.locale, "Save as…"),
+                ) {
                     actions.push(Action::SaveAttachmentAs {
                         path: path.clone(),
                         name: attachment_name(&message.content, path),
                     });
                 }
                 if let Some(folder) = path.parent()
-                    && widgets::menu_item(ui, &palette, Some(Icon::FileText), "Show in folder")
+                    && widgets::menu_item(
+                        ui,
+                        &palette,
+                        Some(Icon::FileText),
+                        &crate::i18n::gettext(view.locale, "Show in folder"),
+                    )
                 {
                     actions.push(Action::OpenFolder(folder.to_path_buf()));
                 }
@@ -3140,10 +3270,10 @@ fn context_menu(ui: &mut egui::Ui, view: &View<'_>, message: &Message, actions: 
                     ui,
                     &palette,
                     Some(Icon::Download),
-                    if downloading {
-                        "Downloading…"
+                    &if downloading {
+                        crate::i18n::gettext(view.locale, "Downloading…")
                     } else {
-                        "Download"
+                        crate::i18n::gettext(view.locale, "Download")
                     },
                     !downloading,
                 ) {
@@ -3167,9 +3297,9 @@ fn context_menu(ui: &mut egui::Ui, view: &View<'_>, message: &Message, actions: 
         ui,
         &palette,
         Icon::Check,
-        &format!(
-            "Sent {}",
-            crate::util::moment_stamp(view.locale, message.timestamp)
+        &crate::i18n::gettext(view.locale, "Sent {}").replace(
+            "{}",
+            &crate::util::moment_stamp(view.locale, message.timestamp),
         ),
     );
     // Delivery and read times, per member in a group, live in "Message info".
@@ -3193,7 +3323,12 @@ fn context_menu(ui: &mut egui::Ui, view: &View<'_>, message: &Message, actions: 
     }
     // The id helps when looking a message up for a bug report. Clicking
     // "Sent" used to copy it without saying so.
-    if widgets::menu_item(ui, &palette, Some(Icon::Copy), "Copy message ID") {
+    if widgets::menu_item(
+        ui,
+        &palette,
+        Some(Icon::Copy),
+        &crate::i18n::gettext(view.locale, "Copy message ID"),
+    ) {
         actions.push(Action::CopyText(message.id.clone()));
     }
 }
@@ -3266,10 +3401,11 @@ fn content(
                     return None;
                 }
             }
+            let fallback = crate::i18n::gettext(view.locale, "Interactive message");
             let body = if card.body.is_empty() {
-                "Interactive message"
+                &*fallback
             } else {
-                &card.body
+                card.body.as_str()
             };
             rich_body(
                 ui,
@@ -3405,7 +3541,7 @@ fn content(
                     ui.spacing_mut().item_spacing.y = 1.0;
                     widgets::rich_text(
                         ui,
-                        name.as_deref().unwrap_or("Location"),
+                        name.as_deref().unwrap_or(&crate::i18n::gettext(view.locale, "Location")),
                         theme::medium(14.0),
                         palette.text,
                     );
@@ -3595,7 +3731,7 @@ fn content(
                 |ui| {
                     theme::text(
                         ui,
-                        "This message was deleted",
+                        &*crate::i18n::gettext(view.locale, "This message was deleted"),
                         theme::regular(13.5),
                         palette.secondary,
                     );
@@ -3604,10 +3740,13 @@ fn content(
             None
         }
         Content::PhoneOnly { view_once } => {
-            let text = if *view_once {
-                "View once message. For your privacy, it opens only on your phone."
+            let text = &*if *view_once {
+                crate::i18n::gettext(
+                    view.locale,
+                    "View once message. For your privacy, it opens only on your phone.",
+                )
             } else {
-                "This message can only be seen on your phone."
+                crate::i18n::gettext(view.locale, "This message can only be seen on your phone.")
             };
             mirrored_row(
                 ui,
@@ -3631,7 +3770,8 @@ fn content(
                 |ui| {
                     theme::text(
                         ui,
-                        format!("Unsupported: {what}"),
+                        crate::i18n::gettext(crate::i18n_extra::locale(), "Unsupported: {what}")
+                            .replace("{what}", &what.to_string()),
                         theme::regular(13.5),
                         palette.secondary,
                     );
@@ -3817,10 +3957,10 @@ fn carousel_arrow(
     id: egui::Id,
     previous: bool,
 ) -> egui::Response {
-    let label = if previous {
-        "Previous card"
+    let label = &*if previous {
+        crate::i18n::gettext(crate::i18n_extra::locale(), "Previous card")
     } else {
-        "Next card"
+        crate::i18n::gettext(crate::i18n_extra::locale(), "Next card")
     };
     let response = ui.interact(rect, id, Sense::click());
     response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, label));
@@ -3882,10 +4022,14 @@ fn carousel_picture(
     let size = vec2(width, width * 0.56);
     let (rect, response) = ui.allocate_exact_size(size, Sense::click());
     let label = match (&media.path, &media.state) {
-        (Some(_), _) => "Open card image",
-        (None, MediaState::Failed(_)) => "Retry card image download",
-        (None, MediaState::Downloading) => "Downloading card image",
-        (None, MediaState::Idle) => "Download card image",
+        (Some(_), _) => &crate::i18n::gettext(view.locale, "Open card image"),
+        (None, MediaState::Failed(_)) => {
+            &crate::i18n::gettext(view.locale, "Retry card image download")
+        }
+        (None, MediaState::Downloading) => {
+            &crate::i18n::gettext(view.locale, "Downloading card image")
+        }
+        (None, MediaState::Idle) => &crate::i18n::gettext(view.locale, "Download card image"),
     };
     response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, label));
     // Tab can land on a card scrolled out of the carousel's viewport.
@@ -3939,7 +4083,10 @@ fn carousel_picture(
                 ui.painter().text(
                     rect.center() + vec2(0.0, 24.0),
                     Align2::CENTER_CENTER,
-                    "Could not display this picture. Click to open it.",
+                    crate::i18n::gettext(
+                        view.locale,
+                        "Could not display this picture. Click to open it.",
+                    ),
                     theme::regular(11.5),
                     view.palette.secondary,
                 );
@@ -3956,7 +4103,7 @@ fn carousel_picture(
                     ui.painter().text(
                         rect.center() + vec2(0.0, 34.0),
                         Align2::CENTER_CENTER,
-                        "Download failed. Click to retry.",
+                        crate::i18n::gettext(view.locale, "Download failed. Click to retry."),
                         theme::regular(11.5),
                         Color32::WHITE,
                     );
@@ -3978,7 +4125,10 @@ fn carousel_picture(
     let response = response.on_hover_cursor(egui::CursorIcon::PointingHand);
     let clicked = response.clicked();
     if let MediaState::Failed(error) = &media.state {
-        response.on_hover_text(format!("{error} · Click to retry"));
+        response.on_hover_text(
+            crate::i18n::gettext(crate::i18n_extra::locale(), "{error} · Click to retry")
+                .replace("{error}", &crate::i18n_extra::tr(error)),
+        );
     }
     if let Some(path) = &media.path {
         if clicked {
@@ -4154,15 +4304,18 @@ fn interactive_buttons(
                     .interactive_pending
                     .contains(&(message.chat.clone(), message.id.clone()))
             {
-                "Sending reply…"
+                crate::i18n::gettext(view.locale, "Sending reply…")
             } else if sends && !view.connected {
-                "Connect to WhatsApp to reply"
+                crate::i18n::gettext(view.locale, "Connect to WhatsApp to reply")
             } else if sends && !view.chat.can_send() {
-                "This conversation is read-only"
+                crate::i18n::gettext(view.locale, "This conversation is read-only")
             } else if sends && message.from_me {
-                "Reply options are for the recipient"
+                crate::i18n::gettext(view.locale, "Reply options are for the recipient")
             } else {
-                "Open this option in WhatsApp Web or on your phone"
+                crate::i18n::gettext(
+                    view.locale,
+                    "Open this option in WhatsApp Web or on your phone",
+                )
             };
             response.on_hover_text(format!("{}\n{reason}", button.label));
         } else if let Some(url) = &button.url {
@@ -4178,14 +4331,20 @@ fn interactive_buttons(
             match &button.action {
                 InteractiveAction::Reply => {
                     if response
-                        .on_hover_text(format!("Send reply: {}", button.label))
+                        .on_hover_text(
+                            crate::i18n::gettext(crate::i18n_extra::locale(), "Send reply: {}")
+                                .replace("{}", &button.label),
+                        )
                         .clicked()
                     {
                         actions.push(reply(None));
                     }
                 }
                 InteractiveAction::Copy(code) => {
-                    if response.on_hover_text("Copy code").clicked() {
+                    if response
+                        .on_hover_text(&*crate::i18n::gettext(view.locale, "Copy code"))
+                        .clicked()
+                    {
                         actions.push(Action::CopyText(code.clone()));
                     }
                 }
@@ -4206,7 +4365,7 @@ fn interactive_buttons(
         ui.add_space(6.0);
         widgets::rich_text(
             ui,
-            "More content in WhatsApp Web or on your phone",
+            &crate::i18n::gettext(view.locale, "More content in WhatsApp Web or on your phone"),
             theme::regular(12.0),
             palette.secondary,
         );
@@ -4572,7 +4731,10 @@ fn picture(
                     ui.painter().text(
                         rect.center() + vec2(0.0, 24.0),
                         Align2::CENTER_CENTER,
-                        "Could not display this picture. Click to open it.",
+                        crate::i18n::gettext(
+                            view.locale,
+                            "Could not display this picture. Click to open it.",
+                        ),
                         theme::regular(11.5),
                         palette.secondary,
                     );
@@ -4619,7 +4781,7 @@ fn picture(
                 ui.painter().text(
                     rect.center() + vec2(0.0, 34.0),
                     Align2::CENTER_CENTER,
-                    "Download failed. Click to retry.",
+                    crate::i18n::gettext(view.locale, "Download failed. Click to retry."),
                     theme::regular(11.5),
                     Color32::WHITE,
                 );
@@ -4689,7 +4851,11 @@ fn video(
     use crate::video::State;
     let palette = view.palette;
     let Some(thumbnail) = message.thumbnail.as_deref() else {
-        let title = if gif { "GIF" } else { "Video" };
+        let title = if gif {
+            "GIF"
+        } else {
+            &crate::i18n::gettext(view.locale, "Video")
+        };
         let mut detail = Vec::new();
         if let Some(seconds) = seconds {
             detail.push(crate::util::duration(seconds));
@@ -5221,7 +5387,11 @@ fn attachment(
                     ui.set_width((card - 70.0).max(0.0));
                     widgets::rich_text(ui, title, theme::medium(14.0), palette.text);
                     let detail = match &media.state {
-                        MediaState::Failed(error) => format!("{error}. Click to retry."),
+                        MediaState::Failed(error) => crate::i18n::gettext(
+                            crate::i18n_extra::locale(),
+                            "{error}. Click to retry.",
+                        )
+                        .replace("{error}", &crate::i18n_extra::tr(error)),
                         _ => detail.to_owned(),
                     };
                     theme::text(ui, detail, theme::regular(12.0), palette.secondary);
@@ -5336,7 +5506,7 @@ fn voice_player(
                         fill,
                         hover,
                         palette.accent,
-                        "Download",
+                        &crate::i18n::gettext(view.locale, "Download"),
                     )
                     .clicked()
                     {
@@ -5351,9 +5521,9 @@ fn voice_player(
                     State::Loading => waiting(ui),
                     State::Playing | State::Paused | State::Idle => {
                         let (icon, tooltip) = if status.state == State::Playing {
-                            (Icon::Pause, "Pause")
+                            (Icon::Pause, &*crate::i18n::gettext(view.locale, "Pause"))
                         } else {
-                            (Icon::Play, "Play")
+                            (Icon::Play, &*crate::i18n::gettext(view.locale, "Play"))
                         };
                         if theme::circle_button(
                             ui,
@@ -5447,7 +5617,11 @@ fn voice_player(
                         .unwrap_or_else(|| crate::util::bytes(media.size)),
                 };
                 let text = match &media.state {
-                    MediaState::Failed(error) => format!("{error}. Click to retry."),
+                    MediaState::Failed(error) => crate::i18n::gettext(
+                        crate::i18n_extra::locale(),
+                        "{error}. Click to retry.",
+                    )
+                    .replace("{error}", &crate::i18n_extra::tr(error)),
                     _ => shown,
                 };
                 theme::text(ui, text, theme::regular(11.5), palette.secondary);
@@ -5480,10 +5654,13 @@ fn voice_player(
                         speed,
                     )));
                 }
-                response.on_hover_text(if preparing {
-                    "Preparing playback speed"
+                response.on_hover_text(&*if preparing {
+                    crate::i18n::gettext(view.locale, "Preparing playback speed")
                 } else {
-                    "Playback speed. Right-click for every speed."
+                    crate::i18n::gettext(
+                        view.locale,
+                        "Playback speed. Right-click for every speed.",
+                    )
                 });
             }
         },
@@ -5521,7 +5698,7 @@ fn recording_strip(app: &mut App, ui: &mut egui::Ui) {
                 palette.surface,
                 palette.surface_hover,
                 palette.secondary,
-                "Discard",
+                &crate::i18n::gettext(app.locale, "Discard"),
             )
             .clicked()
             {
@@ -5560,7 +5737,7 @@ fn recording_strip(app: &mut App, ui: &mut egui::Ui) {
                 palette.accent,
                 palette.accent_hover,
                 palette.on_accent,
-                "Send",
+                &crate::i18n::gettext(app.locale, "Send"),
             )
             .clicked()
             {
@@ -5580,7 +5757,7 @@ fn selection_bar(app: &mut App, ui: &mut egui::Ui, chat: &str, selected: &[Strin
             18.0,
             palette.secondary,
             palette.text,
-            "Cancel selection",
+            &crate::i18n::gettext(app.locale, "Cancel selection"),
         )
         .clicked()
             || ui.input(|input| input.key_pressed(Key::Escape))
@@ -5594,7 +5771,14 @@ fn selection_bar(app: &mut App, ui: &mut egui::Ui, chat: &str, selected: &[Strin
         };
         theme::text(ui, &count, theme::medium(14.5), palette.text);
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-            if theme::pill_button(ui, &palette, "Forward…", true).clicked() {
+            if theme::pill_button(
+                ui,
+                &palette,
+                &crate::i18n::gettext(app.locale, "Forward…"),
+                true,
+            )
+            .clicked()
+            {
                 app.actions.push(Action::ShowDialog(Dialog::Forward {
                     chat: chat.to_owned(),
                     messages: selected.to_vec(),

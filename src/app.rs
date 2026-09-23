@@ -495,6 +495,7 @@ impl App {
             });
         let open_chat = settings.last_chat.clone();
         let locale = crate::i18n::resolve(settings.interface_language);
+        crate::i18n_extra::set_locale(locale);
         let mut app = Self {
             dirs,
             settings,
@@ -999,7 +1000,7 @@ impl App {
     /// message-provided fallback. Our own id becomes "You".
     pub fn display_name_or(&self, id: &str, hint: Option<&str>) -> String {
         if self.me.as_deref() == Some(id) {
-            return "You".to_owned();
+            return crate::i18n::gettext(self.locale, "You").into_owned();
         }
         self.person_name(id, hint)
     }
@@ -1011,7 +1012,7 @@ impl App {
                 .me_name
                 .clone()
                 .filter(|name| !name.is_empty())
-                .unwrap_or_else(|| "You".to_owned());
+                .unwrap_or_else(|| crate::i18n::gettext(self.locale, "You").into_owned());
         }
         self.person_name(id, None)
     }
@@ -1023,7 +1024,7 @@ impl App {
         {
             let participants = self.participant_names(chat);
             return if participants.is_empty() {
-                "Group".to_owned()
+                crate::i18n::gettext(self.locale, "Group").into_owned()
             } else {
                 participants
             };
@@ -1143,7 +1144,10 @@ impl App {
         if let Some(me) = me
             && chat.participants.iter().any(|id| id == me)
         {
-            named.push((me.to_owned(), "You".to_owned()));
+            named.push((
+                me.to_owned(),
+                crate::i18n::gettext(self.locale, "You").into_owned(),
+            ));
         }
         named
     }
@@ -1215,7 +1219,7 @@ impl App {
         numbers.sort();
         counted.extend(numbers);
         if chat.participants.iter().any(|id| Some(id.as_str()) == me) {
-            counted.push("You".to_owned());
+            counted.push(crate::i18n::gettext(self.locale, "You").into_owned());
         }
         counted.join(", ")
     }
@@ -1714,7 +1718,7 @@ impl App {
                 } => self.handle_media(&chat, &message, card, result),
                 Event::Syncing(syncing) => {
                     if self.syncing && !syncing {
-                        self.toast("History loaded");
+                        self.toast(crate::i18n::gettext(self.locale, "History loaded"));
                     }
                     self.syncing = syncing;
                     if !syncing {
@@ -1790,9 +1794,10 @@ impl App {
                                     self.dialog = None;
                                 }
                                 if pending {
-                                    self.toast(
+                                    self.toast(crate::i18n::gettext(
+                                        self.locale,
                                         "Request sent. An admin must approve it before you join.",
-                                    );
+                                    ));
                                 } else {
                                     self.actions.push(Action::OpenChat(id));
                                 }
@@ -1849,7 +1854,10 @@ impl App {
                 Event::UpdateAvailable { version, url } => {
                     let notice = crate::updates::Release { version, url };
                     if self.update.as_ref() != Some(&notice) {
-                        self.toast(format!("ZapFast {} is available", notice.version));
+                        self.toast(
+                            crate::i18n::gettext(self.locale, "ZapFast {} is available")
+                                .replace("{}", &notice.version.to_string()),
+                        );
                     }
                     self.update = Some(notice);
                 }
@@ -1895,7 +1903,7 @@ impl App {
                     }
                 }
                 if matches!(self.link, LinkStatus::Disconnected { .. }) {
-                    self.toast("Back online");
+                    self.toast(crate::i18n::gettext(self.locale, "Back online"));
                 }
                 self.dialog = match self.dialog.take() {
                     Some(Dialog::PairWithPhone) => None,
@@ -1921,7 +1929,10 @@ impl App {
                 self.draft_mentions.clear();
                 self.composer.clear();
                 self.composer_mentions.clear();
-                self.toast_error("This device was unlinked from your phone");
+                self.toast_error(crate::i18n::gettext(
+                    self.locale,
+                    "This device was unlinked from your phone",
+                ));
             }
             LinkStatus::Failed(message) => self.toast_error(message.clone()),
             _ => {}
@@ -2454,7 +2465,7 @@ impl App {
     /// Adds files to the open chat's composer.
     fn stage_files(&mut self, paths: Vec<PathBuf>) {
         if self.open_chat.is_none() {
-            self.toast_error("Open a chat first");
+            self.toast_error(crate::i18n::gettext(self.locale, "Open a chat first"));
             return;
         }
         for path in paths {
@@ -2509,17 +2520,21 @@ impl App {
     #[allow(dead_code)]
     fn send_files(&mut self, paths: Vec<PathBuf>) {
         let Some(chat) = self.open_chat.clone() else {
-            self.toast_error("Open a chat first");
+            self.toast_error(crate::i18n::gettext(self.locale, "Open a chat first"));
             return;
         };
         if paths.is_empty() {
             return;
         }
-        self.toast(format!(
-            "Sending {} file{}…",
-            paths.len(),
-            if paths.len() == 1 { "" } else { "s" }
-        ));
+        self.toast(
+            crate::i18n::ngettext(
+                self.locale,
+                "Sending {} file…",
+                "Sending {} files…",
+                paths.len() as u32,
+            )
+            .replace("{}", &paths.len().to_string()),
+        );
         self.backend.send(Command::SendFiles {
             chat,
             paths,
@@ -2847,7 +2862,7 @@ impl App {
                             self.poll_creating = true;
                             self.backend.send(Command::CreatePoll { chat, draft });
                         }
-                        Err(error) => self.toast_error(error),
+                        Err(error) => self.toast_error(crate::i18n_extra::tr(error)),
                     }
                 }
             }
@@ -2947,10 +2962,19 @@ impl App {
             Action::OpenFile(path) => {
                 if crate::safety::can_open_attachment(&path) && path.is_file() {
                     if let Err(error) = open::that_detached(&path) {
-                        self.toast_error(format!("Could not open the attachment: {error}"));
+                        self.toast_error(
+                            crate::i18n::gettext(
+                                self.locale,
+                                "Could not open the attachment: {error}",
+                            )
+                            .replace("{error}", &error.to_string()),
+                        );
                     }
                 } else {
-                    self.toast("For safety, open this file yourself from its folder");
+                    self.toast(crate::i18n::gettext(
+                        self.locale,
+                        "For safety, open this file yourself from its folder",
+                    ));
                     if let Some(folder) = path.parent() {
                         self.actions.push(Action::OpenFolder(folder.to_owned()));
                     }
@@ -2963,10 +2987,16 @@ impl App {
             Action::OpenFolder(path) => {
                 if path.is_dir() {
                     if let Err(error) = open::that_detached(&path) {
-                        self.toast_error(format!("Could not open the folder: {error}"));
+                        self.toast_error(
+                            crate::i18n::gettext(self.locale, "Could not open the folder: {error}")
+                                .replace("{error}", &error.to_string()),
+                        );
                     }
                 } else {
-                    self.toast_error("The folder is unavailable");
+                    self.toast_error(crate::i18n::gettext(
+                        self.locale,
+                        "The folder is unavailable",
+                    ));
                 }
             }
             Action::OpenUrl(url) => {
@@ -2980,12 +3010,15 @@ impl App {
                 } else if let Some(url) = crate::safety::external_url(&url) {
                     ctx.open_url(egui::OpenUrl::new_tab(url));
                 } else {
-                    self.toast_error("This link type cannot be opened from ZapFast");
+                    self.toast_error(crate::i18n::gettext(
+                        self.locale,
+                        "This link type cannot be opened from ZapFast",
+                    ));
                 }
             }
             Action::CopyText(text) => {
                 ctx.copy_text(text);
-                self.toast("Copied");
+                self.toast(crate::i18n::gettext(self.locale, "Copied"));
             }
             Action::DismissToast(index) => {
                 if index < self.toasts.len() {
@@ -3427,7 +3460,7 @@ impl App {
             }
             Action::SendGif(gif) => {
                 if let Some(chat) = self.open_chat.clone() {
-                    self.toast("Sending GIF…");
+                    self.toast(crate::i18n::gettext(self.locale, "Sending GIF…"));
                     self.backend.send(Command::SendGif { chat, gif });
                     self.picker = None;
                     self.scroll_to_bottom = true;
@@ -3501,7 +3534,15 @@ impl App {
             Action::DeleteChat(chat) => self.backend.send(Command::DeleteChat(chat)),
             Action::SetPinned(chat, pinned) => {
                 if pinned && self.pinned_count() >= self.pin_limit {
-                    self.toast(format!("You can only pin {} chats", self.pin_limit));
+                    self.toast(
+                        crate::i18n::ngettext(
+                            self.locale,
+                            "You can only pin {} chat",
+                            "You can only pin {} chats",
+                            self.pin_limit as u32,
+                        )
+                        .replace("{}", &self.pin_limit.to_string()),
+                    );
                     return;
                 }
                 if let Some(known) = self.chat_mut(&chat) {
@@ -3788,6 +3829,7 @@ impl App {
             Action::SetInterfaceLanguage(choice) => {
                 self.settings.interface_language = choice;
                 self.locale = crate::i18n::resolve(choice);
+                crate::i18n_extra::set_locale(self.locale);
                 self.mark_settings_dirty();
             }
             Action::SetCustomTheme(filename) => {
@@ -3910,7 +3952,10 @@ impl App {
             }
             Action::SetStartWithSystem(enabled) => match crate::autostart::set(enabled) {
                 Ok(()) => self.start_with_system = Some(crate::autostart::enabled()),
-                Err(error) => self.toast_error(format!("Could not change the login item: {error}")),
+                Err(error) => self.toast_error(
+                    crate::i18n::gettext(self.locale, "Could not change the login item: {error}")
+                        .replace("{error}", &error.to_string()),
+                ),
             },
             Action::ZoomBy(delta) => {
                 self.settings.zoom = (self.settings.zoom + delta).clamp(0.6, 2.0);
@@ -3925,9 +3970,10 @@ impl App {
             Action::PairWithPhone(phone) => {
                 let digits: String = phone.chars().filter(char::is_ascii_digit).collect();
                 if digits.len() < 7 {
-                    self.toast_error(
+                    self.toast_error(crate::i18n::gettext(
+                        self.locale,
                         "Enter the phone number with its country code, using digits only",
-                    );
+                    ));
                 } else {
                     self.backend.send(Command::PairWithPhone(digits));
                 }
@@ -4103,7 +4149,10 @@ impl App {
         }
         if let Some(error) = self.recording.as_ref().and_then(Recorder::failure) {
             self.recording = None;
-            self.toast_error(format!("Could not record: {error}"));
+            self.toast_error(
+                crate::i18n::gettext(self.locale, "Could not record: {error}")
+                    .replace("{error}", &error.to_string()),
+            );
         }
         if self.player.is_playing() || self.recording.is_some() {
             self.waker.wake_after(Duration::from_millis(40));
@@ -4201,7 +4250,10 @@ impl App {
                     quoting,
                 });
             }
-            Err(error) => self.toast_error(format!("Could not record: {error}")),
+            Err(error) => self.toast_error(
+                crate::i18n::gettext(self.locale, "Could not record: {error}")
+                    .replace("{error}", &error.to_string()),
+            ),
         }
     }
 

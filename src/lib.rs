@@ -13,6 +13,7 @@ pub mod diagnostics;
 pub mod emoji;
 pub mod emoji_words;
 pub mod i18n;
+pub mod i18n_extra;
 pub mod image_cache;
 pub mod image_preview;
 #[cfg(target_os = "macos")]

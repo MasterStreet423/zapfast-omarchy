@@ -110,12 +110,19 @@ fn tabs(app: &mut App, ui: &mut egui::Ui, palette: &Palette, current: PickerTab)
         let spacing = ui.spacing().item_spacing.x;
         let total = entries
             .iter()
-            .map(|(_, _, label)| theme::soft_button_width(ui, label, true))
+            .map(|(_, _, label)| theme::soft_button_width(ui, &crate::i18n_extra::tr(label), true))
             .sum::<f32>()
             + spacing * (entries.len() as f32 - 1.0);
         ui.add_space((ui.available_width() - total).max(0.0) / 2.0);
         for (tab, icon, label) in entries {
-            if theme::soft_button(ui, palette, Some(icon), label, tab == current).clicked()
+            if theme::soft_button(
+                ui,
+                palette,
+                Some(icon),
+                &crate::i18n_extra::tr(label),
+                tab == current,
+            )
+            .clicked()
                 && tab != current
             {
                 app.actions.push(Action::TogglePicker(tab));
@@ -418,7 +425,7 @@ fn reaction_picker(app: &mut App, ctx: &egui::Context) {
                             ui.horizontal(|ui| {
                                 theme::text(
                                     ui,
-                                    "React to message",
+                                    &*crate::i18n::gettext(app.locale, "React to message"),
                                     theme::semibold(13.0),
                                     palette.text,
                                 );
@@ -429,7 +436,7 @@ fn reaction_picker(app: &mut App, ctx: &egui::Context) {
                                         14.0,
                                         palette.secondary,
                                         palette.text,
-                                        "Close reactions",
+                                        &crate::i18n::gettext(app.locale, "Close reactions"),
                                     )
                                     .clicked()
                                     {
@@ -560,7 +567,7 @@ fn category_tabs(
                 }
                 if response
                     .on_hover_cursor(egui::CursorIcon::PointingHand)
-                    .on_hover_text(label)
+                    .on_hover_text(crate::i18n_extra::tr(label))
                     .clicked()
                 {
                     app.picker_search.clear();
@@ -608,7 +615,13 @@ fn emoji_grid(
         .flatten();
     let submit = search_active && take_plain_key(ui, Key::Enter);
     let mut search = app.picker_search.clone();
-    let response = search_box(ui, palette, search_id, &mut search, "Search emoji");
+    let response = search_box(
+        ui,
+        palette,
+        search_id,
+        &mut search,
+        &crate::i18n::gettext(app.locale, "Search emoji"),
+    );
     let query_changed = search != app.picker_search;
     if query_changed {
         app.picker_search = search;
@@ -727,7 +740,7 @@ fn emoji_grid(
                     ui.painter().text(
                         pos2(rect.left() + 4.0, rect.bottom() - 8.0),
                         Align2::LEFT_BOTTOM,
-                        *label,
+                        crate::i18n_extra::tr(label),
                         theme::semibold(12.5),
                         palette.secondary,
                     );

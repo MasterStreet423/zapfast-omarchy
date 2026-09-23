@@ -496,7 +496,7 @@ pub fn search_field(
             15.0,
             palette.secondary,
             palette.text,
-            "Clear",
+            &crate::i18n::gettext(crate::i18n_extra::locale(), "Clear"),
         )
         .clicked()
         {
@@ -712,7 +712,9 @@ pub fn dotted_chip(
     }
     response.widget_info(|| {
         let label = if count > 0 {
-            format!("{label}, {count} unread")
+            crate::i18n::gettext(crate::i18n_extra::locale(), "{label}, {count} unread")
+                .replace("{label}", label)
+                .replace("{count}", &count.to_string())
         } else {
             label.to_owned()
         };

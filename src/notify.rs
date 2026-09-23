@@ -188,7 +188,10 @@ fn deliver(
         .summary(title)
         .body(body)
         .icon("zapfast")
-        .action("default", "Open");
+        .action(
+            "default",
+            &crate::i18n::gettext(crate::i18n_extra::locale(), "Open"),
+        );
     if !system_sound {
         notification.hint(notify_rust::Hint::SuppressSound(true));
     }

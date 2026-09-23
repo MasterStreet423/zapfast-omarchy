@@ -235,7 +235,11 @@ fn drop_target(app: &mut App, ctx: &egui::Context) {
                         theme::icon(ui, Icon::Paperclip, 28.0, palette.accent);
                         theme::text(
                             ui,
-                            format!("Drop to send to {name}"),
+                            crate::i18n::gettext(
+                                crate::i18n_extra::locale(),
+                                "Drop to send to {name}",
+                            )
+                            .replace("{name}", &name.to_string()),
                             theme::semibold(15.0),
                             palette.text,
                         );
@@ -252,8 +256,12 @@ fn banner(app: &mut App, ui: &mut egui::Ui) {
         LinkStatus::Connected if app.syncing => (
             Icon::Refresh,
             match app.sync_percent {
-                Some(percent) => format!("Loading chat history… {percent}%"),
-                None => "Loading chat history…".to_owned(),
+                Some(percent) => crate::i18n::gettext(
+                    crate::i18n_extra::locale(),
+                    "Loading chat history… {percent}%",
+                )
+                .replace("{percent}", &percent.to_string()),
+                None => crate::i18n::gettext(app.locale, "Loading chat history…").into_owned(),
             },
             palette.accent,
             false,
@@ -263,7 +271,8 @@ fn banner(app: &mut App, ui: &mut egui::Ui) {
             let update = update.as_ref().expect("checked above");
             (
                 Icon::Info,
-                format!("ZapFast {} is available", update.version),
+                crate::i18n::gettext(crate::i18n_extra::locale(), "ZapFast {} is available")
+                    .replace("{}", &update.version.to_string()),
                 palette.accent,
                 false,
                 Some(update.url.clone()),
@@ -272,14 +281,18 @@ fn banner(app: &mut App, ui: &mut egui::Ui) {
         LinkStatus::Connected => return,
         LinkStatus::Starting | LinkStatus::Connecting => (
             Icon::Refresh,
-            "Connecting to WhatsApp…".to_owned(),
+            crate::i18n::gettext(app.locale, "Connecting to WhatsApp…").into_owned(),
             palette.secondary,
             false,
             None,
         ),
         LinkStatus::Disconnected { reason } => (
             Icon::WifiOff,
-            format!("Offline ({reason}). Reconnecting…"),
+            crate::i18n::gettext(
+                crate::i18n_extra::locale(),
+                "Offline ({reason}). Reconnecting…",
+            )
+            .replace("{reason}", &reason.to_string()),
             palette.warning,
             true,
             None,
@@ -293,7 +306,7 @@ fn banner(app: &mut App, ui: &mut egui::Ui) {
         ),
         LinkStatus::Unlinked { .. } | LinkStatus::LoggedOut => (
             Icon::Smartphone,
-            "Not linked to a phone".to_owned(),
+            crate::i18n::gettext(app.locale, "Not linked to a phone").into_owned(),
             palette.warning,
             false,
             None,
@@ -319,7 +332,7 @@ fn banner(app: &mut App, ui: &mut egui::Ui) {
                                 ui,
                                 &palette,
                                 Some(Icon::ExternalLink),
-                                "Update",
+                                &crate::i18n::gettext(app.locale, "Update"),
                                 false,
                             )
                             .clicked()
@@ -330,7 +343,7 @@ fn banner(app: &mut App, ui: &mut egui::Ui) {
                             ui,
                             &palette,
                             Some(Icon::Refresh),
-                            "Retry",
+                            &crate::i18n::gettext(app.locale, "Retry"),
                             false,
                         )
                         .clicked()
@@ -450,7 +463,7 @@ fn toasts(app: &mut App, ctx: &egui::Context) {
                                             14.0,
                                             palette.secondary,
                                             palette.text,
-                                            "Dismiss",
+                                            &crate::i18n::gettext(app.locale, "Dismiss"),
                                         );
                                         // Store the rect for interaction tests.
                                         ui.ctx().data_mut(|data| {
@@ -465,7 +478,7 @@ fn toasts(app: &mut App, ctx: &egui::Context) {
                                             14.0,
                                             palette.secondary,
                                             palette.text,
-                                            "Copy this message",
+                                            &crate::i18n::gettext(app.locale, "Copy this message"),
                                         )
                                         .clicked()
                                         {
@@ -545,7 +558,10 @@ pub fn standalone_header(app: &mut App, ui: &mut egui::Ui) {
                     18.0,
                     palette.secondary,
                     palette.text,
-                    &keys::label("Show the chat list (Ctrl+B)"),
+                    &keys::label(&crate::i18n::gettext(
+                        app.locale,
+                        "Show the chat list (Ctrl+B)",
+                    )),
                 )
                 .tab_stop(Stop::Sidebar)
                 .clicked()

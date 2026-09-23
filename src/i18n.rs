@@ -92,6 +92,9 @@ impl Locale {
 
 /// The operating system's preferred locale, falling back to English.
 pub fn detect() -> Locale {
+    if cfg!(test) {
+        return Locale::English;
+    }
     sys_locale::get_locale()
         .as_deref()
         .and_then(Locale::from_system)

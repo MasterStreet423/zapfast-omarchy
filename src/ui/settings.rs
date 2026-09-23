@@ -31,7 +31,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
                             20.0,
                             palette.secondary,
                             palette.text,
-                            "Back (Esc)",
+                            &crate::i18n::gettext(app.locale, "Back (Esc)"),
                         )
                         .clicked()
                         {
@@ -44,13 +44,13 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
                     section(ui, &palette, &crate::i18n::gettext(app.locale, "Appearance"), |ui| {
                         let detail = app.custom_themes.detail(app.settings.custom_theme.as_deref());
                         let detail = if !detail.is_empty() {
-                            detail
+                            std::borrow::Cow::Borrowed(detail)
                         } else if app.custom_themes.follows_omarchy() {
-                            "Follow system uses your Omarchy colours."
+                            crate::i18n::gettext(app.locale, "Follow system uses your Omarchy colours.")
                         } else {
-                            "Follow system uses your desktop's light or dark appearance."
+                            crate::i18n::gettext(app.locale, "Follow system uses your desktop's light or dark appearance.")
                         };
-                        widgets::setting_row(ui, &palette, "Theme", detail, |ui| {
+                        widgets::setting_row(ui, &palette, &crate::i18n::gettext(app.locale, "Theme"), &detail, |ui| {
                             ui.with_layout(egui::Layout::top_down(egui::Align::Max), |ui| {
                                 let selected = app.settings.custom_theme.as_deref()
                                     .map(theme::custom::label)
@@ -78,11 +78,11 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
                                 let text = widgets::line(ui, selected, theme::regular(14.0), palette.text, rect.width() - 36.0, 1);
                                 text.paint(ui, egui::pos2(rect.left() + 8.0, rect.center().y - text.size().y / 2.0), palette.text);
                                 response.response.widget_info(|| {
-                                    let mut info = egui::WidgetInfo::labeled(egui::WidgetType::ComboBox, ui.is_enabled(), "Theme");
+                                    let mut info = egui::WidgetInfo::labeled(egui::WidgetType::ComboBox, ui.is_enabled(), crate::i18n::gettext(app.locale, "Theme"));
                                     info.current_text_value = Some(selected.to_owned());
                                     info
                                 });
-                                if theme::soft_button(ui, &palette, Some(Icon::ExternalLink), "Open themes folder", false).clicked() {
+                                if theme::soft_button(ui, &palette, Some(Icon::ExternalLink), &crate::i18n::gettext(app.locale, "Open themes folder"), false).clicked() {
                                     app.actions.push(Action::OpenThemesFolder);
                                 }
                             });
@@ -90,7 +90,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
                         widgets::setting_row(
                             ui,
                             &palette,
-                            "Wallpaper",
+                            &crate::i18n::gettext(app.locale, "Wallpaper"),
                             app.settings.wallpaper_color_for(palette.dark).label(),
                             |ui| {
                                 if theme::soft_button(
@@ -119,10 +119,10 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
                         widgets::setting_row(
                             ui,
                             &palette,
-                            "Zoom",
-                            "You can also use Ctrl+plus and Ctrl+minus.",
+                            &crate::i18n::gettext(app.locale, "Zoom"),
+                            &crate::i18n::gettext(app.locale, "You can also use Ctrl+plus and Ctrl+minus."),
                             |ui| {
-                                if theme::icon_button(ui, Icon::Plus, 16.0, palette.secondary, palette.text, "Larger").clicked() {
+                                if theme::icon_button(ui, Icon::Plus, 16.0, palette.secondary, palette.text, &crate::i18n::gettext(app.locale, "Larger")).clicked() {
                                     app.actions.push(Action::ZoomBy(0.1));
                                 }
                                 theme::text(
@@ -131,7 +131,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
                                     theme::medium(13.5),
                                     palette.text,
                                 );
-                                if theme::icon_button(ui, Icon::Minus, 16.0, palette.secondary, palette.text, "Smaller").clicked() {
+                                if theme::icon_button(ui, Icon::Minus, 16.0, palette.secondary, palette.text, &crate::i18n::gettext(app.locale, "Smaller")).clicked() {
                                     app.actions.push(Action::ZoomBy(-0.1));
                                 }
                             },
@@ -177,24 +177,24 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
                     });
 
                     section(ui, &palette, &crate::i18n::gettext(app.locale, "Chats"), |ui| {
-                        toggle(ui, app, "Enter sends", "When off, Enter adds a line and Ctrl+Enter sends.", |settings| &mut settings.enter_sends);
-                        let receipts_note = if app.account_receipts_off {
-                            "Read receipts are disabled for your WhatsApp account. Direct chats will not send them. When this switch is on, groups still do. Read state syncs between your devices either way."
+                        toggle(ui, app, &crate::i18n::gettext(app.locale, "Enter sends"), &crate::i18n::gettext(app.locale, "When off, Enter adds a line and Ctrl+Enter sends."), |settings| &mut settings.enter_sends);
+                        let receipts_note = &*if app.account_receipts_off {
+                            crate::i18n::gettext(app.locale, "Read receipts are disabled for your WhatsApp account. Direct chats will not send them. When this switch is on, groups still do. Read state syncs between your devices either way.")
                         } else {
-                            "Let people see when you read messages or play voice messages. Your WhatsApp privacy setting still applies. Read state syncs between your devices either way."
+                            crate::i18n::gettext(app.locale, "Let people see when you read messages or play voice messages. Your WhatsApp privacy setting still applies. Read state syncs between your devices either way.")
                         };
-                        toggle(ui, app, "Send read receipts", receipts_note, |settings| &mut settings.send_read_receipts);
-                        toggle(ui, app, "Show when you are typing", "", |settings| &mut settings.send_typing);
-                        toggle(ui, app, "Download attachments automatically", "Download non-sticker attachments up to 64 MiB when they enter view. Visible stickers also download automatically up to this limit. When off, click an attachment up to this limit to download it.", |settings| &mut settings.auto_download);
+                        toggle(ui, app, &crate::i18n::gettext(app.locale, "Send read receipts"), receipts_note, |settings| &mut settings.send_read_receipts);
+                        toggle(ui, app, &crate::i18n::gettext(app.locale, "Show when you are typing"), "", |settings| &mut settings.send_typing);
+                        toggle(ui, app, &crate::i18n::gettext(app.locale, "Download attachments automatically"), &crate::i18n::gettext(app.locale, "Download non-sticker attachments up to 64 MiB when they enter view. Visible stickers also download automatically up to this limit. When off, click an attachment up to this limit to download it."), |settings| &mut settings.auto_download);
                         {
                             let locale = app.locale;
                             toggle(ui, app, &crate::i18n::gettext(locale, "Show labels as chips"), &crate::i18n::gettext(locale, "Give each label its own chip, in a row under All, Unread and Groups. When off, they share one Labels chip."), |settings| &mut settings.label_chips);
                         }
-                        toggle(ui, app, "Show sender pictures in every chat", "WhatsApp shows them in groups only.", |settings| &mut settings.show_sender_pictures);
-                        toggle(ui, app, "Names from your address book", "Prefer saved contact names. When off, prefer public WhatsApp profile names. This applies throughout the app.", |settings| &mut settings.names_from_contacts);
-                        toggle(ui, app, "Save contacts to the phone's address book", "Also add contacts saved here to your phone's address book. When off, they remain WhatsApp contacts. Names sync to linked devices either way.", |settings| &mut settings.save_contacts_to_phone);
-                        toggle(ui, app, "Show shortcut hints", "", |settings| &mut settings.show_shortcut_hints);
-                        toggle(ui, app, "Collapse the chat list to icons", "Hiding the chat list (Ctrl+B) leaves a narrow column of avatars with unread badges instead of removing it. Clicking an avatar opens that chat, and Ctrl+B brings the full list back.", |settings| &mut settings.collapse_chat_list);
+                        toggle(ui, app, &crate::i18n::gettext(app.locale, "Show sender pictures in every chat"), &crate::i18n::gettext(app.locale, "WhatsApp shows them in groups only."), |settings| &mut settings.show_sender_pictures);
+                        toggle(ui, app, &crate::i18n::gettext(app.locale, "Names from your address book"), &crate::i18n::gettext(app.locale, "Prefer saved contact names. When off, prefer public WhatsApp profile names. This applies throughout the app."), |settings| &mut settings.names_from_contacts);
+                        toggle(ui, app, &crate::i18n::gettext(app.locale, "Save contacts to the phone's address book"), &crate::i18n::gettext(app.locale, "Also add contacts saved here to your phone's address book. When off, they remain WhatsApp contacts. Names sync to linked devices either way."), |settings| &mut settings.save_contacts_to_phone);
+                        toggle(ui, app, &crate::i18n::gettext(app.locale, "Show shortcut hints"), "", |settings| &mut settings.show_shortcut_hints);
+                        toggle(ui, app, &crate::i18n::gettext(app.locale, "Collapse the chat list to icons"), &crate::i18n::gettext(app.locale, "Hiding the chat list (Ctrl+B) leaves a narrow column of avatars with unread badges instead of removing it. Clicking an avatar opens that chat, and Ctrl+B brings the full list back."), |settings| &mut settings.collapse_chat_list);
 
                         // macOS has no public API to pause other apps' media.
                         if crate::media_pause::SUPPORTED {
@@ -212,15 +212,15 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
                             widgets::setting_row(
                                 ui,
                                 &palette,
-                                "Secret code for locked chats",
-                                "Open the Locked tab in the chat list and enter this local ZapFast code, separate from your phone's code. Leaving the tab or closing the window locks it again. Locked chats are hidden from ordinary search and notifications. This is a local visibility control, not an extra encryption layer. Keep it empty to remove the code.",
+                                &crate::i18n::gettext(app.locale, "Secret code for locked chats"),
+                                &crate::i18n::gettext(app.locale, "Open the Locked tab in the chat list and enter this local ZapFast code, separate from your phone's code. Leaving the tab or closing the window locks it again. Locked chats are hidden from ordinary search and notifications. This is a local visibility control, not an extra encryption layer. Keep it empty to remove the code."),
                                 |ui| {
                                     let response = ui.add(
                                         egui::TextEdit::singleline(&mut code)
                                             .font(theme::regular(13.0))
                                             .text_color(palette.text)
                                             .desired_width(220.0)
-                                            .hint_text("Secret code")
+                                            .hint_text(&*crate::i18n::gettext(app.locale, "Secret code"))
                                             .password(true),
                                     );
                                     if response.changed() {
@@ -228,7 +228,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
                                         app.actions.push(Action::SetChatLockCode(Some(trimmed)));
                                     }
                                     if app.settings.chat_lock_code_hash.is_some()
-                                        && ui.small_button("Clear").clicked()
+                                        && ui.small_button(&*crate::i18n::gettext(app.locale, "Clear")).clicked()
                                     {
                                         code.clear();
                                         app.actions.push(Action::SetChatLockCode(None));
@@ -240,35 +240,35 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
                     });
 
                     section(ui, &palette, &crate::i18n::gettext(app.locale, "Window"), |ui| {
-                        toggle(ui, app, "Keep running when the window closes", "Keep ZapFast linked in the system tray. Quit from the tray menu or with Ctrl+Q.", |settings| &mut settings.keep_running_in_background);
+                        toggle(ui, app, &crate::i18n::gettext(app.locale, "Keep running when the window closes"), &crate::i18n::gettext(app.locale, "Keep ZapFast linked in the system tray. Quit from the tray menu or with Ctrl+Q."), |settings| &mut settings.keep_running_in_background);
                         if let Some(mut enabled) = app.start_with_system {
-                            widgets::setting_row(ui, &palette, "Start at login", "Start ZapFast when you log in. It waits in the system tray, without a window, while it keeps running in the background.", |ui| {
+                            widgets::setting_row(ui, &palette, &crate::i18n::gettext(app.locale, "Start at login"), &crate::i18n::gettext(app.locale, "Start ZapFast when you log in. It waits in the system tray, without a window, while it keeps running in the background."), |ui| {
                                 let response = widgets::switch(ui, &palette, &mut enabled);
                                 theme::reveal_focus(&response);
                                 response.widget_info(|| {
-                                    egui::WidgetInfo::selected(egui::WidgetType::Checkbox, ui.is_enabled(), enabled, "Start at login")
+                                    egui::WidgetInfo::selected(egui::WidgetType::Checkbox, ui.is_enabled(), enabled, crate::i18n::gettext(app.locale, "Start at login"))
                                 });
                                 if response.changed() {
                                     app.actions.push(Action::SetStartWithSystem(enabled));
                                 }
                             });
                         }
-                        toggle(ui, app, "Notify about new messages", "Show desktop notifications when the window is hidden, in the background, or showing another chat. Muted chats do not notify you.", |settings| &mut settings.notifications);
+                        toggle(ui, app, &crate::i18n::gettext(app.locale, "Notify about new messages"), &crate::i18n::gettext(app.locale, "Show desktop notifications when the window is hidden, in the background, or showing another chat. Muted chats do not notify you."), |settings| &mut settings.notifications);
                         if app.settings.notifications {
                             sound_row(ui, app, false);
                             sound_row(ui, app, true);
                         }
-                        toggle(ui, app, "Download updates automatically", "Download and verify new releases in the background. You choose when to restart. Native packages and Flatpak update through their package manager.", |settings| &mut settings.download_updates_automatically);
-                        toggle(ui, app, "Check for updates", "Ask GitHub once a day whether a newer ZapFast release exists. The request identifies only ZapFast and its version.", |settings| &mut settings.check_for_updates);
+                        toggle(ui, app, &crate::i18n::gettext(app.locale, "Download updates automatically"), &crate::i18n::gettext(app.locale, "Download and verify new releases in the background. You choose when to restart. Native packages and Flatpak update through their package manager."), |settings| &mut settings.download_updates_automatically);
+                        toggle(ui, app, &crate::i18n::gettext(app.locale, "Check for updates"), &crate::i18n::gettext(app.locale, "Ask GitHub once a day whether a newer ZapFast release exists. The request identifies only ZapFast and its version."), |settings| &mut settings.check_for_updates);
 
                         widgets::setting_row(
                             ui,
                             &palette,
-                            "GIPHY API key",
-                            if crate::settings::BUILT_IN_GIPHY_KEY.is_some() {
-                                "Used for GIF search. This build includes a key. Enter a key from developers.giphy.com to replace it."
+                            &crate::i18n::gettext(app.locale, "GIPHY API key"),
+                            &if crate::settings::BUILT_IN_GIPHY_KEY.is_some() {
+                                crate::i18n::gettext(app.locale, "Used for GIF search. This build includes a key. Enter a key from developers.giphy.com to replace it.")
                             } else {
-                                "Required for GIF search. Get a free key from developers.giphy.com."
+                                crate::i18n::gettext(app.locale, "Required for GIF search. Get a free key from developers.giphy.com.")
                             },
                             |ui| {
                                 let response = ui.add(
@@ -292,10 +292,10 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
                             .then(crate::proxy::for_whatsapp)
                             .flatten();
                         let description = match environment {
-                            Some(proxy) => format!("Using {} from the environment. Enter a proxy to replace it.", proxy.redacted()),
+                            Some(proxy) => crate::i18n::gettext(app.locale, "Using {} from the environment. Enter a proxy to replace it.").replace("{}", &proxy.redacted().to_string()),
                             None => "socks5h://, socks5://, or http:// with an optional user:password@. Leave empty to use ALL_PROXY or HTTPS_PROXY.".to_owned(),
                         };
-                        widgets::setting_row(ui, &palette, "Proxy", &description, |ui| {
+                        widgets::setting_row(ui, &palette, &crate::i18n::gettext(app.locale, "Proxy"), &description, |ui| {
                             let id = ui.id().with("proxy-draft");
                             let mut draft = ui
                                 .data(|data| data.get_temp::<String>(id))
@@ -325,10 +325,10 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
                         widgets::setting_row(
                             ui,
                             &palette,
-                            "Message archive",
+                            &crate::i18n::gettext(app.locale, "Message archive"),
                             &archive.display().to_string(),
                             |ui| {
-                                if theme::soft_button(ui, &palette, Some(Icon::ExternalLink), "Open folder", false).clicked() {
+                                if theme::soft_button(ui, &palette, Some(Icon::ExternalLink), &crate::i18n::gettext(app.locale, "Open folder"), false).clicked() {
                                     app.actions.push(Action::OpenFolder(app.dirs.state.clone()));
                                 }
                             },
@@ -336,31 +336,31 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
                         let custom = app.settings.download_folder.clone();
                         let media = custom.clone().unwrap_or_else(|| app.dirs.media_cache_dir());
                         let description = if custom.is_some() {
-                            format!("{}. Earlier downloads stay where they are.", media.display())
+                            crate::i18n::gettext(app.locale, "{}. Earlier downloads stay where they are.").replace("{}", &media.display().to_string())
                         } else {
                             media.display().to_string()
                         };
                         widgets::setting_row(
                             ui,
                             &palette,
-                            "Downloaded attachments",
+                            &crate::i18n::gettext(app.locale, "Downloaded attachments"),
                             &description,
                             |ui| {
-                                if theme::soft_button(ui, &palette, Some(Icon::ExternalLink), "Open folder", false).clicked() {
+                                if theme::soft_button(ui, &palette, Some(Icon::ExternalLink), &crate::i18n::gettext(app.locale, "Open folder"), false).clicked() {
                                     let _ = std::fs::create_dir_all(&media);
                                     app.actions.push(Action::OpenFolder(media.clone()));
                                 }
-                                if theme::soft_button(ui, &palette, None, "Change…", false).clicked() {
+                                if theme::soft_button(ui, &palette, None, &crate::i18n::gettext(app.locale, "Change…"), false).clicked() {
                                     app.actions.push(Action::PickDownloadFolder);
                                 }
-                                if custom.is_some() && theme::soft_button(ui, &palette, None, "Use default", false).clicked() {
+                                if custom.is_some() && theme::soft_button(ui, &palette, None, &crate::i18n::gettext(app.locale, "Use default"), false).clicked() {
                                     app.actions.push(Action::SetDownloadFolder(None));
                                 }
                             },
                         );
                         let log = app.dirs.log_file();
-                        widgets::setting_row(ui, &palette, "Log of this run", &log.display().to_string(), |ui| {
-                            if theme::soft_button(ui, &palette, Some(Icon::FileText), "Open", false).clicked() {
+                        widgets::setting_row(ui, &palette, &crate::i18n::gettext(app.locale, "Log of this run"), &log.display().to_string(), |ui| {
+                            if theme::soft_button(ui, &palette, Some(Icon::FileText), &crate::i18n::gettext(app.locale, "Open"), false).clicked() {
                                 app.actions.push(Action::OpenFile(log.clone()));
                             }
                         });
@@ -417,13 +417,13 @@ pub fn wallpaper_show(app: &mut App, ui: &mut egui::Ui) {
                                 20.0,
                                 palette.secondary,
                                 palette.text,
-                                "Back to settings",
+                                &crate::i18n::gettext(app.locale, "Back to settings"),
                             )
                             .clicked()
                             {
                                 app.actions.push(Action::Open(Page::Settings));
                             }
-                            theme::text(ui, "Set chat wallpaper", theme::bold(18.0), palette.text);
+                            theme::text(ui, &*crate::i18n::gettext(app.locale, "Set chat wallpaper"), theme::bold(18.0), palette.text);
                         },
                     );
 
@@ -500,7 +500,7 @@ pub fn wallpaper_show(app: &mut App, ui: &mut egui::Ui) {
                     ui.painter().text(
                         header.center(),
                         egui::Align2::CENTER_CENTER,
-                        "Wallpaper preview",
+                        crate::i18n::gettext(app.locale, "Wallpaper preview"),
                         theme::bold(18.0),
                         palette.text,
                     );
@@ -850,20 +850,25 @@ fn sound_row(ui: &mut egui::Ui, app: &mut App, group: bool) {
         app.settings.message_sound.clone()
     };
     let (label, description) = if group {
-        ("Group sound", "Played for new group messages.")
+        (
+            &crate::i18n::gettext(app.locale, "Group sound"),
+            &crate::i18n::gettext(app.locale, "Played for new group messages."),
+        )
     } else {
         (
-            "Message sound",
-            "Played for new messages in one-to-one chats.",
+            &crate::i18n::gettext(app.locale, "Message sound"),
+            &crate::i18n::gettext(app.locale, "Played for new messages in one-to-one chats."),
         )
     };
     let selected = match &current {
-        NotificationSound::Chime => "Chime".to_owned(),
-        NotificationSound::Ripple => "Ripple".to_owned(),
-        NotificationSound::System => "System default".to_owned(),
-        NotificationSound::None => "None".to_owned(),
+        NotificationSound::Chime => crate::i18n::gettext(app.locale, "Chime").into_owned(),
+        NotificationSound::Ripple => crate::i18n::gettext(app.locale, "Ripple").into_owned(),
+        NotificationSound::System => {
+            crate::i18n::gettext(app.locale, "System default").into_owned()
+        }
+        NotificationSound::None => crate::i18n::gettext(app.locale, "None").into_owned(),
         NotificationSound::Custom(path) => path.file_name().map_or_else(
-            || "Custom".to_owned(),
+            || crate::i18n::gettext(app.locale, "Custom").into_owned(),
             |name| name.to_string_lossy().into_owned(),
         ),
     };
@@ -875,7 +880,7 @@ fn sound_row(ui: &mut egui::Ui, app: &mut App, group: bool) {
                 16.0,
                 palette.secondary,
                 palette.text,
-                "Play",
+                &crate::i18n::gettext(app.locale, "Play"),
             )
             .clicked()
         {
@@ -886,17 +891,32 @@ fn sound_row(ui: &mut egui::Ui, app: &mut App, group: bool) {
             .width(170.0_f32.min(ui.available_width()))
             .show_ui(ui, |ui| {
                 for (sound, name) in [
-                    (NotificationSound::Chime, "Chime"),
-                    (NotificationSound::Ripple, "Ripple"),
-                    (NotificationSound::System, "System default"),
-                    (NotificationSound::None, "None"),
+                    (
+                        NotificationSound::Chime,
+                        &*crate::i18n::gettext(app.locale, "Chime"),
+                    ),
+                    (
+                        NotificationSound::Ripple,
+                        &*crate::i18n::gettext(app.locale, "Ripple"),
+                    ),
+                    (
+                        NotificationSound::System,
+                        &*crate::i18n::gettext(app.locale, "System default"),
+                    ),
+                    (
+                        NotificationSound::None,
+                        &*crate::i18n::gettext(app.locale, "None"),
+                    ),
                 ] {
                     if ui.selectable_label(current == sound, name).clicked() {
                         app.actions
                             .push(Action::SetNotificationSound { group, sound });
                     }
                 }
-                if ui.selectable_label(false, "Choose a file…").clicked() {
+                if ui
+                    .selectable_label(false, &*crate::i18n::gettext(app.locale, "Choose a file…"))
+                    .clicked()
+                {
                     app.actions.push(Action::PickNotificationSound { group });
                 }
             });
