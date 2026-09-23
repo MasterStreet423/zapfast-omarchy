@@ -50,7 +50,7 @@ pub enum Outcome {
 }
 
 /// Request from another launch.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ControlCommand {
     /// Shows or creates the window.
     Show,
@@ -58,6 +58,8 @@ pub enum ControlCommand {
     ReloadThemes,
     /// Confirms an instance is running and changes nothing.
     Ping,
+    /// Opens a chat by id and shows the window.
+    OpenChat(String),
 }
 
 type Queue = Arc<Mutex<Vec<ControlCommand>>>;
@@ -338,7 +340,7 @@ fn parse(line: &str) -> Option<ControlCommand> {
         "show" => Some(ControlCommand::Show),
         "reload-themes" => Some(ControlCommand::ReloadThemes),
         "ping" => Some(ControlCommand::Ping),
-        _ => None,
+        other => crate::chat_index::parse_open(other).map(ControlCommand::OpenChat),
     }
 }
 

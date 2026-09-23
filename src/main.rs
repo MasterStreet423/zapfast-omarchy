@@ -80,6 +80,8 @@ struct Cli {
 enum Control {
     /// Reload palettes in an already-running ZapFast without showing its window.
     ReloadThemes,
+    /// Open a chat by id in the running ZapFast.
+    OpenChat { id: String },
 }
 
 /// Default log filter, used when `RUST_LOG` is unset.
@@ -106,6 +108,11 @@ fn main() -> eframe::Result<()> {
     let discovered = paths::AppDirs::discover();
     if matches!(cli.command, Some(Control::ReloadThemes)) {
         single_instance::send(&discovered.runtime, "reload-themes")
+            .map_err(|error| eframe::Error::AppCreation(error.into()))?;
+        return Ok(());
+    }
+    if let Some(Control::OpenChat { id }) = &cli.command {
+        single_instance::send(&discovered.runtime, &format!("open-chat:{id}"))
             .map_err(|error| eframe::Error::AppCreation(error.into()))?;
         return Ok(());
     }

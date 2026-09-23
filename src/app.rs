@@ -718,6 +718,10 @@ impl App {
                 ControlCommand::Show => self.actions.push(Action::ShowWindow),
                 ControlCommand::ReloadThemes => self.actions.push(Action::ReloadThemes),
                 ControlCommand::Ping => {}
+                ControlCommand::OpenChat(chat) => {
+                    self.actions.push(Action::OpenChat(chat));
+                    self.actions.push(Action::ShowWindow);
+                }
             }
         }
     }
@@ -4101,6 +4105,7 @@ impl App {
         self.hold_media();
         self.follow_receipts();
         self.sync_badge();
+        crate::chat_index::sync(self);
     }
 
     /// Mirrors the unread total onto the taskbar icon, where the desktop
