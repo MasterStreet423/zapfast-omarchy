@@ -1,5 +1,10 @@
 # ZapFast
 
+> **Fork [zapfast-omarchy](https://github.com/MasterStreet423/zapfast-omarchy):**
+> el ZapFast oficial al día, con la interfaz entera en español, emojis
+> buscables en español y el fondo de Omarchy en el chat. Detalle y cómo se
+> sincroniza en [FORK.md](FORK.md).
+
 **WhatsApp, native and fast.** ZapFast is a WhatsApp client written in Rust
 with [egui](https://github.com/emilk/egui). It uses
 [whatsapp-rust](https://github.com/oxidezap/whatsapp-rust) for the WhatsApp Web
