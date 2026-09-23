@@ -505,6 +505,9 @@ fn emoji_suggestion(emoji: &'static emojis::Emoji) -> EmojiSuggestion {
 fn emoji_candidates(app: &App, query: &str) -> Vec<EmojiSuggestion> {
     const LIMIT: usize = 6;
     let query = query.to_lowercase();
+    let folded = crate::emoji_words::fold(&query);
+    let locale = app.locale;
+    let suggestion = |emoji| localized_suggestion(emoji, locale);
     let mut seen = HashSet::new();
     if query.is_empty() {
         let recent = app
@@ -515,7 +518,7 @@ fn emoji_candidates(app: &App, query: &str) -> Vec<EmojiSuggestion> {
             .chain(emojis::iter())
             .filter(|emoji| seen.insert(emoji.as_str()))
             .take(LIMIT)
-            .map(emoji_suggestion)
+            .map(suggestion)
             .collect();
         return recent;
     }
@@ -523,7 +526,13 @@ fn emoji_candidates(app: &App, query: &str) -> Vec<EmojiSuggestion> {
     let mut found: Vec<_> = emojis::iter()
         .enumerate()
         .filter_map(|(order, emoji)| {
-            emoji_match_score(emoji, &query).map(|score| (score, order, emoji))
+            let local = crate::emoji_words::lookup(locale, emoji.as_str())
+                .and_then(|words| words.match_score(&folded));
+            emoji_match_score(emoji, &query)
+                .into_iter()
+                .chain(local)
+                .min()
+                .map(|score| (score, order, emoji))
         })
         .collect();
     found.sort_by_key(|(score, order, _)| (*score, *order));
@@ -531,8 +540,24 @@ fn emoji_candidates(app: &App, query: &str) -> Vec<EmojiSuggestion> {
         .into_iter()
         .filter(|(_, _, emoji)| seen.insert(emoji.as_str()))
         .take(LIMIT)
-        .map(|(_, _, emoji)| emoji_suggestion(emoji))
+        .map(|(_, _, emoji)| suggestion(emoji))
         .collect()
+}
+
+/// Shows the CLDR name and a shortcode built from it when the interface
+/// language has emoji words.
+fn localized_suggestion(
+    emoji: &'static emojis::Emoji,
+    locale: crate::i18n::Locale,
+) -> EmojiSuggestion {
+    match crate::emoji_words::lookup(locale, emoji.as_str()) {
+        Some(words) => EmojiSuggestion {
+            emoji: emoji.as_str(),
+            shortcode: words.shortcode(),
+            name: &words.name,
+        },
+        None => emoji_suggestion(emoji),
+    }
 }
 
 fn take_plain_key(ui: &mut egui::Ui, key: Key) -> bool {

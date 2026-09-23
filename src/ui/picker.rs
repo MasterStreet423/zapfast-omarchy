@@ -160,11 +160,13 @@ fn usable_recent(recent: &[String]) -> Vec<&'static str> {
 
 fn rows_for(
     query: &str,
+    locale: crate::i18n::Locale,
     recent: &[String],
     columns: usize,
     recent_label: &'static str,
 ) -> Vec<Row> {
     let query = query.trim().to_lowercase();
+    let folded = crate::emoji_words::fold(&query);
     let mut rows = Vec::new();
     let mut next = 0;
     let mut chunk = |rows: &mut Vec<Row>, list: Vec<&'static str>| {
@@ -184,6 +186,8 @@ fn rows_for(
                     || emoji
                         .shortcodes()
                         .any(|code| code.to_lowercase().contains(&query))
+                    || crate::emoji_words::lookup(locale, emoji.as_str())
+                        .is_some_and(|words| words.folded.contains(&folded))
             })
             .map(|emoji| emoji.as_str())
             .collect();
@@ -629,7 +633,13 @@ fn emoji_grid(
     } else {
         &app.settings.recent_emoji
     };
-    let rows = rows_for(&app.picker_search, recent, columns, recent_label);
+    let rows = rows_for(
+        &app.picker_search,
+        app.locale,
+        recent,
+        columns,
+        recent_label,
+    );
     let emoji_count = rows
         .iter()
         .map(|row| match row {
@@ -791,7 +801,7 @@ mod emoji_tests {
 
     #[test]
     fn search_finds_emoji_by_name_and_shortcode() {
-        let rows = rows_for("crab", &[], 8, "Recent");
+        let rows = rows_for("crab", crate::i18n::Locale::English, &[], 8, "Recent");
         let found: Vec<&str> = rows
             .iter()
             .filter_map(|row| match row {
@@ -805,8 +815,38 @@ mod emoji_tests {
     }
 
     #[test]
+    fn spanish_search_finds_emoji_by_cldr_keywords() {
+        use crate::i18n::Locale;
+        let found = |query: &str, locale: Locale| -> Vec<&'static str> {
+            rows_for(query, locale, &[], 8, "Recent")
+                .into_iter()
+                .filter_map(|row| match row {
+                    Row::Emoji { values, .. } => Some(values),
+                    _ => None,
+                })
+                .flatten()
+                .collect()
+        };
+        assert!(found("cangrejo", Locale::Spanish).contains(&"🦀"));
+        assert!(
+            found("corazon", Locale::Spanish)
+                .iter()
+                .any(|e| e.starts_with('❤'))
+        );
+        assert!(found("chile", Locale::Spanish).contains(&"🇨🇱"));
+        assert!(found("crab", Locale::Spanish).contains(&"🦀"));
+        assert!(!found("cangrejo", Locale::English).contains(&"🦀"));
+    }
+
+    #[test]
     fn empty_query_lists_recent_then_groups() {
-        let rows = rows_for("", &["👍".into()], 8, "Frequently Used");
+        let rows = rows_for(
+            "",
+            crate::i18n::Locale::English,
+            &["👍".into()],
+            8,
+            "Frequently Used",
+        );
         assert!(matches!(rows.first(), Some(Row::Header("Frequently Used"))));
         assert!(
             rows.iter()
@@ -818,7 +858,13 @@ mod emoji_tests {
     #[test]
     fn empty_recent_omits_the_recent_header() {
         for recent in [Vec::new(), vec!["not-an-emoji".into()]] {
-            let rows = rows_for("", &recent, 8, "Frequently Used");
+            let rows = rows_for(
+                "",
+                crate::i18n::Locale::English,
+                &recent,
+                8,
+                "Frequently Used",
+            );
             assert!(
                 !rows.iter().any(|row| matches!(
                     row,
@@ -855,18 +901,27 @@ mod emoji_tests {
 
     #[test]
     fn empty_recent_jump_falls_back_to_the_first_unicode_group() {
-        let empty = rows_for("", &[], 8, "Frequently Used");
+        let empty = rows_for("", crate::i18n::Locale::English, &[], 8, "Frequently Used");
         assert_eq!(
             resolve_jump(Some("Frequently Used"), &empty),
             Some("Smileys & Emotion")
         );
         assert_eq!(
-            resolve_jump(Some("Recent"), &rows_for("", &[], 8, "Recent")),
+            resolve_jump(
+                Some("Recent"),
+                &rows_for("", crate::i18n::Locale::English, &[], 8, "Recent")
+            ),
             Some("Smileys & Emotion")
         );
         assert_eq!(resolve_jump(Some("Flags"), &empty), Some("Flags"));
         assert_eq!(resolve_jump(None, &empty), None);
-        let with_recent = rows_for("", &["👍".into()], 8, "Frequently Used");
+        let with_recent = rows_for(
+            "",
+            crate::i18n::Locale::English,
+            &["👍".into()],
+            8,
+            "Frequently Used",
+        );
         assert_eq!(
             resolve_jump(Some("Frequently Used"), &with_recent),
             Some("Frequently Used")
