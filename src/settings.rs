@@ -336,6 +336,9 @@ pub struct Settings {
     pub wallpaper_color: WallpaperColor,
     /// Colour selected for the dark wallpaper picker.
     pub dark_wallpaper_color: WallpaperColor,
+    /// Paint Omarchy's desktop background behind the open chat while
+    /// following the system theme.
+    pub chat_wallpaper: bool,
     /// Last open chat, restored at startup.
     pub last_chat: Option<String>,
     pub show_shortcut_hints: bool,
@@ -402,6 +405,7 @@ impl Default for Settings {
             show_wallpaper: true,
             wallpaper_color: WallpaperColor::default(),
             dark_wallpaper_color: WallpaperColor::Black,
+            chat_wallpaper: true,
             last_chat: None,
             show_shortcut_hints: true,
             recent_emoji: Vec::new(),

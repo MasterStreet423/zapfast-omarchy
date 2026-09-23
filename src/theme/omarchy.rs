@@ -70,6 +70,41 @@ impl Setup {
         })
     }
 
+    /// Identifies the desktop background without decoding it, so reloads
+    /// caused by unrelated theme files keep the texture already on screen.
+    pub(super) fn wallpaper_key(&self) -> Option<WallpaperKey> {
+        let path = fs::canonicalize(self.watch_directory().join("background")).ok()?;
+        let metadata = fs::metadata(&path).ok()?;
+        metadata.is_file().then(|| WallpaperKey {
+            modified: metadata.modified().ok(),
+            len: metadata.len(),
+            path,
+        })
+    }
+
+    /// Decoded off the UI thread and scaled down so it fits in one texture.
+    pub(super) fn wallpaper(&self, key: &WallpaperKey) -> io::Result<egui::ColorImage> {
+        if key.len > MAX_WALLPAPER_BYTES {
+            return Err(io::Error::other("Omarchy background is too large"));
+        }
+        let image = image::open(&key.path).map_err(io::Error::other)?;
+        let image = if image.width().max(image.height()) > MAX_WALLPAPER_SIDE {
+            image.resize(
+                MAX_WALLPAPER_SIDE,
+                MAX_WALLPAPER_SIDE,
+                image::imageops::FilterType::Triangle,
+            )
+        } else {
+            image
+        };
+        let rgba = image.to_rgba8();
+        let size = [rgba.width() as usize, rgba.height() as usize];
+        Ok(egui::ColorImage::from_rgba_unmultiplied(
+            size,
+            rgba.as_raw(),
+        ))
+    }
+
     pub(super) fn install(&self, themes: &Path) -> io::Result<()> {
         let config = self.home.join(".config/omarchy");
         let current = self.home.join(".local/state/omarchy/current/theme");
@@ -106,6 +141,16 @@ impl Setup {
         super::custom::parse_palette(&palette).map_err(io::Error::other)?;
         create_only(&destination, palette.as_bytes(), 0o644)
     }
+}
+
+const MAX_WALLPAPER_BYTES: u64 = 64 * 1024 * 1024;
+const MAX_WALLPAPER_SIDE: u32 = 2560;
+
+#[derive(Clone, Debug, PartialEq)]
+pub(super) struct WallpaperKey {
+    path: PathBuf,
+    modified: Option<std::time::SystemTime>,
+    len: u64,
 }
 
 fn read_colors(path: &Path) -> io::Result<String> {

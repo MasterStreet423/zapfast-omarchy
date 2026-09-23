@@ -5,7 +5,7 @@ use egui::Color32;
 use std::{
     io::Read,
     path::{Component, Path, PathBuf},
-    sync::mpsc,
+    sync::{Arc, mpsc},
 };
 
 /// A local JSON palette, identified by its filename in the themes directory.
@@ -178,8 +178,18 @@ struct Loaded {
     problem: Option<String>,
     follows_omarchy: bool,
     system_theme: Option<CustomTheme>,
+    wallpaper: WallpaperUpdate,
     #[cfg(target_os = "linux")]
     watch: Option<super::watch::ThemeWatch>,
+}
+
+#[derive(Default)]
+enum WallpaperUpdate {
+    #[default]
+    Keep,
+    Clear,
+    #[cfg(target_os = "linux")]
+    Set(super::omarchy::WallpaperKey, Arc<egui::ColorImage>),
 }
 
 fn discover(directory: &Path, selected: Option<&str>) -> Loaded {
@@ -260,6 +270,8 @@ pub struct Catalog {
     pending: Option<Scan>,
     follows_omarchy: bool,
     system_theme: Option<CustomTheme>,
+    wallpaper: Option<Arc<egui::ColorImage>>,
+    wallpaper_generation: u64,
     presets: bool,
     #[cfg(target_os = "linux")]
     watch: Option<super::watch::ThemeWatch>,
@@ -267,6 +279,8 @@ pub struct Catalog {
     setup: Option<super::omarchy::Setup>,
     #[cfg(target_os = "linux")]
     setup_pending: bool,
+    #[cfg(target_os = "linux")]
+    wallpaper_key: Option<super::omarchy::WallpaperKey>,
 }
 
 impl Catalog {
@@ -315,6 +329,8 @@ impl Catalog {
         let setup = self.setup.clone();
         #[cfg(target_os = "linux")]
         let install = std::mem::take(&mut self.setup_pending);
+        #[cfg(target_os = "linux")]
+        let shown_wallpaper = self.wallpaper_key.clone();
         let waker = scan.waker.clone();
         self.spawn(&waker, move || {
             #[cfg(target_os = "linux")]
@@ -383,6 +399,19 @@ impl Catalog {
                             loaded.problem.get_or_insert_with(|| "The Omarchy palette could not be loaded. Keeping the last usable appearance. See the log for details.".into());
                         }
                     }
+                    loaded.wallpaper = match setup.wallpaper_key() {
+                        None => WallpaperUpdate::Clear,
+                        Some(key) if Some(&key) == shown_wallpaper.as_ref() => WallpaperUpdate::Keep,
+                        Some(key) => match setup.wallpaper(&key) {
+                            Ok(image) => WallpaperUpdate::Set(key, Arc::new(image)),
+                            Err(error) => {
+                                log::warn!("unable to load the Omarchy background: {error}");
+                                WallpaperUpdate::Clear
+                            }
+                        },
+                    };
+                } else {
+                    loaded.wallpaper = WallpaperUpdate::Clear;
                 }
 
                 loaded
@@ -447,6 +476,12 @@ impl Catalog {
         self.system_theme.as_ref()
     }
 
+    /// Omarchy's current desktop background, with a counter that changes
+    /// whenever it is replaced or removed.
+    pub fn wallpaper(&self) -> (u64, Option<&Arc<egui::ColorImage>>) {
+        (self.wallpaper_generation, self.wallpaper.as_ref())
+    }
+
     pub fn loading(&self) -> bool {
         self.receiver.is_some()
     }
@@ -482,6 +517,24 @@ impl Catalog {
                 self.problem = loaded.problem;
                 self.follows_omarchy = loaded.follows_omarchy;
                 self.system_theme = loaded.system_theme;
+                match loaded.wallpaper {
+                    WallpaperUpdate::Keep => {}
+                    WallpaperUpdate::Clear => {
+                        if self.wallpaper.take().is_some() {
+                            self.wallpaper_generation += 1;
+                        }
+                        #[cfg(target_os = "linux")]
+                        {
+                            self.wallpaper_key = None;
+                        }
+                    }
+                    #[cfg(target_os = "linux")]
+                    WallpaperUpdate::Set(key, image) => {
+                        self.wallpaper = Some(image);
+                        self.wallpaper_key = Some(key);
+                        self.wallpaper_generation += 1;
+                    }
+                }
                 #[cfg(target_os = "linux")]
                 if loaded.watch.is_some() {
                     self.watch = loaded.watch;

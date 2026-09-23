@@ -154,6 +154,8 @@ pub struct App {
     pub palette: Palette,
     pub custom_themes: theme::custom::Catalog,
     applied_dark: Option<bool>,
+    /// Texture of the catalog's wallpaper, tagged with its generation.
+    wallpaper: (u64, Option<egui::TextureHandle>),
     zoom_applied: bool,
 
     pub link: LinkStatus,
@@ -503,6 +505,7 @@ impl App {
             palette,
             custom_themes: theme::custom::Catalog::default(),
             applied_dark: None,
+            wallpaper: (0, None),
             zoom_applied: false,
             link: LinkStatus::Starting,
             syncing: false,
@@ -2652,6 +2655,18 @@ impl App {
         }
     }
 
+    /// The desktop background belongs to the desktop's palette, so it only
+    /// shows while the app follows Omarchy.
+    pub fn chat_wallpaper(&self) -> Option<&egui::TextureHandle> {
+        let follows = self.custom_themes.follows_omarchy()
+            && self.settings.custom_theme.is_none()
+            && self.settings.theme == ThemeChoice::System;
+        self.wallpaper
+            .1
+            .as_ref()
+            .filter(|_| follows && self.settings.chat_wallpaper)
+    }
+
     fn apply_theme(&mut self, ctx: &egui::Context) {
         let preference = self.settings.cached_palette().map_or_else(
             || match self.settings.theme {
@@ -2681,6 +2696,17 @@ impl App {
             self.palette = palette;
             crate::theme::apply(ctx, &self.palette);
             self.applied_dark = Some(dark);
+        }
+        let (generation, image) = self.custom_themes.wallpaper();
+        if self.wallpaper.0 != generation {
+            let texture = image.map(|image| {
+                ctx.load_texture(
+                    "omarchy-wallpaper",
+                    egui::ImageData::Color(image.clone()),
+                    egui::TextureOptions::LINEAR,
+                )
+            });
+            self.wallpaper = (generation, texture);
         }
         if !self.zoom_applied {
             ctx.set_zoom_factor(self.settings.zoom);

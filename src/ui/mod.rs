@@ -100,6 +100,29 @@ fn central_frame(app: &App) -> Frame {
     Frame::new().fill(central_background(app)).stroke(stroke)
 }
 
+/// Covers the chat area like a desktop background, cropped rather than
+/// stretched, under a veil of the chat colour so messages stay readable.
+pub(super) fn paint_wallpaper(ui: &egui::Ui, texture: &egui::TextureHandle, veil: egui::Color32) {
+    let rect = ui.max_rect();
+    let [width, height] = texture.size().map(|side| side as f32);
+    if rect.width() <= 0.0 || rect.height() <= 0.0 || width <= 0.0 || height <= 0.0 {
+        return;
+    }
+    let (image, area) = (width / height, rect.width() / rect.height());
+    let (u, v) = if image > area {
+        (area / image, 1.0)
+    } else {
+        (1.0, image / area)
+    };
+    let uv = egui::Rect::from_center_size(egui::pos2(0.5, 0.5), vec2(u, v));
+    let painter = ui.painter();
+    painter.image(texture.id(), rect, uv, egui::Color32::WHITE);
+    painter.rect_filled(rect, 0.0, veil.gamma_multiply(WALLPAPER_VEIL));
+}
+
+/// How much of the chat colour lies over the background.
+const WALLPAPER_VEIL: f32 = 0.75;
+
 /// Where the focus ring was drawn this frame, used by interaction tests.
 pub fn focus_ring_id() -> egui::Id {
     egui::Id::new("focus-ring")

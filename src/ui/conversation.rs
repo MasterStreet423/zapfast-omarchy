@@ -39,7 +39,9 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
         empty(app, ui);
         return;
     };
-    if app.settings.show_wallpaper {
+    if let Some(texture) = app.chat_wallpaper() {
+        super::paint_wallpaper(ui, texture, app.palette.chat);
+    } else if app.settings.show_wallpaper {
         wallpaper::paint(ui, app.settings.wallpaper_color_for(app.palette.dark));
     }
     header(app, ui, &chat);

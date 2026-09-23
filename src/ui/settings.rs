@@ -106,6 +106,16 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
                                 }
                             },
                         );
+                        if app.custom_themes.follows_omarchy() {
+                            let locale = app.locale;
+                            toggle(
+                                ui,
+                                app,
+                                &crate::i18n::gettext(locale, "Desktop background in chats"),
+                                &crate::i18n::gettext(locale, "Uses the Omarchy background while the theme follows the system."),
+                                |settings| &mut settings.chat_wallpaper,
+                            );
+                        }
                         widgets::setting_row(
                             ui,
                             &palette,
