@@ -1,7 +1,7 @@
 # zapfast-omarchy
 
 Fork personal de [ZapFast](https://github.com/crmne/zapfast) que sigue al
-oficial. `main` es un espejo puro de `crmne/zapfast`; `erwin` (la rama por
+oficial. `main` es un espejo puro de `crmne/zapfast`; `masterstreet` (la rama por
 defecto) es la distribución: el oficial al día más estos cambios.
 
 ## Qué agrega
