@@ -21,6 +21,13 @@ defecto) es la distribución: el oficial al día más estos cambios.
   color del chat para que se lea, y cambia en vivo con el fondo. Se apaga en
   Ajustes → Apariencia.
 
+- **Abrir chats desde el escritorio.** Mientras corre, ZapFast deja sus 60
+  chats más recientes (sin bloqueados ni archivados) en
+  `$XDG_RUNTIME_DIR/zapfast/chats.json`, legible solo por el usuario, y
+  `zapfast open-chat <id>` abre uno en la instancia que está corriendo. Con
+  eso un lanzador (el menú de Omarchy, por ejemplo) puede listar y abrir chats.
+  Código en `src/chat_index.rs`.
+
 ## Traer lo nuevo del oficial
 
 ```bash
