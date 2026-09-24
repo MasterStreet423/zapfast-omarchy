@@ -1332,6 +1332,9 @@ impl Worker {
                     .with_platform_type(wa::device_props::PlatformType::DESKTOP),
             )
             .with_event_handler(UiEvents(sender))
+            // The window's focus decides presence; the library's own
+            // announcements would show the account online while it is hidden.
+            .with_presence_policy(whatsapp_rust::PresencePolicy::Manual)
             .build()
             .await;
         match bot {
