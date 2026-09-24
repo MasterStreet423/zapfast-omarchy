@@ -76,7 +76,10 @@ fi
 
 regenerar
 # Si lo único que cambió es la fecha de extracción, no vale un commit.
-if git diff -- "$i18n" | grep '^[-+][^-+]' | grep -qv 'POT-Creation-Date'; then
+# El diff va a una variable: con pipefail, un grep -q que corta temprano mata a
+# git diff por SIGPIPE y la condición daba falso, botando los catálogos nuevos.
+cambios=$(git diff -- "$i18n" | grep '^[-+][^-+]' || true)
+if grep -qv 'POT-Creation-Date' <<<"$cambios"; then
     git add "$i18n"
     git commit -q -m "Update the Spanish catalog after syncing upstream"
     echo "Catálogos actualizados en un commit aparte."
