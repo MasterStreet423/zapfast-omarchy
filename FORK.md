@@ -57,3 +57,10 @@ install -m755 target/release/zapfast ~/.local/bin/zapfast
 ```
 
 Los tests corren siempre en inglés, sin importar el idioma del sistema.
+
+Se sacaron cinco tests de árabe y hebreo que fallan en Omarchy también sobre el
+oficial limpio (dependen de las fuentes instaladas): cuatro en `src/bidi.rs`
+(`arabic_lam_ligatures_…`, `ligatures_inside_right_to_left_…`,
+`wrapped_right_to_left_…`, `message_bubbles_follow_the_bidi_…`) y
+`rtl_self_chat_bubbles_render_like_whatsapp` en `src/demo.rs`. Si upstream los
+toca, el merge choca ahí: se resuelve volviendo a sacarlos.
