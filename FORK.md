@@ -20,13 +20,18 @@ defecto) es la distribución: el oficial al día más estos cambios.
   fondo del escritorio se pinta detrás de la conversación, con un velo del
   color del chat para que se lea, y cambia en vivo con el fondo. Se apaga en
   Ajustes → Apariencia.
-
 - **Abrir chats desde el escritorio.** Mientras corre, ZapFast deja sus 60
   chats más recientes (sin bloqueados ni archivados) en
   `$XDG_RUNTIME_DIR/zapfast/chats.json`, legible solo por el usuario, y
   `zapfast open-chat <id>` abre uno en la instancia que está corriendo. Con
   eso un lanzador (el menú de Omarchy, por ejemplo) puede listar y abrir chats.
   Código en `src/chat_index.rs`.
+
+- **"En línea" solo cuando lo estás mirando.** whatsapp-rust anuncia presencia
+  por su cuenta al conectar y cuando cambia el nombre, así que con la ventana
+  escondida en la bandeja la cuenta podía quedar en línea. Acá la presencia es
+  manual (`PresencePolicy::Manual` en `src/backend/worker.rs`) y la decide solo
+  el foco de la ventana, como ya pretendía upstream.
 
 ## Traer lo nuevo del oficial
 
