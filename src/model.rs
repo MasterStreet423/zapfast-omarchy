@@ -143,6 +143,9 @@ pub struct LastMessage {
     /// Group-message sender.
     pub sender_name: Option<String>,
     pub summary: String,
+    /// The whole message behind `summary`, every line of it: the chat row
+    /// shows it in a tooltip when the one-line preview cannot.
+    pub full: String,
     pub status: Delivery,
 }
 
@@ -621,6 +624,24 @@ impl Content {
         }
     }
 
+    /// The whole message as [`Self::summary`] would label it: every line of
+    /// a text or a photo or video caption. Other content has nothing more
+    /// to say than its summary.
+    pub fn full_summary(&self) -> String {
+        let captioned = |label: &str, caption: &Option<String>| match caption.as_deref() {
+            Some(caption) if !caption.trim().is_empty() => format!("{label}: {caption}"),
+            _ => label.to_owned(),
+        };
+        match self {
+            Self::Text { text, .. } | Self::Interactive { text, .. } => text.clone(),
+            Self::Image { caption, .. } => captioned("Photo", caption),
+            Self::Video {
+                caption, gif, note, ..
+            } => captioned(video_label(*gif, *note), caption),
+            _ => self.summary(),
+        }
+    }
+
     pub fn summary(&self) -> String {
         match self {
             Self::Text { text, .. } | Self::Interactive { text, .. } => {
@@ -629,16 +650,7 @@ impl Content {
             Self::Image { caption, .. } => with_caption("Photo", caption),
             Self::Video {
                 caption, gif, note, ..
-            } => with_caption(
-                if *gif {
-                    "GIF"
-                } else if *note {
-                    "Video message"
-                } else {
-                    "Video"
-                },
-                caption,
-            ),
+            } => with_caption(video_label(*gif, *note), caption),
             Self::Audio {
                 voice_note,
                 seconds,
@@ -749,6 +761,17 @@ impl Content {
             } => card.image.as_mut(),
             _ => None,
         }
+    }
+}
+
+/// What a video is called in previews.
+fn video_label(gif: bool, note: bool) -> &'static str {
+    if gif {
+        "GIF"
+    } else if note {
+        "Video message"
+    } else {
+        "Video"
     }
 }
 
@@ -1816,6 +1839,26 @@ mod tests {
             .summary(),
             "Voice message (1:05)"
         );
+    }
+
+    #[test]
+    fn full_summaries_keep_every_line_behind_the_summary_label() {
+        assert_eq!(Content::text("hi\nthere").full_summary(), "hi\nthere");
+        assert_eq!(
+            Content::Image {
+                caption: Some("look\nat this".into()),
+                media: media()
+            }
+            .full_summary(),
+            "Photo: look\nat this"
+        );
+        let voice = Content::Audio {
+            media: media(),
+            seconds: Some(65),
+            voice_note: true,
+            waveform: Vec::new(),
+        };
+        assert_eq!(voice.full_summary(), voice.summary());
     }
 
     #[test]

@@ -1,6 +1,6 @@
 [package]
 name = "zapfast"
-version = "0.16.0"
+version = "0.16.2"
 edition = "2024"
 rust-version = "1.98"
 license = "MIT"
@@ -59,7 +59,7 @@ image = { version = "0.25", default-features = false, features = ["jpeg", "png",
 # sync events (#1538), boolean AB props (#1539), and favorite chats sync
 # (#1544). Device-store
 # compatibility retains the legacy created_at column.
-whatsapp-rust = { git = "https://github.com/oxidezap/whatsapp-rust", rev = "215123065e63e0a7ddefadf0c53740c90467769d", default-features = false, features = ["sqlite-storage", "tokio-transport", "tokio-runtime", "ureq-client", "tokio-native"] }
+whatsapp-rust = { git = "https://github.com/oxidezap/whatsapp-rust", rev = "f7468ae2920a2b0aedbd0848cf121de56a07f93c", default-features = false, features = ["sqlite-storage", "tokio-transport", "tokio-runtime", "ureq-client", "tokio-native"] }
 tokio = { version = "1", features = ["rt-multi-thread", "sync", "time", "macros", "fs", "net", "io-util"] }
 # Opens the WhatsApp WebSocket through a proxy. Both crates are already
 # included through the Tokio transport at these versions.
@@ -108,7 +108,12 @@ resvg = { version = "0.45", default-features = false }
 notify-rust = { version = "4", default-features = false, features = ["z"] }
 openh264 = "0.9"
 mp4 = "0.14"
-rodio = { version = "0.22", default-features = false, features = ["playback", "recording", "mp3", "mp4", "wav", "vorbis"] }
+# The 0.22 release ends the sound of an interleaved MP4 at the first packet of
+# another track, so a video that has a picture and a sound track plays a tenth
+# of a second of audio and the listener hears silence. This revision is the
+# merge of upstream RustAudio/rodio#833, which skips the packets of every track
+# but the selected one. Drop the pin at the first release that carries it.
+rodio = { git = "https://github.com/RustAudio/rodio", rev = "e89e685d326a684b298c5138adf94caa49e5568c", default-features = false, features = ["playback", "recording", "mp3", "mp4", "wav", "vorbis"] }
 opus = "0.4"
 ogg = "0.9"
 # Converts animated Signal APNG stickers to the animated WebP used by WhatsApp.
@@ -122,24 +127,27 @@ tr = { version = "0.1.11", default-features = false }
 sys-locale = "0.3"
 
 [patch.crates-io]
-# Right-to-left shaping and glyph clusters from crmne/zapfast#144, on top of
+# Right-to-left shaping and glyph clusters from crmne/zapfast#144, and digits
+# shaped left to right in text without right-to-left letters (#184), on top of
 # egui 0.36.1. Every egui crate comes from the same revision so they share one
 # emath and epaint. Drop this once egui releases bidirectional text support.
-ecolor = { git = "https://github.com/crmne/egui", rev = "6147de7b09f255190121e8166cbb083d88cabfb2" }
-eframe = { git = "https://github.com/crmne/egui", rev = "6147de7b09f255190121e8166cbb083d88cabfb2" }
-egui = { git = "https://github.com/crmne/egui", rev = "6147de7b09f255190121e8166cbb083d88cabfb2" }
-egui-wgpu = { git = "https://github.com/crmne/egui", rev = "6147de7b09f255190121e8166cbb083d88cabfb2" }
-egui-winit = { git = "https://github.com/crmne/egui", rev = "6147de7b09f255190121e8166cbb083d88cabfb2" }
-egui_extras = { git = "https://github.com/crmne/egui", rev = "6147de7b09f255190121e8166cbb083d88cabfb2" }
-egui_glow = { git = "https://github.com/crmne/egui", rev = "6147de7b09f255190121e8166cbb083d88cabfb2" }
-emath = { git = "https://github.com/crmne/egui", rev = "6147de7b09f255190121e8166cbb083d88cabfb2" }
-epaint = { git = "https://github.com/crmne/egui", rev = "6147de7b09f255190121e8166cbb083d88cabfb2" }
-epaint_default_fonts = { git = "https://github.com/crmne/egui", rev = "6147de7b09f255190121e8166cbb083d88cabfb2" }
+ecolor = { git = "https://github.com/crmne/egui", rev = "8e5923482f6882a169b5c74ee6b380089f890391" }
+eframe = { git = "https://github.com/crmne/egui", rev = "8e5923482f6882a169b5c74ee6b380089f890391" }
+egui = { git = "https://github.com/crmne/egui", rev = "8e5923482f6882a169b5c74ee6b380089f890391" }
+egui-wgpu = { git = "https://github.com/crmne/egui", rev = "8e5923482f6882a169b5c74ee6b380089f890391" }
+egui-winit = { git = "https://github.com/crmne/egui", rev = "8e5923482f6882a169b5c74ee6b380089f890391" }
+egui_extras = { git = "https://github.com/crmne/egui", rev = "8e5923482f6882a169b5c74ee6b380089f890391" }
+egui_glow = { git = "https://github.com/crmne/egui", rev = "8e5923482f6882a169b5c74ee6b380089f890391" }
+emath = { git = "https://github.com/crmne/egui", rev = "8e5923482f6882a169b5c74ee6b380089f890391" }
+epaint = { git = "https://github.com/crmne/egui", rev = "8e5923482f6882a169b5c74ee6b380089f890391" }
+epaint_default_fonts = { git = "https://github.com/crmne/egui", rev = "8e5923482f6882a169b5c74ee6b380089f890391" }
 # winit 0.30.13 plus Wayland `Occluded` events for the xdg-shell suspended
 # state, so a hidden window stops painting instead of blocking on vsync.
-# Shared with Spotifast and proposed upstream as rust-windowing/winit#4709;
-# drop the fork when a winit release includes it.
-winit = { git = "https://github.com/crmne/winit", rev = "c8df61a52b8b563e1bb65e0f1d8630289d1c1bd6" }
+# Shared with Spotifast and proposed upstream as rust-windowing/winit#4709.
+# Also file drag and drop on Wayland through the data device (#178), which
+# upstream only has in 0.31's new drag-and-drop API (winit#4571). Drop the
+# fork when ZapFast moves to a winit release with both.
+winit = { git = "https://github.com/crmne/winit", rev = "05fbaf7a757b7657f717c07761d8ff4db81fa426" }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 notify = "8.2"

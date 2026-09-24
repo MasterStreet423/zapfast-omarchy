@@ -78,6 +78,16 @@ impl TabStop for Response {
     }
 }
 
+/// The widget last registered for `stop`, such as an icon button without
+/// painted text, so a scripted demo can find it where it was drawn.
+#[cfg(any(test, feature = "demo"))]
+pub(crate) fn control(ctx: &Context, stop: Stop) -> Option<Id> {
+    ctx.data(|data| data.get_temp::<Order>(order_id()))?
+        .controls
+        .into_iter()
+        .find_map(|(known, id)| (known == stop).then_some(id))
+}
+
 /// Intercept Tab before any widgets are registered. Merely consuming the key
 /// is insufficient: egui already chose a focus direction during begin_pass.
 pub fn begin(ctx: &Context, active: bool) {

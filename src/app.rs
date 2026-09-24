@@ -944,6 +944,10 @@ impl App {
         crate::theme::install(ctx);
         // Use a faster wheel speed for short chat rows.
         ctx.options_mut(|options| options.input_options.line_scroll_speed = 120.0);
+        // A keystroke that wraps the draft is applied in one pass, and the
+        // bottom panel holding the composer only takes the new height in
+        // the next: three passes keep it from showing a frame out of place.
+        ctx.options_mut(|options| options.max_passes = std::num::NonZeroUsize::new(3).unwrap());
         // Load and index the color emoji font outside the frame loop.
         std::thread::Builder::new()
             .name("emoji-font".into())
@@ -3636,7 +3640,16 @@ impl App {
                 if self.open_chat.is_some() && self.recording.is_none() {
                     self.picker = None;
                     self.composer_tools_open = false;
-                    self.recording = Some(Recorder::start(self.waker.clone()));
+                    // An offline demo never opens the microphone.
+                    #[cfg(any(test, feature = "demo"))]
+                    let recorder = if self.backend.is_offline() {
+                        Recorder::simulated(self.waker.clone())
+                    } else {
+                        Recorder::start(self.waker.clone())
+                    };
+                    #[cfg(not(any(test, feature = "demo")))]
+                    let recorder = Recorder::start(self.waker.clone());
+                    self.recording = Some(recorder);
                 }
             }
             Action::CancelRecording => {

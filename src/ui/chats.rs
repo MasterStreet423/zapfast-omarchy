@@ -857,6 +857,8 @@ fn row(app: &mut App, ui: &mut egui::Ui, chat: &Chat) -> egui::Response {
         Sense::click(),
     );
     theme::reveal_focus(&response);
+    // The preview area and the whole last message, when the row cuts it short.
+    let mut full_preview: Option<(Rect, String, String)> = None;
     response.widget_info(|| {
         egui::WidgetInfo::selected(
             egui::WidgetType::SelectableLabel,
@@ -967,6 +969,7 @@ fn row(app: &mut App, ui: &mut egui::Ui, chat: &Chat) -> egui::Response {
                 1,
             )
         } else if let Some(last) = &chat.last {
+            let mut prefix = String::new();
             if last.from_me {
                 let tick_rect =
                     Rect::from_center_size(pos2(x + 8.0, line_y + 8.0), Vec2::splat(16.0));
@@ -975,9 +978,10 @@ fn row(app: &mut App, ui: &mut egui::Ui, chat: &Chat) -> egui::Response {
             } else if chat.is_group() {
                 let sender = app.display_name_or(&last.sender, last.sender_name.as_deref());
                 let first = sender.split_whitespace().next().unwrap_or(&sender);
+                prefix = format!("{first}: ");
                 let sender = widgets::line(
                     ui,
-                    &format!("{first}: "),
+                    &prefix,
                     theme::regular(13.0),
                     preview_color,
                     (badge_right - x) * 0.5,
@@ -987,7 +991,7 @@ fn row(app: &mut App, ui: &mut egui::Ui, chat: &Chat) -> egui::Response {
                 sender.paint(ui, pos2(x, line_y), preview_color);
                 x += width;
             }
-            widgets::line(
+            let words = widgets::line(
                 ui,
                 &crate::markup::plain(
                     &app.resolve_mention_tokens(&crate::i18n_extra::summary(&last.summary)),
@@ -997,7 +1001,17 @@ fn row(app: &mut App, ui: &mut egui::Ui, chat: &Chat) -> egui::Response {
                 preview_color,
                 (badge_right - x).max(0.0),
                 1,
-            )
+            );
+            // The row shows one line: offer the whole message when that line
+            // was cut short or the message has more lines than it.
+            if words.galley.elided || last.full.trim_end() != last.summary {
+                let area = Rect::from_min_max(
+                    pos2(left, line_y - 4.0),
+                    pos2(badge_right, line_y + words.size().y.max(16.0) + 4.0),
+                );
+                full_preview = Some((area, prefix, last.full.clone()));
+            }
+            words
         } else {
             widgets::line(ui, "", theme::regular(13.0), preview_color, 1.0, 1)
         };
@@ -1009,6 +1023,9 @@ fn row(app: &mut App, ui: &mut egui::Ui, chat: &Chat) -> egui::Response {
         );
     }
     let response = response.on_hover_cursor(egui::CursorIcon::PointingHand);
+    if let Some((area, prefix, full)) = full_preview {
+        full_preview_tooltip(app, ui, &chat.id, area, &prefix, &full);
+    }
     if response.clicked() {
         app.actions.push(Action::OpenChat(chat.id.clone()));
     }
@@ -1063,6 +1080,56 @@ fn row(app: &mut App, ui: &mut egui::Ui, chat: &Chat) -> egui::Response {
     };
     popup.show(|ui| context_menu(app, ui, chat, &menu_palette));
     response
+}
+
+/// The widest a chat row's full-message tooltip grows before it wraps.
+const FULL_PREVIEW_WIDTH: f32 = 360.0;
+/// Lines a full-message tooltip shows before it ends in an ellipsis.
+const FULL_PREVIEW_ROWS: usize = 12;
+/// Characters of a message the tooltip lays out: far more than its rows
+/// hold, so a very long message costs no more than a long one.
+const FULL_PREVIEW_CHARS: usize = 2_000;
+
+/// Where a chat row's latest-message preview sits, for hover tests.
+pub fn preview_id(chat: &str) -> egui::Id {
+    egui::Id::new(("chat-preview", chat))
+}
+
+/// Shows the whole last message while the pointer rests on a chat row's
+/// cut-short preview, as WhatsApp Web does. It keeps out of the way of an
+/// open menu and of a drag.
+fn full_preview_tooltip(
+    app: &App,
+    ui: &egui::Ui,
+    chat: &str,
+    area: Rect,
+    prefix: &str,
+    full: &str,
+) {
+    let hover = ui.interact(area, preview_id(chat), Sense::hover());
+    if egui::Popup::is_any_open(ui.ctx()) || ui.ctx().dragged_id().is_some() {
+        return;
+    }
+    egui::Tooltip::for_enabled(&hover)
+        .width(FULL_PREVIEW_WIDTH)
+        .show(|ui| {
+            let full: String = full.chars().take(FULL_PREVIEW_CHARS).collect();
+            let text = format!(
+                "{prefix}{}",
+                crate::markup::plain(&app.resolve_mention_tokens(&full), &[])
+            );
+            let color = ui.visuals().text_color();
+            let line = widgets::line(
+                ui,
+                text.trim_end(),
+                theme::regular(13.0),
+                color,
+                FULL_PREVIEW_WIDTH,
+                FULL_PREVIEW_ROWS,
+            );
+            let (rect, _) = ui.allocate_exact_size(line.size(), Sense::hover());
+            line.paint(ui, rect.min, color);
+        });
 }
 
 /// Width of the chat list when it is collapsed to avatars.

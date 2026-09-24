@@ -44,6 +44,34 @@ struct Cli {
     #[arg(long, requires = "demo_tour", value_name = "PATH")]
     demo_tour_events: Option<std::path::PathBuf>,
 
+    /// Which tour to play: `launch` (41 seconds) or `whats-new` (what 0.16
+    /// added, 86 seconds).
+    #[cfg(feature = "demo")]
+    #[arg(
+        long,
+        requires = "demo_tour",
+        value_name = "NAME",
+        default_value = "launch",
+        value_parser = clap::builder::PossibleValuesParser::new(zapfast::demo::tour::Script::NAMES),
+    )]
+    demo_tour_script: String,
+
+    /// Play the tour at once on a virtual clock, save every frame as a PNG in
+    /// this directory, and quit when it ends.
+    #[cfg(feature = "demo")]
+    #[arg(
+        long,
+        requires = "demo_tour",
+        conflicts_with = "demo_tour_delay",
+        value_name = "DIR"
+    )]
+    demo_tour_frames: Option<std::path::PathBuf>,
+
+    /// Frames per second for `--demo-tour-frames` (default 30).
+    #[cfg(feature = "demo")]
+    #[arg(long, requires = "demo_tour_frames", value_name = "FPS", value_parser = clap::value_parser!(u32).range(1..=120))]
+    demo_fps: Option<u32>,
+
     /// Preview macOS content layout on another platform (demo only).
     #[cfg(feature = "demo")]
     #[arg(long, requires = "demo")]
@@ -229,7 +257,7 @@ fn main() -> eframe::Result<()> {
         zapfast::demo::populate(&mut app);
         zapfast::demo::apply_flags(&mut app, cli.demo_page.as_deref());
         if cli.demo_tour {
-            zapfast::demo::tour::prepare(&mut app);
+            tour_script(&cli.demo_tour_script).prepare(&mut app);
         }
     }
     #[cfg(feature = "demo")]
@@ -273,6 +301,16 @@ fn main() -> eframe::Result<()> {
             let creator_shot = shot.clone();
             #[cfg(feature = "demo")]
             let creator_tour_events = cli.demo_tour_events.clone();
+            #[cfg(feature = "demo")]
+            let creator_tour = (
+                tour_script(&cli.demo_tour_script),
+                cli.demo_tour_frames
+                    .clone()
+                    .map(|dir| zapfast::demo::tour::Capture {
+                        dir,
+                        fps: cli.demo_fps.unwrap_or(30),
+                    }),
+            );
             eframe::run_native(
                 "ZapFast",
                 native_options(demo_persistence.clone()),
@@ -299,9 +337,11 @@ fn main() -> eframe::Result<()> {
                         hover: demo_hover,
                         #[cfg(feature = "demo")]
                         tour: cli.demo_tour.then(|| {
-                            zapfast::demo::tour::Tour::new(
+                            zapfast::demo::tour::Tour::scripted(
+                                creator_tour.0,
                                 cli.demo_tour_delay.map(std::time::Duration::from_millis),
                                 creator_tour_events,
+                                creator_tour.1,
                             )
                         }),
                     }))
@@ -404,6 +444,12 @@ fn demo_size_arg() -> Option<[f32; 2]> {
         .nth(1)?;
     let (w, h) = value.split_once('x')?;
     Some([w.parse::<f32>().ok()?, h.parse::<f32>().ok()?])
+}
+
+/// The tour `--demo-tour-script` names; clap has already checked the name.
+#[cfg(feature = "demo")]
+fn tour_script(name: &str) -> zapfast::demo::tour::Script {
+    zapfast::demo::tour::Script::from_name(name).unwrap_or_default()
 }
 
 fn native_options(demo_persistence: Option<std::path::PathBuf>) -> eframe::NativeOptions {
@@ -596,7 +642,12 @@ impl eframe::App for Shell {
         if let (Some(tour), Some(app)) = (&mut self.tour, &mut self.app) {
             tour.input(app, ctx, input);
         }
-        if let Some(pos) = self.hover {
+        // Moves the pointer only while it is elsewhere: each move restarts
+        // egui's tooltip delay, so a fake pointer that kept moving in place
+        // would never show one.
+        if let Some(pos) = self.hover
+            && ctx.input(|input| input.pointer.latest_pos()) != Some(pos)
+        {
             input.events.push(egui::Event::PointerMoved(pos));
         }
     }
@@ -707,6 +758,51 @@ mod tests {
         assert_eq!(cli.demo_tour_delay, Some(5000));
         assert!(Cli::try_parse_from(["zapfast", "--demo-tour-delay", "5000"]).is_err());
         assert!(Cli::try_parse_from(["zapfast", "--demo-tour", "--demo-page", "login",]).is_err());
+    }
+
+    #[test]
+    fn tour_cli_picks_a_script_and_a_frame_capture() {
+        let cli = Cli::try_parse_from(["zapfast", "--demo-tour"]).unwrap();
+        assert_eq!(
+            tour_script(&cli.demo_tour_script),
+            zapfast::demo::tour::Script::Launch
+        );
+        let cli = Cli::try_parse_from([
+            "zapfast",
+            "--demo-tour",
+            "--demo-tour-script",
+            "whats-new",
+            "--demo-tour-frames",
+            "frames",
+            "--demo-fps",
+            "60",
+        ])
+        .unwrap();
+        assert_eq!(
+            tour_script(&cli.demo_tour_script),
+            zapfast::demo::tour::Script::WhatsNew
+        );
+        assert_eq!(
+            cli.demo_tour_frames.as_deref(),
+            Some(std::path::Path::new("frames"))
+        );
+        assert_eq!(cli.demo_fps, Some(60));
+        assert!(
+            Cli::try_parse_from(["zapfast", "--demo-tour", "--demo-tour-script", "other"]).is_err()
+        );
+        assert!(Cli::try_parse_from(["zapfast", "--demo-tour-script", "whats-new"]).is_err());
+        assert!(Cli::try_parse_from(["zapfast", "--demo-tour", "--demo-fps", "30"]).is_err());
+        assert!(
+            Cli::try_parse_from([
+                "zapfast",
+                "--demo-tour",
+                "--demo-tour-frames",
+                "frames",
+                "--demo-tour-delay",
+                "5000",
+            ])
+            .is_err()
+        );
     }
 }
 

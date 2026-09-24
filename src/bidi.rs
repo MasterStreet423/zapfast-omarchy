@@ -860,6 +860,29 @@ mod tests {
         }
     }
 
+    /// Numbers (bidi classes EN and AN) keep their left-to-right order in every
+    /// context, including a message of Arabic-Indic digits alone (#184).
+    #[test]
+    fn numbers_read_left_to_right_in_any_paragraph() {
+        for text in [
+            "٤٥",
+            "١٢:٣٠",
+            "45",
+            "3.14",
+            "لدي ٤٥ رسالة",
+            "عندي 45 رسالة",
+            "الساعة ١٢:٣٠ الآن",
+            "القيمة 3.14 تقريبا",
+            "اتصل على +49 170 1234567 الآن",
+            "יש לי 45 הודעות",
+            "המחיר 3.14 ש״ח",
+            "Order ٤٥ today",
+            "٤٥ messages",
+        ] {
+            assert_visual(text);
+        }
+    }
+
     #[test]
     fn clicking_the_visual_ends_uses_logical_offsets() {
         let text = "שלום עולם";

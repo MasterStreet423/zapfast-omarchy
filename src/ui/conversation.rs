@@ -992,10 +992,22 @@ fn composer(app: &mut App, ui: &mut egui::Ui, chat: &Chat) {
                 .max(COMPOSER_CONTROL);
             let button_width = line;
             let field_margin = ((line - line_height) / 2.0).round().max(0.0);
+            // Measure this frame's draft at the text column's width, so the
+            // field and the panel holding it grow on the keystroke that wraps
+            // a line rather than a frame later, which made them jump.
+            let wrap_id = id.with("wrap");
             let text_height = ui
                 .ctx()
-                .read_response(id)
-                .map(|previous| previous.rect.height())
+                .data(|data| data.get_temp::<f32>(wrap_id))
+                .map(|wrap| {
+                    let format =
+                        egui::TextFormat::simple(theme::regular(BODY_SIZE), palette.text);
+                    crate::bidi::layout_editor(ui, &app.composer, &format, wrap, true)
+                        .0
+                        .size()
+                        .y
+                })
+                .or_else(|| ui.ctx().read_response(id).map(|previous| previous.rect.height()))
                 .unwrap_or(line_height)
                 .clamp(line_height, line_height * 6.0);
             let row_height = (text_height + 2.0 * field_margin).max(line);
@@ -1004,6 +1016,9 @@ fn composer(app: &mut App, ui: &mut egui::Ui, chat: &Chat) {
                 vec2(ui.available_width(), row_height),
                 Layout::left_to_right(Align::Max),
                 |ui| {
+                // The plus sits in the field's rounded left end, centred as
+                // the send button is in the right one.
+                ui.add_space((line / 2.0 - PLUS_EDGE / 2.0).max(0.0));
                 if app.editing.is_none() {
                     let tools = last_line(ui, line, |ui| theme::icon_button(
                         ui,
@@ -1057,12 +1072,14 @@ fn composer(app: &mut App, ui: &mut egui::Ui, chat: &Chat) {
                     })
                     .show(ui, |ui| {
                         ui.set_width((field_width - 16.0).max(0.0));
-                        // Grow from one to six lines, then scroll.
+                        // Grow from one to six lines, then scroll. The height
+                        // is this frame's draft, measured above, rather than
+                        // the scroll area's memory of the last frame.
                         egui::ScrollArea::vertical()
                             .id_salt("composer-scroll")
-                            .max_height(line_height * 6.0)
-                            .min_scrolled_height(0.0)
-                            .auto_shrink([false, true])
+                            .max_height(text_height)
+                            .min_scrolled_height(text_height)
+                            .auto_shrink([false, false])
                             .show(ui, |ui| {
                                 // Keep emoji in the buffer so character offsets match, then
                                 // paint their color bitmaps over the transparent glyphs.
@@ -1085,6 +1102,8 @@ fn composer(app: &mut App, ui: &mut egui::Ui, chat: &Chat) {
                                     clusters = found;
                                     galley
                                 };
+                                let wrap = ui.available_width();
+                                ui.ctx().data_mut(|data| data.insert_temp(wrap_id, wrap));
                                 let output = egui::TextEdit::multiline(&mut app.composer)
                                     .id(id)
                                     .frame(Frame::NONE)
@@ -1130,6 +1149,35 @@ fn composer(app: &mut App, ui: &mut egui::Ui, chat: &Chat) {
                                     }
                                     let rect = bounds.translate(output.galley_pos.to_vec2());
                                     crate::emoji::paint_cluster(ui, cluster, rect);
+                                }
+                                // The row was sized from last frame's text. When a
+                                // keystroke wraps or unwraps a line, lay the frame
+                                // out again instead of showing the field a frame
+                                // late, which made it jump while typing.
+                                // egui sizes the box before applying the keystroke,
+                                // and text typed into an empty field reaches its
+                                // galley a frame later still, so measure the
+                                // edited draft itself.
+                                let painted = Rect::from_min_size(
+                                    output.galley_pos,
+                                    output.galley.size(),
+                                );
+                                let measured = crate::bidi::layout_editor(
+                                    ui,
+                                    &app.composer,
+                                    &format,
+                                    wrap,
+                                    true,
+                                )
+                                .0
+                                .size()
+                                .y
+                                .clamp(line_height, line_height * 6.0);
+                                ui.ctx().data_mut(|data| {
+                                    data.insert_temp(composer_text_id(), painted);
+                                });
+                                if (measured - text_height).abs() > 0.5 {
+                                    ui.ctx().request_discard("composer height changed");
                                 }
                                 let response = output.response.response.clone().tab_stop(Stop::Composer);
                                 ui.ctx().accesskit_node_builder(response.id, |node| node.set_label(&*crate::i18n::gettext(app.locale, "Message")));
@@ -1299,6 +1347,19 @@ fn composer(app: &mut App, ui: &mut egui::Ui, chat: &Chat) {
                 });
             }
         });
+    // A bottom panel is placed from last frame's height. When the composer
+    // grows or shrinks, lay the frame out again so it never shows the field
+    // hanging below the window or a gap above it for a frame.
+    let height = shown.response.rect.height();
+    let height_id = egui::Id::new("composer-panel-height");
+    let previous = ui.ctx().data_mut(|data| {
+        let previous = data.get_temp::<f32>(height_id);
+        data.insert_temp(height_id, height);
+        previous
+    });
+    if previous.is_some_and(|previous| (previous - height).abs() > 0.5) {
+        ui.ctx().request_discard("composer height changed");
+    }
     // Toasts sit above the composer so they never cover its buttons.
     ui.ctx()
         .data_mut(|data| data.insert_temp(super::composer_rect_id(), shown.response.rect));
@@ -1313,10 +1374,20 @@ const COMPOSER_PADDING: f32 = 14.0;
 /// Height of the plus and emoji buttons: a row is never shorter, or they
 /// would stretch it and pull the text off its centre.
 const COMPOSER_CONTROL: f32 = 36.0;
-/// Space between the composer's rounded field and the send button.
+/// Space between the composer's rounded field and the buttons at its ends.
 const COMPOSER_INSET: i8 = 2;
-/// Space between the plus and emoji buttons.
-const COMPOSER_PAIR_GAP: f32 = 2.0;
+/// Space between the plus and emoji buttons' hit areas. Each area pads its
+/// 22-point icon by six points a side, so this leaves eight between the
+/// icons, a pair.
+const COMPOSER_PAIR_GAP: f32 = -4.0;
+/// Width of the plus button: its 22-point icon and `icon_button`'s padding.
+const PLUS_EDGE: f32 = 34.0;
+
+/// Where the composer's text was painted in the frame's last pass, for
+/// layout tests.
+pub(crate) fn composer_text_id() -> egui::Id {
+    egui::Id::new("composer-text-rect")
+}
 
 /// Where the composer's rounded field was drawn, for layout tests.
 pub(crate) fn composer_pill_id() -> egui::Id {
@@ -1341,10 +1412,10 @@ fn composer_pill(palette: &Palette) -> Frame {
             spread: 0,
             color: Color32::from_black_alpha(31),
         })
-        // The send button is inset on the right by as much as above and
-        // below, so it sits evenly in the rounded end.
+        // The end buttons are inset by as much at the sides as above and
+        // below, so they sit evenly in the rounded ends.
         .inner_margin(Margin {
-            left: 8,
+            left: COMPOSER_INSET,
             right: COMPOSER_INSET,
             top: COMPOSER_INSET,
             bottom: COMPOSER_INSET,
@@ -3002,8 +3073,10 @@ fn bubble_frame(
     if reacting && !egui::Popup::is_id_open(ui.ctx(), bubble_id.with("popup")) {
         actions.push(Action::ClosePicker);
     }
-    // Store this frame's final rect for later scrolling.
-    inner.response
+    // This frame's final rect, for later scrolling, with the bubble's own
+    // clicks: the frame alone only senses hover, so a Ctrl-click to select
+    // or a click to add to a selection would never register.
+    inner.response.union(bubble)
 }
 
 /// Minimum shared width for cards inside message bubbles.
@@ -5091,7 +5164,21 @@ fn picture(
         // A row that is off screen only reserves its space. Loading the image
         // decodes it and uploads a texture, so it waits until it is scrolled
         // into view, and `image_cache` can release it once it leaves again.
-        let reserved = frame_size(media, None, max_width, max_height);
+        // The space is the size the picture was last drawn at, when known:
+        // a message without dimensions (or with wrong ones) would otherwise
+        // take one height on screen and another off it, and a picture across
+        // the top edge of a transcript held at its end would flip between
+        // them on every frame, shaking the whole chat (#179).
+        let fit = |pixels: Vec2| {
+            if sticker.is_some() {
+                fit_sticker(pixels.x, pixels.y)
+            } else {
+                fit_picture(pixels.x, pixels.y, max_width, max_height)
+            }
+        };
+        let pixels_id = egui::Id::new(("picture-pixels", path));
+        let drawn = ui.ctx().data(|data| data.get_temp::<Vec2>(pixels_id));
+        let reserved = drawn.map_or_else(|| frame_size(media, None, max_width, max_height), fit);
         let position = ui.next_widget_position();
         if !ui.is_rect_visible(Rect::from_min_size(position, reserved)) {
             ui.allocate_exact_size(reserved, Sense::hover());
@@ -5100,11 +5187,11 @@ fn picture(
         let image = widgets::file_image(ui, path);
         return match image.load_for_size(ui.ctx(), vec2(max_width, max_height)) {
             Ok(egui::load::TexturePoll::Ready { texture }) => {
-                let size = if sticker.is_some() {
-                    fit_sticker(texture.size.x, texture.size.y)
-                } else {
-                    fit_picture(texture.size.x, texture.size.y, max_width, max_height)
-                };
+                if drawn != Some(texture.size) {
+                    ui.ctx()
+                        .data_mut(|data| data.insert_temp(pixels_id, texture.size));
+                }
+                let size = fit(texture.size);
                 let response = ui.add(
                     image
                         .fit_to_exact_size(size)
@@ -5128,10 +5215,11 @@ fn picture(
                 size.x
             }
             Ok(egui::load::TexturePoll::Pending { .. }) => {
-                let size = if sticker.is_some() {
-                    Vec2::splat(STICKER_SIDE)
-                } else {
-                    frame_size(media, None, max_width, max_height)
+                // A picture released while away loads again at its old size.
+                let size = match drawn {
+                    Some(pixels) => fit(pixels),
+                    None if sticker.is_some() => Vec2::splat(STICKER_SIDE),
+                    None => frame_size(media, None, max_width, max_height),
                 };
                 let (rect, _) = ui.allocate_exact_size(size, Sense::hover());
                 if ui.is_rect_visible(rect) {
@@ -6118,50 +6206,13 @@ fn recording_strip(app: &mut App, ui: &mut egui::Ui) {
         .round()
         .max(COMPOSER_CONTROL);
     let button = row_height;
+    // As in WhatsApp: discard at the start, the light and the time, the
+    // waveform across the rest, and send at the end.
     ui.allocate_ui_with_layout(
         vec2(ui.available_width().max(0.0), row_height),
-        egui::Layout::right_to_left(egui::Align::Center),
+        egui::Layout::left_to_right(egui::Align::Center),
         |ui| {
             ui.spacing_mut().item_spacing.x = 10.0;
-            if theme::circle_button(
-                ui,
-                Icon::Send,
-                button,
-                palette.accent,
-                palette.accent_hover,
-                palette.on_accent,
-                &crate::i18n::gettext(app.locale, "Send"),
-            )
-            .clicked()
-            {
-                app.actions.push(Action::SendRecording);
-            }
-            // Recent audio levels, newest on the right.
-            let wave_width = ui.available_width().clamp(40.0, 150.0);
-            let (rect, _) = ui.allocate_exact_size(vec2(wave_width, 28.0), Sense::hover());
-            let pitch = 3.0;
-            let count = (rect.width() / pitch).floor() as usize;
-            let start = levels.len().saturating_sub(count);
-            for (index, level) in levels[start..].iter().enumerate() {
-                let height = 2.0_f32 + (level * 4.0).min(1.0) * 24.0;
-                let x = rect.left() + index as f32 * pitch + 1.0;
-                ui.painter().rect_filled(
-                    Rect::from_center_size(egui::pos2(x, rect.center().y), vec2(2.0, height)),
-                    1.0,
-                    palette.accent,
-                );
-            }
-            // Pulsing recording light and elapsed time.
-            theme::text(
-                ui,
-                crate::util::duration(elapsed.as_secs() as u32),
-                theme::medium(14.0),
-                palette.text,
-            );
-            let (dot, _) = ui.allocate_exact_size(Vec2::splat(12.0), Sense::hover());
-            let pulse = 0.55 + 0.45 * (elapsed.as_secs_f32() * 3.0).sin().abs();
-            ui.painter()
-                .circle_filled(dot.center(), 5.0, palette.danger.gamma_multiply(pulse));
             if theme::circle_button(
                 ui,
                 Icon::Trash,
@@ -6175,8 +6226,54 @@ fn recording_strip(app: &mut App, ui: &mut egui::Ui) {
             {
                 app.actions.push(Action::CancelRecording);
             }
+            let (dot, _) = ui.allocate_exact_size(Vec2::splat(12.0), Sense::hover());
+            let pulse = 0.55 + 0.45 * (elapsed.as_secs_f32() * 3.0).sin().abs();
+            ui.painter()
+                .circle_filled(dot.center(), 5.0, palette.danger.gamma_multiply(pulse));
+            theme::text(
+                ui,
+                crate::util::duration(elapsed.as_secs() as u32),
+                theme::medium(14.0),
+                palette.text,
+            );
+            // Recent audio levels, newest on the right against send.
+            let spacing = ui.spacing().item_spacing.x;
+            let wave_width = (ui.available_width() - button - spacing).max(0.0);
+            let (rect, _) = ui.allocate_exact_size(vec2(wave_width, 28.0), Sense::hover());
+            ui.ctx()
+                .data_mut(|data| data.insert_temp(recording_wave_id(), rect));
+            let pitch = 3.0;
+            let count = (rect.width() / pitch).floor() as usize;
+            let shown = &levels[levels.len().saturating_sub(count)..];
+            for (index, level) in shown.iter().enumerate() {
+                let height = 2.0_f32 + (level * 4.0).min(1.0) * 24.0;
+                let x = rect.right() - (shown.len() - index) as f32 * pitch + 1.0;
+                ui.painter().rect_filled(
+                    Rect::from_center_size(egui::pos2(x, rect.center().y), vec2(2.0, height)),
+                    1.0,
+                    palette.accent,
+                );
+            }
+            if theme::circle_button(
+                ui,
+                Icon::Send,
+                button,
+                palette.accent,
+                palette.accent_hover,
+                palette.on_accent,
+                &crate::i18n::gettext(app.locale, "Send"),
+            )
+            .clicked()
+            {
+                app.actions.push(Action::SendRecording);
+            }
         },
     );
+}
+
+/// Where the recorder's waveform was drawn, for layout tests.
+pub(crate) fn recording_wave_id() -> egui::Id {
+    egui::Id::new("recording-wave")
 }
 
 /// Replaces the composer while messages are selected.

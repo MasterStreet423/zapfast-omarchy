@@ -170,6 +170,7 @@ fn chat_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Chat> {
                 sender: row.get::<_, Option<String>>(12)?.unwrap_or_default(),
                 sender_name: row.get(9)?,
                 summary: content.summary(),
+                full: content.full_summary(),
                 status: status_from_rank(row.get(11)?),
             })
         }
@@ -1688,6 +1689,85 @@ pub(crate) mod tests {
             forwarded: false,
             thumbnail: None,
         }
+    }
+
+    /// `left` reads like a SQL keyword, so this pins down that it is usable as
+    /// a column name on the engine the app ships: the migration adds it to an
+    /// archive that predates it and already holds rows, and the reads and the
+    /// write the leave goes through name it bare and qualified.
+    #[test]
+    fn the_leave_column_lands_on_an_archive_that_predates_it() {
+        fn has_left(connection: &Connection) -> bool {
+            connection
+                .prepare("PRAGMA table_info(chats)")
+                .expect("table info")
+                .query_map([], |row| row.get::<_, String>(1))
+                .expect("column names")
+                .any(|name| name.as_deref() == Ok("left"))
+        }
+
+        let connection = Connection::open_in_memory().expect("opens");
+        // An archive made before the leave feature: the chats table without
+        // `left`, and rows already in it. `left` is not in `SCHEMA`, it only
+        // ever arrives through `MIGRATIONS`.
+        connection.execute_batch(SCHEMA).expect("the older schema");
+        connection
+            .execute_batch(
+                "INSERT INTO chats (id, name, kind) VALUES ('1-2@g.us', 'Rust', 'group');
+                 INSERT INTO chats (id, name, kind) VALUES ('3@s.whatsapp.net', 'Ana', 'direct');",
+            )
+            .expect("rows");
+        assert!(!has_left(&connection), "the table predates the column");
+
+        // The archive the migration leaves behind, not a fresh one: every
+        // assertion below has to run against the table `left` was just added
+        // to, which is the one the review asked about.
+        let archive = Archive::prepare(connection).expect("the migration adds the column");
+        assert!(has_left(&archive.connection), "the column arrived");
+
+        // The row that was there when the column arrived takes the default.
+        let id = "1-2@g.us";
+        assert!(
+            !archive.chat(id).expect("row").expect("chat").left,
+            "an existing row takes the default"
+        );
+        assert!(
+            !archive
+                .chat("3@s.whatsapp.net")
+                .expect("row")
+                .expect("chat")
+                .left,
+            "and so does the other one"
+        );
+        // The write, then the read that goes through `CHAT_COLUMNS`, which
+        // names `c.left` in the same statement as its `LEFT JOIN`.
+        archive.set_left(id, true).expect("the update");
+        assert!(archive.chat(id).expect("row").expect("chat").left);
+        archive.set_left(id, false).expect("the update back");
+        assert!(!archive.chat(id).expect("row").expect("chat").left);
+        // And the name on its own, bare and unqualified, in a select, in an
+        // update and in a where.
+        let mut statement = archive
+            .connection
+            .prepare("SELECT left FROM chats")
+            .expect("a bare left in a select");
+        assert_eq!(
+            statement
+                .query_row([], |row| row.get::<_, i64>(0))
+                .expect("the value"),
+            0
+        );
+        archive
+            .connection
+            .execute("UPDATE chats SET left = 1", [])
+            .expect("a bare left in an update");
+        let marked: i64 = archive
+            .connection
+            .query_row("SELECT COUNT(*) FROM chats WHERE left = 1", [], |row| {
+                row.get(0)
+            })
+            .expect("a bare left in a where");
+        assert_eq!(marked, 2, "both rows took the update");
     }
 
     #[test]

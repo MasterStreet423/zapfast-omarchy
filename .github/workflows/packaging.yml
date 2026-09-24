@@ -31,6 +31,8 @@ on:
         required: false
       HOMEBREW_TAP_GITHUB_TOKEN:
         required: false
+      HOMEBREW_TAP_SSH_KEY:
+        required: false
 
 permissions:
   contents: read
@@ -39,7 +41,7 @@ jobs:
   packaging:
     permissions:
       contents: write
-    uses: crmne/native-packages/.github/workflows/package.yml@dc0cb1586894ca0239c53fd02d4da8064712671c # v0.7.0
+    uses: crmne/native-packages/.github/workflows/package.yml@8025372579b1864b09b579255484f4e15f65bc78 # main after v0.7.0: tap deploy key
     with:
       targets: linux-amd64,linux-arm64
       version: ${{ inputs.version || 'v0.13.1' }}

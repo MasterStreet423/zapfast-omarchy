@@ -18,15 +18,16 @@ hero:
       text: GitHub
       link: https://github.com/crmne/zapfast
   image:
-    src: /screenshot.png
+    dark: /screenshot.png
+    light: /screenshot-light.png
     alt: "ZapFast showing a conversation with an attachment, voice messages, reactions, a quoted reply, and a link preview"
-    width: 1387
-    height: 1040
+    width: 1800
+    height: 1360
 
 features:
   - icon: ⚡
     title: Lightweight
-    details: Opens in under a second and uses 150MB of RAM. No browser engine.
+    details: Opens in under a second and uses about 200MB of RAM. No browser engine.
   - icon: 🎤
     title: Voice messages
     details: Play, seek, and record voice messages in the chat. OGG/Opus support is built in.

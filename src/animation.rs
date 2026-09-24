@@ -478,6 +478,15 @@ fn decode_mp4(path: &Path, limit: usize) -> Option<Decoded> {
     (!frames.is_empty()).then_some(Decoded { frames })
 }
 
+/// Frame `index` of a video (or its last, if shorter), for demo posters.
+#[cfg(any(test, feature = "demo"))]
+pub(crate) fn video_frame(path: &Path, index: usize) -> Option<ColorImage> {
+    decode_video(path, index + 1)?
+        .frames
+        .pop()
+        .map(|(image, _)| image)
+}
+
 /// Trims animations until the resident frames fit the budget, sparing the
 /// one being drawn. What the last sweep found idle goes first; an animation
 /// drawn since only drops back to its poster, so a tile that is still on

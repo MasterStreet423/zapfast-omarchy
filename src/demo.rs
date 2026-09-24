@@ -263,6 +263,10 @@ pub const RTL_SELF_CHAT: [&str; 3] = [
     "إلى السطر التالي\nالله أكبر، لا بأس 🌙\nهذا نص عربي طويل يختبر ترتيب الأسطر عندما تلتف الكلمات داخل فقاعة رسالة ضيقة إلى السطر التالي",
 ];
 
+/// Numbers inside right-to-left text on the `rtl` page: Arabic-Indic and
+/// European digits, a time, and a phone number, each reading left to right.
+const RTL_NUMBERS: &str = "لدي ٤٥ رسالة، الساعة ١٢:٣٠\nعندي 45 رسالة\nاتصل على +49 170 1234567";
+
 fn message(chat: &str, id: &str, from_me: bool, timestamp: i64, content: Content) -> Message {
     Message {
         id: id.to_owned(),
@@ -557,6 +561,7 @@ pub fn populate(app: &mut App) {
                 sender: last.sender.clone(),
                 sender_name: last.sender_name.clone(),
                 summary: last.summary(),
+                full: last.content.full_summary(),
                 status: last.status,
             });
         app.conversations.insert(sample.id.to_owned(), conversation);
@@ -875,6 +880,7 @@ pub fn populate(app: &mut App) {
                 sender: last.sender.clone(),
                 sender_name: last.sender_name.clone(),
                 summary: last.summary(),
+                full: last.content.full_summary(),
                 status: last.status,
             });
         }
@@ -1148,6 +1154,7 @@ fn interactive_sample(app: &mut App, with_image: bool) {
             sender: last.sender.clone(),
             sender_name: None,
             summary: last.summary(),
+            full: last.content.full_summary(),
             status: last.status,
         });
     }
@@ -1383,6 +1390,29 @@ fn poll_sample(app: &mut App, voted: bool, results: bool) {
     }
 }
 
+/// A bigger group's audience for one of our messages: some members read it,
+/// some only have it, and the rest have not received it yet.
+fn sample_recipients(now: i64) -> Vec<crate::model::Recipient> {
+    let recipient = |id: &str, delivered: Option<i64>, read: Option<i64>| crate::model::Recipient {
+        id: id.into(),
+        expected: true,
+        delivered_at: delivered.map(|minutes| now - minutes * 60),
+        read_at: read.map(|minutes| now - minutes * 60),
+        played_at: None,
+    };
+    vec![
+        recipient("491701111111@s.whatsapp.net", Some(24), Some(3)),
+        recipient("491702222222@s.whatsapp.net", Some(24), Some(11)),
+        recipient(SAMPLES[2].id, Some(23), Some(19)),
+        recipient("491703333333@s.whatsapp.net", Some(22), None),
+        recipient(SAMPLES[4].id, Some(9), None),
+        recipient("12025550137@s.whatsapp.net", Some(20), None),
+        recipient("491704444444@s.whatsapp.net", None, None),
+        recipient("491705555555@s.whatsapp.net", None, None),
+        recipient("491706666666@s.whatsapp.net", None, None),
+    ]
+}
+
 /// "Message info" for our message in a bigger group: some members read it,
 /// some only have it, and the rest have not received it yet. Without a saved
 /// audience, the dialog explains that earlier receipts are unknown.
@@ -1400,32 +1430,14 @@ fn message_info_sample(app: &mut App, recorded: bool) {
         .unwrap();
     message.status = crate::model::Delivery::Delivered;
     let id = message.id.clone();
-    let recipient = |id: &str, delivered: Option<i64>, read: Option<i64>| crate::model::Recipient {
-        id: id.into(),
-        expected: true,
-        delivered_at: delivered.map(|minutes| now - minutes * 60),
-        read_at: read.map(|minutes| now - minutes * 60),
-        played_at: None,
-    };
-    let recipients = if recorded {
-        vec![
-            recipient("491701111111@s.whatsapp.net", Some(24), Some(3)),
-            recipient("491702222222@s.whatsapp.net", Some(24), Some(11)),
-            recipient(SAMPLES[2].id, Some(23), Some(19)),
-            recipient("491703333333@s.whatsapp.net", Some(22), None),
-            recipient(SAMPLES[4].id, Some(9), None),
-            recipient("12025550137@s.whatsapp.net", Some(20), None),
-            recipient("491704444444@s.whatsapp.net", None, None),
-            recipient("491705555555@s.whatsapp.net", None, None),
-            recipient("491706666666@s.whatsapp.net", None, None),
-        ]
-    } else {
-        Vec::new()
-    };
     app.message_receipts = Some(crate::model::MessageReceipts {
         chat: chat.into(),
         message: id.clone(),
-        recipients,
+        recipients: if recorded {
+            sample_recipients(now)
+        } else {
+            Vec::new()
+        },
     });
     app.receipts_watch = Some((chat.into(), id.clone()));
     app.dialog = Some(Dialog::MessageInfo {
@@ -1739,14 +1751,31 @@ pub fn apply_flags(app: &mut App, page: Option<&str>) {
                         });
                         reply
                     },
+                    // Numbers keep their left-to-right order inside
+                    // right-to-left text, and alone (#184).
+                    message(id, "rtl-numbers", false, now, Content::text(RTL_NUMBERS)),
+                    message(id, "rtl-digits", true, now, Content::text("٤٥")),
+                    {
+                        let text = Content::text("עולה 3.14 ש״ח");
+                        let mut reply = message(id, "rtl-digits-reply", false, now, text);
+                        reply.quoted = Some(Quoted {
+                            id: "rtl-digits".into(),
+                            sender: ME.into(),
+                            sender_name: None,
+                            summary: "٤٥".into(),
+                            mentions: Vec::new(),
+                        });
+                        reply
+                    },
                 ];
                 if let Some(chat) = app.chats.iter_mut().find(|chat| chat.id == id) {
                     chat.name = "שלום יזמות ונדל\"ן".into();
                     if let Some(last) = &mut chat.last {
-                        last.summary = "הכלב הגדול קפץ 🐕".into();
+                        last.summary = "٤٥".into();
                     }
                 }
                 app.conversations.get_mut(id).expect("demo group").messages = messages;
+                app.composer = "١٢:٣٠".into();
                 app.open_chat = Some(id.into());
                 app.typing.clear();
                 app.scroll_to_bottom = true;
@@ -1770,6 +1799,7 @@ pub fn apply_flags(app: &mut App, page: Option<&str>) {
                     sender: last.sender.clone(),
                     sender_name: None,
                     summary: last.summary(),
+                    full: last.content.full_summary(),
                     status: last.status,
                 });
                 app.chats.insert(0, chat);
@@ -2124,6 +2154,7 @@ pub fn apply_flags(app: &mut App, page: Option<&str>) {
                     sender: last.sender.clone(),
                     sender_name: None,
                     summary: last.summary(),
+                    full: last.content.full_summary(),
                     status: last.status,
                 });
                 app.chats.insert(0, chat);
@@ -3531,6 +3562,65 @@ mod tests {
         );
     }
 
+    /// Issue #184: "٤٥" drew as "٥٤". Every number on the `rtl` page, in the
+    /// bubbles, the quote, the chat list preview, and the composer, must read
+    /// left to right, alone or inside right-to-left text.
+    #[test]
+    fn issue_184_numbers_read_left_to_right_everywhere() {
+        fn collect(shape: &egui::Shape, galleys: &mut Vec<std::sync::Arc<egui::Galley>>) {
+            match shape {
+                egui::Shape::Text(text) => galleys.push(text.galley.clone()),
+                egui::Shape::Vec(shapes) => {
+                    for shape in shapes {
+                        collect(shape, galleys);
+                    }
+                }
+                _ => {}
+            }
+        }
+        let mut app = app();
+        apply_flags(&mut app, Some("rtl"));
+        let ctx = egui::Context::default();
+        app.attach(&ctx);
+        render(&mut app, &ctx);
+        let shapes = frame_sized(&mut app, &ctx, 780.0, Vec::new());
+        let mut galleys = Vec::new();
+        for shape in shapes {
+            collect(&shape.shape, &mut galleys);
+        }
+        let count = |text: &str| galleys.iter().filter(|g| g.text() == text).count();
+        assert!(
+            count("٤٥") >= 3,
+            "bubble, quote, and chat list preview of \"٤٥\""
+        );
+        assert_eq!(count("١٢:٣٠"), 1, "composer");
+        assert_eq!(
+            galleys
+                .iter()
+                .filter(|g| g.text().replace(crate::emoji::PLACEHOLDER, "") == RTL_NUMBERS)
+                .count(),
+            1,
+            "bubble with numbers inside Arabic"
+        );
+        let mut reversed = Vec::new();
+        for galley in &galleys {
+            for placed in &galley.rows {
+                // A row that was never reordered keeps its glyphs in shaped
+                // order, so compare them in logical (cluster) order.
+                let mut logical: Vec<_> = placed.row.glyphs.iter().collect();
+                logical.sort_by_key(|glyph| glyph.cluster);
+                for pair in logical.windows(2) {
+                    let [left, right] = pair else { continue };
+                    if left.chr.is_numeric() && right.chr.is_numeric() && left.pos.x >= right.pos.x
+                    {
+                        reversed.push((galley.text().to_owned(), left.chr, right.chr));
+                    }
+                }
+            }
+        }
+        assert!(reversed.is_empty(), "reversed digits: {reversed:?}");
+    }
+
     #[test]
     fn the_sample_has_every_kind_of_row() {
         let app = app();
@@ -3850,6 +3940,136 @@ mod tests {
             },
         );
         output.textures_delta.clear();
+    }
+
+    /// Resting the pointer on a chat row's cut-short preview shows the whole
+    /// last message, sender first in a group; a preview that already fits
+    /// shows nothing more, and neither does a row showing typing or a row
+    /// whose menu is open.
+    #[test]
+    fn hovering_a_cut_short_preview_shows_the_whole_last_message() {
+        let mut app = app();
+        let ctx = egui::Context::default();
+        app.attach(&ctx);
+        let group = SAMPLES[4].id;
+        let direct = SAMPLES[2].id;
+        // The sample has someone typing here, which the row shows instead.
+        let typing = SAMPLES[1].id;
+        let long = "The venue moved to the courtyard because the hall is being painted, \
+                    bring a jacket since it gets cold after sunset and the tail marker";
+        let sender = "4930111222333@s.whatsapp.net";
+        for chat in app.chats.iter_mut() {
+            if chat.id == group || chat.id == typing {
+                chat.last = Some(crate::model::LastMessage {
+                    from_me: false,
+                    sender: sender.into(),
+                    sender_name: Some("Linus Example".into()),
+                    summary: long.into(),
+                    full: long.into(),
+                    status: Delivery::Read,
+                });
+            } else if chat.id == direct {
+                chat.last = Some(crate::model::LastMessage {
+                    from_me: false,
+                    sender: direct.into(),
+                    sender_name: None,
+                    summary: "Short one".into(),
+                    full: "Short one".into(),
+                    status: Delivery::Read,
+                });
+            }
+        }
+        let name = app.display_name_or(sender, Some("Linus Example"));
+        let prefix = format!("{}: ", name.split_whitespace().next().unwrap());
+        render(&mut app, &ctx);
+        let long_area = ctx
+            .read_response(crate::ui::chats::preview_id(group))
+            .expect("a cut-short preview registers its hover area")
+            .rect;
+        assert!(
+            ctx.read_response(crate::ui::chats::preview_id(direct))
+                .is_none(),
+            "a preview that fits registers none"
+        );
+        assert!(
+            ctx.read_response(crate::ui::chats::preview_id(typing))
+                .is_none(),
+            "a row showing typing offers no tooltip"
+        );
+        // Rests the pointer on the preview line of `chat` past the tooltip
+        // delay and returns every text painted in the last frame.
+        let clock = std::cell::Cell::new(10.0);
+        let rest_on = |app: &mut App, chat: &str| -> Vec<String> {
+            let index = |id: &str| app.chats.iter().position(|row| row.id == id).unwrap();
+            let offset = (index(chat) as f32 - index(group) as f32) * crate::theme::ROW_HEIGHT;
+            let pos = long_area.left_center() + egui::vec2(20.0, offset);
+            let mut shapes = Vec::new();
+            for step in 0..6 {
+                clock.set(clock.get() + 0.3);
+                let mut output = ctx.run_ui(
+                    egui::RawInput {
+                        screen_rect: Some(egui::Rect::from_min_size(
+                            egui::Pos2::ZERO,
+                            egui::vec2(1180.0, 780.0),
+                        )),
+                        time: Some(clock.get()),
+                        events: if step == 0 {
+                            vec![egui::Event::PointerMoved(pos)]
+                        } else {
+                            Vec::new()
+                        },
+                        ..Default::default()
+                    },
+                    |ui| {
+                        let ctx = ui.ctx().clone();
+                        app.background_frame(&ctx);
+                        app.frame_ui(ui);
+                    },
+                );
+                output.textures_delta.clear();
+                shapes = output.shapes;
+            }
+            shapes
+                .into_iter()
+                .filter_map(|clipped| match clipped.shape {
+                    egui::Shape::Text(text) => Some(text.galley.text().to_owned()),
+                    _ => None,
+                })
+                .collect()
+        };
+
+        // A galley keeps its whole text however much of it shows, so the
+        // row's own preview counts once and the tooltip adds a second.
+        let count = |texts: &[String], needle: &str| {
+            texts.iter().filter(|text| text.contains(needle)).count()
+        };
+        let texts = rest_on(&mut app, group);
+        assert!(
+            texts
+                .iter()
+                .any(|text| text.starts_with(&prefix) && text.contains("tail marker")),
+            "the tooltip shows the whole message after the group sender: {texts:?}"
+        );
+
+        let texts = rest_on(&mut app, direct);
+        assert_eq!(
+            count(&texts, "Short one"),
+            1,
+            "a preview that fits shows no tooltip"
+        );
+        assert_eq!(
+            count(&texts, "tail marker"),
+            1,
+            "only the group row shows it"
+        );
+
+        app.open_chat_menu = Some(group.into());
+        let texts = rest_on(&mut app, group);
+        assert_eq!(
+            count(&texts, "tail marker"),
+            1,
+            "an open menu hides the tooltip"
+        );
     }
 
     fn key(key: egui::Key, modifiers: egui::Modifiers) -> egui::Event {
@@ -4351,6 +4571,80 @@ mod tests {
         );
         render(&mut app, &ctx);
         assert!(egui::Popup::is_id_open(&ctx, popup), "and it stays open");
+    }
+
+    #[test]
+    fn ctrl_click_selects_messages_and_shift_click_takes_the_ones_between() {
+        let mut app = app();
+        let ctx = egui::Context::default();
+        app.attach(&ctx);
+        for _ in 0..3 {
+            render(&mut app, &ctx);
+        }
+        let chat = sample_ids()[0].to_owned();
+        // A click in the bubble's margin, beside its time: the text and
+        // media inside take clicks for themselves.
+        let click = |app: &mut App, message: &str, modifiers: egui::Modifiers| {
+            let id = crate::ui::conversation::bubble_id(&chat, message);
+            let rect = ctx
+                .data(|data| data.get_temp::<egui::Rect>(id.with("rect")))
+                .unwrap_or_else(|| panic!("{message} is on screen"));
+            let pos = rect.right_bottom() - egui::vec2(5.0, 2.0);
+            let button = |pressed| egui::Event::PointerButton {
+                pos,
+                button: egui::PointerButton::Primary,
+                pressed,
+                modifiers,
+            };
+            frame_with(
+                app,
+                &ctx,
+                vec![
+                    egui::Event::ModifiersChanged(modifiers),
+                    egui::Event::PointerMoved(pos),
+                    button(true),
+                ],
+            );
+            frame_with(app, &ctx, vec![button(false)]);
+            frame_with(
+                app,
+                &ctx,
+                vec![egui::Event::ModifiersChanged(egui::Modifiers::NONE)],
+            );
+        };
+        let selected = |app: &App| app.selection.as_ref().map(|(_, ids)| ids.clone());
+        click(&mut app, "ada-doc", egui::Modifiers::NONE);
+        assert_eq!(selected(&app), None, "a plain click selects nothing");
+        click(&mut app, "ada-doc", egui::Modifiers::COMMAND);
+        assert_eq!(selected(&app), Some(vec!["ada-doc".to_owned()]));
+        click(&mut app, "ada-reply", egui::Modifiers::SHIFT);
+        assert_eq!(
+            selected(&app),
+            Some(
+                ["ada-doc", "ada-voice", "you-voice", "ada-reply"]
+                    .map(str::to_owned)
+                    .to_vec()
+            ),
+            "Shift-click takes every message between"
+        );
+        click(&mut app, "ada-voice", egui::Modifiers::NONE);
+        assert_eq!(
+            selected(&app),
+            Some(
+                ["ada-doc", "you-voice", "ada-reply"]
+                    .map(str::to_owned)
+                    .to_vec()
+            ),
+            "a click while selecting leaves one out"
+        );
+        frame_with(
+            &mut app,
+            &ctx,
+            vec![key(egui::Key::Escape, egui::Modifiers::NONE)],
+        );
+        frame_with(&mut app, &ctx, Vec::new());
+        assert_eq!(selected(&app), None, "Escape ends the selection");
+        assert_eq!(app.open_chat, Some(chat), "and leaves the chat open");
     }
 
     /// One frame with AccessKit on; returns (label, role, centre) per node.
@@ -6577,6 +6871,78 @@ mod tests {
         }
     }
 
+    /// A keystroke that wraps the draft onto another line, or joins it back,
+    /// shows the grown field in that same frame: sizing it from the frame
+    /// before made the field and its text jump while typing.
+    #[test]
+    fn typing_never_shows_the_composer_a_frame_late() {
+        for scale in [1.0_f32, 1.25, 1.5] {
+            let mut app = app();
+            app.focus_composer = true;
+            let ctx = egui::Context::default();
+            ctx.set_pixels_per_point(scale);
+            app.attach(&ctx);
+            render(&mut app, &ctx);
+            for _ in 0..3 {
+                frame_with(&mut app, &ctx, Vec::new());
+            }
+            let snap = |ctx: &egui::Context| {
+                ctx.data(|data| {
+                    (
+                        data.get_temp::<egui::Rect>(crate::ui::conversation::composer_pill_id()),
+                        data.get_temp::<egui::Rect>(crate::ui::conversation::composer_text_id()),
+                    )
+                })
+            };
+            let key = |key| egui::Event::Key {
+                key,
+                physical_key: None,
+                pressed: true,
+                repeat: false,
+                modifiers: egui::Modifiers::NONE,
+            };
+            let draft = "A synthetic line that keeps going until it wraps across the composer, with enough words after that to be sure it reaches a second row.";
+            let mut events: Vec<egui::Event> = draft
+                .chars()
+                .map(|ch| egui::Event::Text(ch.to_string()))
+                .collect();
+            events.extend((0..draft.len()).map(|_| key(egui::Key::Backspace)));
+            events.push(egui::Event::Text("one\ntwo\nthree".into()));
+            let mut heights = std::collections::BTreeSet::new();
+            for (index, event) in events.into_iter().enumerate() {
+                frame_with(&mut app, &ctx, vec![event]);
+                let typed = snap(&ctx);
+                frame_with(&mut app, &ctx, Vec::new());
+                let settled = snap(&ctx);
+                let (Some(pill), Some(text)) = settled else {
+                    panic!("the composer is drawn")
+                };
+                // The field, and where its text starts, must not move once
+                // the keystroke has landed. (egui lays out the first
+                // character typed into an empty field a frame late, so the
+                // text's far corner is not compared.)
+                let (Some(typed_pill), Some(typed_text)) = typed else {
+                    panic!("the composer is drawn")
+                };
+                assert!(
+                    (typed_pill.min - pill.min).length() < 0.5
+                        && (typed_pill.max - pill.max).length() < 0.5
+                        && (typed_text.min - text.min).length() < 0.5,
+                    "event {index} at scale {scale}: {typed:?} then {settled:?}"
+                );
+                assert!(
+                    pill.contains_rect(text),
+                    "text {text:?} leaves the field {pill:?}"
+                );
+                heights.insert(pill.height() as u32);
+            }
+            assert!(
+                heights.len() >= 3,
+                "the draft wrapped and grew: {heights:?}"
+            );
+        }
+    }
+
     /// The send button sits evenly in the field's rounded end: as far from
     /// its right edge as from its top and bottom.
     #[test]
@@ -6603,6 +6969,48 @@ mod tests {
         assert!(
             (right - bottom).abs() <= 1.0,
             "send is {right} from the right and {bottom} from the bottom"
+        );
+        // The plus mirrors it in the left end, and emoji stays close by.
+        let rect = |stop| {
+            let id = crate::ui::focus::stops(&ctx)
+                .into_iter()
+                .find(|(found, _)| *found == stop)
+                .map(|(_, id)| id)
+                .unwrap_or_else(|| panic!("{stop:?} is drawn"));
+            ctx.read_response(id).unwrap().rect
+        };
+        let plus = rect(crate::ui::focus::Stop::Attach);
+        let emoji = rect(crate::ui::focus::Stop::Emoji);
+        let left = plus.center().x - pill.left();
+        let right = pill.right() - send.center().x;
+        assert!(
+            (left - right).abs() <= 1.0,
+            "plus centre is {left} from the left, send's {right} from the right"
+        );
+        let apart = emoji.center().x - plus.center().x;
+        assert!(apart <= 32.0, "plus and emoji are {apart} apart");
+    }
+
+    /// The recorder runs discard, time, waveform and send from left to right,
+    /// with the waveform taking the space between.
+    #[test]
+    fn the_recorder_waveform_fills_the_field() {
+        let mut app = app();
+        app.recording = Some(crate::audio::Recorder::rehearsal());
+        let ctx = egui::Context::default();
+        app.attach(&ctx);
+        render(&mut app, &ctx);
+        for _ in 0..3 {
+            frame_sized(&mut app, &ctx, 780.0, Vec::new());
+        }
+        let wave = ctx
+            .data(|data| data.get_temp::<egui::Rect>(crate::ui::conversation::recording_wave_id()))
+            .expect("the recorder is drawn");
+        // The window is 1180 points wide; the old strip stopped at 150.
+        assert!(
+            wave.width() > 400.0,
+            "the waveform is {} wide",
+            wave.width()
         );
     }
 
@@ -7505,5 +7913,109 @@ mod long_chat_tests {
             Some(&y),
             "the message stays where it landed"
         );
+    }
+}
+
+/// A picture whose file does not have the proportions its message states
+/// takes one height on screen and another while scrolled away. At the edge of
+/// a transcript held at its end, that must not shake the chat (#179).
+#[cfg(test)]
+mod picture_edge_tests {
+    use super::tests::app;
+    use super::*;
+    use crate::model::{Action, Content};
+
+    /// Opens a chat of text rows with an undimensioned portrait picture
+    /// `after` rows from the end, in a window `height` points tall.
+    fn chat_with_picture(after: i64, height: f32) -> Vec<(String, egui::Pos2)> {
+        let mut app = app();
+        let ctx = egui::Context::default();
+        app.attach(&ctx);
+        app.typing.clear();
+        let (photo, _) = sample_files(&app);
+        let chat = SAMPLES[0].id.to_owned();
+        let conversation = app.conversations.get_mut(&chat).unwrap();
+        let template = conversation.messages.last().unwrap().clone();
+        conversation.messages.clear();
+        let rows = 30 + 1 + after;
+        for n in 0..rows {
+            let mut row = template.clone();
+            row.id = format!("edge-{n}");
+            row.from_me = n % 3 == 0;
+            row.reactions.clear();
+            row.quoted = None;
+            row.timestamp = template.timestamp - (rows - n) * 60;
+            let words: Vec<&str> =
+                std::iter::repeat_n("lorem", 3 + (n * 7 % 20) as usize).collect();
+            row.content = Content::text(format!("Row {n} {}", words.join(" ")));
+            if n == 30 {
+                // The sample photo is portrait; the message gives no size.
+                let mut picture = media("image/jpeg", 402_113, None, None);
+                picture.path = Some(photo.clone());
+                row.content = Content::Image {
+                    caption: Some("Row 30 picture".into()),
+                    media: picture,
+                };
+            }
+            conversation.messages.push(row);
+        }
+        for row in &mut app.chats {
+            row.unread = 0;
+        }
+        app.open_chat = None;
+        app.actions.push(Action::OpenChat(chat));
+        let mut time = 0.0;
+        let mut frame = |app: &mut App| {
+            time += 1.0 / 60.0;
+            let mut output = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(1180.0, height),
+                    )),
+                    time: Some(time),
+                    ..Default::default()
+                },
+                |ui| {
+                    let ctx = ui.ctx().clone();
+                    app.background_frame(&ctx);
+                    app.frame_ui(ui);
+                },
+            );
+            output.textures_delta.clear();
+            let view = app.selection_view.lock().unwrap().unwrap();
+            output
+                .shapes
+                .iter()
+                .filter(|clipped| clipped.clip_rect == view)
+                .filter_map(|clipped| match &clipped.shape {
+                    egui::Shape::Text(text) => Some((text.galley.text().to_owned(), text.pos)),
+                    _ => None,
+                })
+                .collect::<Vec<_>>()
+        };
+        // The picture decodes on a loader thread.
+        for _ in 0..30 {
+            frame(&mut app);
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+        let settled = frame(&mut app);
+        for _ in 0..6 {
+            assert_eq!(
+                frame(&mut app),
+                settled,
+                "the transcript moved without input ({after} rows below, {height} tall)"
+            );
+        }
+        settled
+    }
+
+    #[test]
+    fn a_picture_across_the_top_edge_keeps_a_chat_at_its_end_still() {
+        // Somewhere in this range the picture straddles the top edge.
+        for height in (480..=720).step_by(20) {
+            let shown = chat_with_picture(2, height as f32);
+            assert!(!shown.is_empty(), "the chat shows its end ({height} tall)");
+        }
     }
 }

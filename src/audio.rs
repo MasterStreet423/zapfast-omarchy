@@ -519,6 +519,10 @@ fn decode_file(path: &Path) -> Result<Vec<f32>, String> {
 
 type Outcome = Arc<Mutex<Option<Result<Vec<f32>, String>>>>;
 
+/// Records until told to stop, pushing a level per 50 ms, and returns the
+/// mono 48 kHz samples.
+type Take = fn(&AtomicBool, &Mutex<Vec<f32>>, &Waker) -> Result<Vec<f32>, String>;
+
 /// Records from the default microphone until told to stop.
 pub struct Recorder {
     started: Instant,
@@ -531,6 +535,18 @@ pub struct Recorder {
 
 impl Recorder {
     pub fn start(waker: Waker) -> Self {
+        Self::spawn(waker, record)
+    }
+
+    /// Records a synthetic voice instead of the microphone, at the pace a
+    /// real take would, for offline demos: the waveform grows while it runs
+    /// and sending it yields that many seconds of a speech-like tone.
+    #[cfg(any(test, feature = "demo"))]
+    pub fn simulated(waker: Waker) -> Self {
+        Self::spawn(waker, rehearse)
+    }
+
+    fn spawn(waker: Waker, body: Take) -> Self {
         let stop = Arc::new(AtomicBool::new(false));
         let levels: Arc<Mutex<Vec<f32>>> = Default::default();
         let outcome: Outcome = Default::default();
@@ -541,7 +557,7 @@ impl Recorder {
             std::thread::Builder::new()
                 .name("voice-record".to_owned())
                 .spawn(move || {
-                    let result = record(&stop, &levels, &waker);
+                    let result = body(&stop, &levels, &waker);
                     *outcome.lock().unwrap_or_else(|p| p.into_inner()) = Some(result);
                     waker.wake();
                 })
@@ -619,6 +635,36 @@ impl Drop for Recorder {
     fn drop(&mut self) {
         self.stop.store(true, Ordering::Relaxed);
     }
+}
+
+/// A speech-like tone for [`Recorder::simulated`], one level per 50 ms.
+#[cfg(any(test, feature = "demo"))]
+fn rehearse(
+    stop: &AtomicBool,
+    levels: &Mutex<Vec<f32>>,
+    waker: &Waker,
+) -> Result<Vec<f32>, String> {
+    let segment = voice::RATE as usize / 20;
+    let mut samples = Vec::new();
+    while !stop.load(Ordering::Relaxed) {
+        let start = samples.len();
+        samples.extend((start..start + segment).map(|index| {
+            let t = index as f32 / voice::RATE as f32;
+            (t * 180.0 * std::f32::consts::TAU).sin()
+                * 0.35
+                * ((t * 2.3).sin() * (t * 0.9).cos()).abs()
+        }));
+        let peak = samples[start..]
+            .iter()
+            .fold(0.0_f32, |peak, sample| peak.max(sample.abs()));
+        levels
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .push(peak * 0.7);
+        waker.wake();
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    Ok(samples)
 }
 
 fn record(stop: &AtomicBool, levels: &Mutex<Vec<f32>>, waker: &Waker) -> Result<Vec<f32>, String> {

@@ -12,11 +12,12 @@ WhatsApp has no official Linux app. ZapFast is a native WhatsApp client
 written in Rust with [egui](https://github.com/emilk/egui). It connects through
 [whatsapp-rust](https://github.com/oxidezap/whatsapp-rust). ZapFast is a
 single binary with no browser engine and uses a layout similar to WhatsApp Web.
-In our Linux test, it opened in under a second and used about 150 MB of idle
+In our Linux test, it opens in under a second and uses about 200 MB of idle
 RAM, compared with 1.13 GB for WhatsApp Web and its Chromium processes.
 [See the measurements](/benchmarks/).
 
-![ZapFast showing a conversation with an attachment, voice messages, reactions, a quoted reply, and a link preview](/screenshot.png)
+<img class="VPImage dark" src="{{ '/screenshot.png' | relative_url }}" alt="ZapFast showing a conversation with an attachment, voice messages, reactions, a quoted reply, and a link preview" width="1800" height="1360">
+<img class="VPImage light" src="{{ '/screenshot-light.png' | relative_url }}" alt="ZapFast showing a conversation with an attachment, voice messages, reactions, a quoted reply, and a link preview" width="1800" height="1360">
 
 ## What it does
 

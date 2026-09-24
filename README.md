@@ -9,20 +9,29 @@
 with [egui](https://github.com/emilk/egui). It uses
 [whatsapp-rust](https://github.com/oxidezap/whatsapp-rust) for the WhatsApp Web
 protocol. It runs on Linux, macOS, and Windows, links to your phone as a
-companion device, and has no browser engine. In our Linux test, it opened in
-under a second and used about 150 MB of idle RAM, compared with 1.13 GB for
+companion device, and has no browser engine. In our Linux test, it opens in
+under a second and uses about 200 MB of idle RAM, compared with 1.13 GB for
 WhatsApp Web and its Chromium processes. [See the measurements](https://zapfast.rocks/benchmarks/).
 
 ZapFast is a sibling of [Spotifast](https://spotifast.rocks),
 with the same native UI for a different service.
 
-![ZapFast showing a conversation with an attachment, voice messages, reactions, a quoted reply, and a link preview](docs/screenshot.png)
+<picture>
+  <source media="(prefers-color-scheme: light)" srcset="docs/screenshot-light.png">
+  <img src="docs/screenshot.png" alt="ZapFast showing a conversation with an attachment, voice messages, reactions, a quoted reply, and a link preview">
+</picture>
 
 See **[zapfast.rocks](https://zapfast.rocks)** for downloads and guides.
 
-![A titled group chat with participant names, reactions, a quoted mention, and a poll](docs/screenshot-group.png)
+<picture>
+  <source media="(prefers-color-scheme: light)" srcset="docs/screenshot-group-light.png">
+  <img src="docs/screenshot-group.png" alt="A titled group chat with participant names, reactions, a quoted mention, and a poll">
+</picture>
 
-![The linking screen with the QR code](docs/screenshot-link.png)
+<picture>
+  <source media="(prefers-color-scheme: light)" srcset="docs/screenshot-link-light.png">
+  <img src="docs/screenshot-link.png" alt="The linking screen with the QR code">
+</picture>
 
 ## What it does
 
@@ -153,6 +162,9 @@ See **[zapfast.rocks](https://zapfast.rocks)** for downloads and guides.
   phone survive history arriving later, including during initial linking.
   Existing installations request one settings refresh after upgrading to
   recover previously lost mute settings and pin order, without relinking.
+- **Read the last message from the chat list.** When a chat's one-line
+  preview is cut short, resting the pointer on it shows the whole message in
+  a tooltip, as in WhatsApp Web, without opening the chat or marking it read.
 - **Delete chats.** Remove a chat and its messages from the chat list's
   right-click menu. The phone deletes it first, so this needs a connection,
   and the chat only leaves this computer once the phone has confirmed. Chats
@@ -270,6 +282,10 @@ See **[zapfast.rocks](https://zapfast.rocks)** for downloads and guides.
   when validation fails. Private read-state updates run one at a time. Failures
   pause the whole queue with backoff from 30 seconds to 15 minutes; pending reads
   remain saved and resume automatically. New messages can still arrive.
+- **Reconnects after sleep.** After the computer wakes from sleep, or when the
+  connection has received nothing for two minutes, ZapFast reconnects and
+  fetches what arrived meanwhile, instead of waiting on a connection that
+  looks open but no longer delivers.
 - **Runs in the background.** Closing the window keeps ZapFast linked in the
   system tray. Reopen it from the tray or by launching it again. Quit from the
   tray or with `Ctrl+Q`, or disable this behavior in Settings. The window
@@ -673,6 +689,7 @@ cargo run --features demo -- --demo            # sample chats, no connection
 cargo run --features demo -- --demo-page login # or settings, pair, info, light, …
 cargo run --features demo -- --demo-shot shot.png --demo-page chat,light
 cargo run --features demo -- --demo-tour      # Space starts/replays a 41-second tour
+cargo run --features demo -- --demo-tour --demo-tour-script whats-new # what 0.16 added
 cargo run --features demo -- --demo-hover 900,400 # holds a fake pointer there
 cargo test --all-features                      # includes a headless layout of every screen
 cargo clippy --all-targets --all-features -- -D warnings
@@ -713,6 +730,16 @@ Noto emoji font; demo GIF search uses these local fixtures. The tour makes no
 sound and holds its final frame. Space rebuilds the sample and replays.
 For an automatic start, add `--demo-tour-delay 5000` (milliseconds).
 Use `--demo` instead of `--demo-tour` to explore the sample chats yourself.
+
+`--demo-tour-script whats-new` plays an 86-second tour of what ZapFast 0.16
+added instead: the composer's plus menu and poll dialog, searching a chat and
+narrowing it to a day, the photo preview, videos and round video messages
+playing in place, sticker shelves and sticker search, message info in a group,
+the Favorites and label chips and a chat's menu, recording a voice message and
+choosing a playback speed, the chat list folded to avatars, hover controls,
+Ctrl-click and Shift-click selection with Forward, and Settings (languages,
+search, and the light theme). `--demo-tour-script launch` is the default.
+Demo runs never open the microphone: recording plays back a synthetic tone.
 Use `--demo-page rtl-self` for a self-chat of mixed Hebrew, Arabic, and
 English lines.
 Use `--demo-page composer-tools` to preview the WhatsApp-style composer pill
@@ -758,8 +785,26 @@ python3 scripts/render-demo.py recording.mp4 tour.json launch.mp4 --start 0.8
 Set `--start` to the recording time (in seconds) when you pressed Space. The
 export trims the setup footage, adds a caption band below the app, and produces
 a silent H.264 MP4. It requires `ffmpeg` with libass support and `ffprobe`.
+`--scale 1.5` keeps 1.5 pixels per point, for example 1920 pixels across from a
+1280-point window recorded at 2x; the default is one pixel per point.
+
 These annotations are added during video export, not drawn by the app. The
 trace contains only pointer coordinates and shortcut labels, not typed text.
+
+Instead of recording the screen, the tour can save its own frames. With
+`--demo-tour-frames DIR`, it starts at once, plays on a virtual clock (steady
+frame times even when a frame is slow to draw), writes every frame as a PNG
+at the window's pixel size, and quits when the tour ends. `--demo-fps` sets the
+rate (30 by default). The window still has to be shown somewhere; a virtual
+output keeps it off your screens. Then assemble and annotate the frames:
+
+```sh
+cargo build --release --locked --features demo
+./target/release/zapfast --demo-tour --demo-tour-script whats-new \
+  --demo-size 1280x800 --demo-tour-frames frames --demo-tour-events tour.json
+ffmpeg -framerate 30 -i frames/frame-%05d.png -c:v libx264 -crf 12 -pix_fmt yuv420p raw.mp4
+python3 scripts/render-demo.py raw.mp4 tour.json whats-new.mp4 --scale 1.5
+```
 
 ## Disclaimer
 
