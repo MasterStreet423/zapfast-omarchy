@@ -7,7 +7,7 @@
     <name>Carmine Paolino</name>
   </developer>
   <metadata_license>CC0-1.0</metadata_license>
-  <project_license>MIT</project_license>
+  <project_license>MIT AND GPL-2.0-only</project_license>
   <description>
     <p>A native WhatsApp companion for Linux, macOS and Windows, written in Rust
     without a browser engine. Link your phone to read and send messages.</p>
@@ -37,6 +37,9 @@
     <control>keyboard</control>
   </supports>
   <releases>
+    <release version="0.16.0" date="2026-09-24">
+      <url>https://github.com/crmne/zapfast/releases/tag/v0.16.0</url>
+    </release>
     <release version="0.13.1" date="2026-09-14">
       <url>https://github.com/crmne/zapfast/releases/tag/v0.13.1</url>
     </release>

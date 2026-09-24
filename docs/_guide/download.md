@@ -48,6 +48,12 @@ One download for both Apple Silicon and Intel:
 
 Open it and drag **{{ app }}** to Applications.
 
+If you use [Homebrew](https://brew.sh), you can install it with:
+
+```sh
+brew install --cask crmne/tap/zapfast
+```
+
 The app is signed with Developer ID and notarized by Apple. The DMG includes
 a validated notarization ticket.
 

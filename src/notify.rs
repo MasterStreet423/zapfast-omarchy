@@ -1,7 +1,8 @@
 //! Desktop notifications when the app is hidden, unfocused, or on another chat.
 //!
 //! Delivery uses the platform notification service. Each notification runs on
-//! its own thread because delivery and click handling can block.
+//! its own thread because delivery and click handling can block. A click hands
+//! back the chat and the message it announced.
 
 use crate::settings::NotificationSound;
 use std::path::PathBuf;
@@ -23,6 +24,15 @@ pub struct Badge;
 impl Badge {
     /// Does nothing; no desktop here reads a taskbar badge.
     pub fn set(&mut self, _count: u32) {}
+}
+
+/// Chat and message a clicked notification opens. The message id travels with
+/// the click, so the reader lands on what was announced instead of on the end
+/// of the chat.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NotificationTarget {
+    pub chat: String,
+    pub message: String,
 }
 
 #[cfg(any(target_os = "macos", test))]
@@ -85,11 +95,11 @@ impl Notifications {
         body: String,
         picture: Option<PathBuf>,
         sound: NotificationSound,
-        chat: String,
-        opened: Arc<Mutex<Vec<String>>>,
+        target: NotificationTarget,
+        opened: Arc<Mutex<Vec<NotificationTarget>>>,
         wake: impl Fn() + Send + 'static,
     ) {
-        let cancelled = self.register(&chat);
+        let cancelled = self.register(&target.chat);
         let spawned = std::thread::Builder::new()
             .name("notification".into())
             .spawn(move || {
@@ -100,7 +110,7 @@ impl Notifications {
                     &body,
                     picture.as_deref(),
                     system_sound,
-                    chat,
+                    target,
                     opened,
                     wake,
                     cancelled,
@@ -112,16 +122,16 @@ impl Notifications {
     }
 }
 
-/// ZapFast's own sounds, synthesized by `assets/sounds/generate.py`.
-const CHIME: &[u8] = include_bytes!("../assets/sounds/chime.ogg");
-const RIPPLE: &[u8] = include_bytes!("../assets/sounds/ripple.ogg");
+/// Pidgin's message and alert sounds (GPL-2.0, see `assets/sounds/README.md`).
+const RECEIVE: &[u8] = include_bytes!("../assets/sounds/receive.wav");
+const ALERT: &[u8] = include_bytes!("../assets/sounds/alert.wav");
 
 /// Plays a notification sound on its own thread, for notifications and
 /// their preview in Settings. System sounds and silence play nothing here.
 pub fn play_sound(sound: NotificationSound) {
     let source: Box<dyn Fn() -> std::io::Result<Box<dyn ReadSeek>> + Send> = match sound {
-        NotificationSound::Chime => Box::new(|| Ok(Box::new(std::io::Cursor::new(CHIME)))),
-        NotificationSound::Ripple => Box::new(|| Ok(Box::new(std::io::Cursor::new(RIPPLE)))),
+        NotificationSound::Receive => Box::new(|| Ok(Box::new(std::io::Cursor::new(RECEIVE)))),
+        NotificationSound::Alert => Box::new(|| Ok(Box::new(std::io::Cursor::new(ALERT)))),
         NotificationSound::Custom(path) => Box::new(move || {
             Ok(Box::new(std::io::BufReader::new(std::fs::File::open(
                 &path,
@@ -171,8 +181,8 @@ fn deliver(
     body: &str,
     picture: Option<&std::path::Path>,
     system_sound: bool,
-    chat: String,
-    opened: Arc<Mutex<Vec<String>>>,
+    target: NotificationTarget,
+    opened: Arc<Mutex<Vec<NotificationTarget>>>,
     wake: impl Fn() + Send + 'static,
     mut cancelled: tokio::sync::oneshot::Receiver<()>,
 ) {
@@ -217,7 +227,7 @@ fn deliver(
                     _ = &mut cancelled => handle.close_async().await,
                     _ = handle.wait_for_action_async(|action| {
                         if matches!(action, notify_rust::NotificationResponse::Default) {
-                            opened.lock().unwrap_or_else(|p| p.into_inner()).push(chat);
+                            opened.lock().unwrap_or_else(|p| p.into_inner()).push(target);
                             wake();
                         }
                     }) => {}
@@ -235,15 +245,15 @@ fn deliver(
     body: &str,
     picture: Option<&std::path::Path>,
     system_sound: bool,
-    _chat: String,
-    _opened: Arc<Mutex<Vec<String>>>,
-    _wake: impl Fn() + Send + 'static,
+    target: NotificationTarget,
+    opened: Arc<Mutex<Vec<NotificationTarget>>>,
+    wake: impl Fn() + Send + 'static,
     mut cancelled: tokio::sync::oneshot::Receiver<()>,
 ) {
     if matches!(
         cancelled.try_recv(),
         Err(tokio::sync::oneshot::error::TryRecvError::Empty)
-    ) && let Err(error) = windows::show(title, body, picture, system_sound)
+    ) && let Err(error) = windows::show(title, body, picture, system_sound, target, opened, wake)
     {
         log::debug!("no Windows notification: {error}");
     }
@@ -256,8 +266,8 @@ fn deliver(
     body: &str,
     picture: Option<&std::path::Path>,
     system_sound: bool,
-    _chat: String,
-    _opened: Arc<Mutex<Vec<String>>>,
+    _target: NotificationTarget,
+    _opened: Arc<Mutex<Vec<NotificationTarget>>>,
     _wake: impl Fn() + Send + 'static,
     mut cancelled: tokio::sync::oneshot::Receiver<()>,
 ) {
@@ -351,7 +361,10 @@ mod tests {
             "A test from ZapFast, with a picture".into(),
             picture,
             NotificationSound::System,
-            "test".into(),
+            NotificationTarget {
+                chat: "test".into(),
+                message: "test-message".into(),
+            },
             Default::default(),
             || {},
         );

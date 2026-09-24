@@ -87,7 +87,7 @@ jobs:
           else
             cp "target/${{ matrix.target }}/release/zapfast" "dist/$name/"
           fi
-          cp README.md LICENSE packaging/zapfast-portable.txt "dist/$name/"
+          cp README.md LICENSE THIRD-PARTY-NOTICES.md packaging/zapfast-portable.txt "dist/$name/"
           if [ "${{ runner.os }}" = "Linux" ]; then
             # Desktop integration for package builds and hand-installs.
             cp --parents packaging/applications/zapfast.desktop packaging/icons/zapfast.svg contrib/omarchy/zapfast.json.tpl contrib/omarchy/zapfast-theme "dist/$name/"
@@ -181,7 +181,7 @@ jobs:
           version="${GITHUB_REF_NAME#v}"
           mkdir -p dist/macos-input
           bash packaging/macos/bundle.sh universal/zapfast dist/macos-input/ZapFast.app "$version"
-          cp README.md LICENSE dist/macos-input/
+          cp README.md LICENSE THIRD-PARTY-NOTICES.md dist/macos-input/
 
       - name: Package, sign and notarize macOS app
         run: |
@@ -269,10 +269,26 @@ jobs:
           key-env: ZAPFAST_UPDATE_SIGNING_KEY
         env:
           ZAPFAST_UPDATE_SIGNING_KEY: ${{ secrets.ZAPFAST_UPDATE_SIGNING_KEY }}
+      # Publish the reviewed notes committed before the tag, never a
+      # generated summary. A stable tag without them stops here; a
+      # prerelease without them gets a short placeholder.
+      - name: Release notes
+        run: |
+          notes="packaging/release-notes/${GITHUB_REF_NAME}.md"
+          if [ -f "$notes" ]; then
+            cp "$notes" release-notes.md
+          elif [[ "$GITHUB_REF_NAME" == *-* ]]; then
+            echo "Prerelease build of ZapFast ${GITHUB_REF_NAME}." > release-notes.md
+          else
+            echo "::error::Write $notes and push it before tagging a stable release."
+            exit 1
+          fi
       - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           files: dist/*
-          generate_release_notes: true
+          name: ZapFast ${{ github.ref_name }}
+          body_path: release-notes.md
+          generate_release_notes: false
           draft: ${{ contains(github.ref_name, '-') }}
           prerelease: ${{ contains(github.ref_name, '-') }}
           make_latest: ${{ !contains(github.ref_name, '-') }}

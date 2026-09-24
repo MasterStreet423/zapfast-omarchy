@@ -19,6 +19,10 @@ resolver_catalogos() {
     if grep -qx "$i18n/zapfast.pot" <<<"$conflictos"; then
         git checkout --theirs -- "$i18n/zapfast.pot"
     fi
+    # POTFILES es una lista: se quedan las entradas de los dos lados.
+    if grep -qx "$i18n/POTFILES" <<<"$conflictos"; then
+        sed -i '/^<<<<<<< /d;/^=======$/d;/^>>>>>>> /d' "$i18n/POTFILES"
+    fi
     if grep -qx "$i18n/es.po" <<<"$conflictos"; then
         local tmp
         tmp=$(mktemp -d)

@@ -49,6 +49,18 @@ protocol. These notes are for coding agents and new contributors.
   a disposable archive. Tests use fixtures and mock credentials only.
 - `src/model.rs` holds the app's own types. Views never touch a protobuf;
   the worker translates in `classify()` and `parse_conversation()`.
+- Favorite chats sync with the phone through the `favorites` app-state action
+  (RegularHigh), which carries the whole ordered list: `Event::FavoritesUpdate`
+  replaces ours and `send_app_state_action(&schemas::FAVORITES, ..)` writes it.
+  `archive/favorites.rs` keeps the list in order with each entry's JID as the
+  phone named it, plus a queue of changes made here; a phone list applies
+  (unless older than the newest applied) and the queue replays on top.
+  `backend/worker/favorite_chats.rs` sends one list at a time with backoff and
+  never before the phone's list is known: the first connection reads
+  RegularHigh once as a snapshot, and its completion on the same queue as the
+  replayed mutations means a phone without favorites. A blind write would
+  replace the phone's list. Channels are never favorites. The Favorites chip
+  follows the list order; pins stay global and first in every chip.
 - Interactive messages are parsed in `backend/worker/interactive.rs`. Views receive
   labels and local capabilities, never protocol option ids. `ReplyInteractive`
   carries only the archived message id and visible button/choice indices;
@@ -109,7 +121,9 @@ protocol. These notes are for coding agents and new contributors.
   its C++ from source with the C++ compiler of the host; `nasm` is
   optional and only adds the SIMD paths (the AUR recipes leave it out,
   the build works without it). Frames become textures on the interface
-  thread and are dropped when unseen.
+  thread and are dropped when unseen. A paused animation decodes only its
+  first frame, the poster, and the rest once it plays: full decodes of a
+  picker's paused stickers overran the frame budget and evicted each other.
 - `src/video.rs` plays other videos inside their message, one at a time,
   with the same `mp4` and `openh264` pieces: a thread decodes from the
   keyframe before the start (openh264 must not flush after each packet or
@@ -173,7 +187,10 @@ protocol. These notes are for coding agents and new contributors.
   `Microphone` on a thread, keeping a loudness per 50 ms for the live bars.
   Linux needs ALSA headers to build (`libasound2-dev` on Debian,
   `alsa-lib` on Arch). `Action::PlayVoice/SeekVoice` drive the player from
-  the bubble; `StartRecording/CancelRecording/SendRecording` the
+  the bubble, and a clip that ends hands its message back
+  (`Player::take_finished`) so the app plays the next unheard voice message
+  of the same run (`App::next_voice_after`), keeping other apps' media paused
+  in between; `StartRecording/CancelRecording/SendRecording` the
   microphone from the composer (the send button is a microphone when there
   is nothing to send); `Command::SendVoice` normalizes
   (`voice::normalize`, quiet takes up to just under full scale, gain
@@ -205,8 +222,9 @@ protocol. These notes are for coding agents and new contributors.
   exists). `src/single_instance.rs` holds a loopback port so a second
   launch surfaces the first. `src/notify.rs` sends desktop notifications
   for `Event::Incoming` (live messages from others, not history) when the
-  reader is away from that chat. macOS has no title bar: the content runs
-  to the top. `src/macos.rs` keeps native application menus alive across window
+  reader is away from that chat; a click carries the chat and the message
+  id, so the reader lands on the announced message. macOS has no title bar:
+  the content runs to the top. `src/macos.rs` keeps native application menus alive across window
   recreation and aligns traffic lights with the chat header. Linking retains
   `ui::titlebar_strip`; other headers reserve horizontal space for the buttons.
 - Group delivery uses `archive::receipts`: save the recipients when filing an
@@ -244,7 +262,8 @@ Three egui pitfalls this code has already hit:
   double-click on either replies; the body keeps it for selecting the word.
 - `Popup::context_menu` opens on the *response's* right-click, which those
   inner widgets take for themselves; the bubble reads the right-click from
-  the input over its own rect and opens `Popup::menu` itself, so the menu
+  the input over the part of its rect inside the transcript viewport (the chat
+  header shares its layer) and opens `Popup::menu` itself, so the menu
   comes up anywhere on the message.
 
 ## Branches
@@ -294,18 +313,21 @@ released, which goes out as soon as it is fixed.
 
 A release is not finished when the tag is pushed. Do these in order:
 
-1. From a clean, up-to-date `main`, bump `version` in `Cargo.toml` and update
-   `Cargo.lock` with a build. Run the full checks, commit, and push `main`.
-   Before tagging, verify the release commit is reachable from `origin/main`
-   so the binaries report the right version and the release contains the
-   canonical history.
+1. From a clean, up-to-date `main`, bump `version` in `Cargo.toml`, add the
+   release to the `<releases>` list in the Flatpak metainfo, and update
+   `Cargo.lock` with a build. Write the release notes, in the style above, to
+   `packaging/release-notes/vX.Y.Z.md`: the release workflow publishes that
+   file as the release description, and a stable tag without it fails. Link
+   screenshots at the release's asset URLs
+   (`https://github.com/crmne/zapfast/releases/download/vX.Y.Z/NAME.png`).
+   Run the full checks, commit, and push `main`. Before tagging, verify the
+   release commit is reachable from `origin/main` so the binaries report the
+   right version and the release contains the canonical history.
 2. Tag `vX.Y.Z` and push the tag. Wait for every platform build, artifact,
    and `checksums.txt`.
-3. Replace the generated GitHub notes with written release notes. Start with
-   a short summary, group user-visible changes under headings such as `New`
-   and `Fixed`, credit contributors and reporters where it helps, and end
-   with a full-changelog link comparing the previous tag. Write about what
-   changed for the user, not the commit history.
+3. Upload the screenshots to the release as assets with the names the notes
+   link, then open the published release and check the text, every image,
+   and every download link. Never leave generated placeholder notes.
 4. After the release files exist, update both `zapfast_version` in
    `docs/_config.yml` and the version menu in `docs/_data/versions.yml`.
    The menu lists only the current version, which points to `/download/`,

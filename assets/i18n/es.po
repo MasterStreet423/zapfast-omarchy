@@ -2152,6 +2152,339 @@ msgstr "Mensaje de visualización única"
 msgid "Message on your phone"
 msgstr "Mensaje en tu teléfono"
 
+#: src/ui/chats.rs:437
+msgid "No favorites yet"
+msgstr "Aún no hay favoritos"
+
+#: src/ui/chats.rs:1010 src/ui/chats.rs:1332 src/ui/conversation.rs:228
+#: src/ui/dialogs.rs:1056 src/ui/dialogs.rs:1479
+msgid "Leave group"
+msgstr "Salir del grupo"
+
+#: src/ui/chats.rs:1011 src/ui/chats.rs:1330 src/ui/conversation.rs:226
+#: src/ui/dialogs.rs:1054 src/ui/dialogs.rs:1477
+msgid "Leave channel"
+msgstr "Salir del canal"
+
+#: src/ui/conversation.rs:307 src/ui/pane.rs:133
+msgid "Search messages"
+msgstr "Buscar mensajes"
+
+#: src/ui/conversation.rs:799
+msgid "You left this channel"
+msgstr "Saliste de este canal"
+
+#: src/ui/conversation.rs:832
+msgid "You left this group"
+msgstr "Saliste de este grupo"
+
+#: src/ui/conversation.rs:958
+msgid "Attach"
+msgstr "Adjuntar"
+
+#: src/ui/conversation.rs:1292
+msgid "Send files"
+msgstr "Enviar archivos"
+
+#: src/ui/conversation.rs:1314
+#, rust-format
+msgid "Voice message ({duration}) not sent"
+msgstr "Mensaje de voz ({duration}) no enviado"
+
+#: src/ui/conversation.rs:1316
+msgid "Discard voice message"
+msgstr "Descartar mensaje de voz"
+
+#: src/ui/conversation.rs:3913
+msgid "Open WhatsApp on your phone to follow it."
+msgstr "Abre WhatsApp en tu teléfono para seguirla."
+
+#: src/ui/dialogs.rs:1038
+msgid "Leave this channel?"
+msgstr "¿Salir de este canal?"
+
+#: src/ui/dialogs.rs:1040
+msgid "Leave this group?"
+msgstr "¿Salir de este grupo?"
+
+#: src/ui/dialogs.rs:1047
+msgid ""
+"You will not receive new messages. The local history stays on this computer."
+msgstr ""
+"No vas a recibir mensajes nuevos. El historial local queda en esta "
+"computadora."
+
+#: src/ui/dialogs.rs:1067
+msgid "Leave channel and archive"
+msgstr "Salir del canal y archivar"
+
+#: src/ui/dialogs.rs:1069
+msgid "Leave group and archive"
+msgstr "Salir del grupo y archivar"
+
+#: src/ui/dialogs.rs:1349
+msgid "Channel"
+msgstr "Canal"
+
+#: src/ui/settings.rs:242
+#, rust-format
+msgid "No settings match “{query}”."
+msgstr "Ningún ajuste coincide con «{query}»."
+
+#: src/ui/settings.rs:261
+msgid "Search settings"
+msgstr "Buscar en los ajustes"
+
+#: src/ui/settings.rs:399
+msgid "Pause music while playing voice messages and videos"
+msgstr "Pausar la música con mensajes de voz y vídeos"
+
+#: src/ui/settings.rs:402
+msgid ""
+"Pause media players while a voice message, audio, or video plays with sound, "
+"and resume them when it stops."
+msgstr ""
+"Pausa los reproductores mientras suena un mensaje de voz, un audio o un "
+"vídeo con sonido, y los reanuda cuando termina."
+
+#: src/ui/settings.rs:435
+msgid "Privacy"
+msgstr "Privacidad"
+
+#: src/ui/settings.rs:439
+msgid ""
+"Read receipts are off for your WhatsApp account (see Read receipts below). "
+"Direct chats will not send them. When this switch is on, groups still do. "
+"Read state syncs between your devices either way."
+msgstr ""
+"Las confirmaciones de lectura están desactivadas en tu cuenta de WhatsApp "
+"(consulta Confirmaciones de lectura más abajo). Los chats individuales no "
+"las enviarán. Con este interruptor activado, los grupos sí. El estado de "
+"lectura se sincroniza entre tus dispositivos en cualquier caso."
+
+#: src/ui/settings.rs:444
+msgid ""
+"Let people see when you read messages or play voice messages here. The "
+"account setting below still applies. Read state syncs between your devices "
+"either way."
+msgstr ""
+"Permite que otros vean cuándo lees mensajes o reproduces mensajes de voz "
+"aquí. El ajuste de la cuenta de abajo sigue aplicándose. El estado de "
+"lectura se sincroniza entre tus dispositivos en cualquier caso."
+
+#: src/ui/settings.rs:459
+msgid ""
+"Could not load your account privacy. It loads again when ZapFast reconnects."
+msgstr ""
+"No se pudo cargar la privacidad de tu cuenta. Se volverá a cargar cuando "
+"ZapFast se reconecte."
+
+#: src/ui/settings.rs:464
+msgid "Connect to WhatsApp to see and change your account privacy."
+msgstr "Conéctate a WhatsApp para ver y cambiar la privacidad de tu cuenta."
+
+#: src/ui/settings.rs:469
+msgid "Loading your account privacy…"
+msgstr "Cargando la privacidad de tu cuenta…"
+
+#: src/ui/settings.rs:494
+msgid "Change who is excluded on your phone."
+msgstr "Cambia a quién se excluye desde tu teléfono."
+
+#: src/ui/settings.rs:544 src/ui/settings.rs:1459
+msgid "Play sounds for group messages"
+msgstr "Reproducir sonidos para mensajes de grupo"
+
+#: src/ui/settings.rs:547
+msgid ""
+"When off, group messages notify you silently. Mentions and replies to you "
+"still play the mention sound."
+msgstr ""
+"Si está desactivado, los mensajes de grupo te avisan en silencio. Las "
+"menciones y las respuestas a ti siguen reproduciendo el sonido de mención."
+
+#: src/ui/settings.rs:1276
+msgid "Mention sound"
+msgstr "Sonido de mención"
+
+#: src/ui/settings.rs:1279
+msgid "Played when someone mentions you or replies to you in a group."
+msgstr "Suena cuando alguien te menciona o te responde en un grupo."
+
+#: src/ui/settings.rs:1285
+msgid "Played for new messages in chats and groups."
+msgstr "Suena con los mensajes nuevos en chats y grupos."
+
+#: src/ui/settings.rs:1303
+msgid "Pidgin alert"
+msgstr "Alerta de Pidgin"
+
+#. Translators: no notification sound.
+#: src/ui/settings.rs:1306
+msgctxt "sound"
+msgid "None"
+msgstr "Ninguno"
+
+#: src/app.rs:1182
+#, rust-format
+msgid "{name} (You)"
+msgstr "{name} (Tú)"
+
+#: src/app.rs:2427
+msgid "Not sent: ZapFast is not connected to WhatsApp."
+msgstr "No enviado: ZapFast no está conectado a WhatsApp."
+
+#: src/app.rs:2431
+msgid ""
+"Not sent: the message you’re replying to isn’t available on this computer. "
+"Cancel the reply to send without a quote."
+msgstr ""
+"No enviado: el mensaje al que respondes no está disponible en este equipo. "
+"Cancela la respuesta para enviarlo sin cita."
+
+#: src/ui/pane.rs:123
+msgid "Close search"
+msgstr "Cerrar búsqueda"
+
+#: src/ui/pane.rs:151 src/ui/pane.rs:329
+msgid "Filter by date"
+msgstr "Filtrar por fecha"
+
+#: src/ui/pane.rs:204
+#, rust-format
+msgid "Search messages with {}"
+msgstr "Buscar mensajes en {}"
+
+#: src/ui/pane.rs:227
+msgid "No messages found"
+msgstr "No se encontraron mensajes"
+
+#: src/ui/pane.rs:228
+msgid "Try another word or pick a different day."
+msgstr "Probá con otra palabra o elegí otro día."
+
+#: src/ui/pane.rs:255
+#, rust-format
+msgid "Only the newest {} matches are listed. Narrow the search or pick a day."
+msgstr ""
+"Solo se listan las {} coincidencias más recientes. Acotá la búsqueda o elegí "
+"un día."
+
+#: src/ui/pane.rs:344
+msgid "Clear the day filter"
+msgstr "Quitar el filtro de día"
+
+#: src/ui/pane.rs:411
+msgid "Next month"
+msgstr "Mes siguiente"
+
+#: src/ui/pane.rs:423
+msgid "Previous month"
+msgstr "Mes anterior"
+
+#: src/privacy.rs:42
+msgctxt "privacy"
+msgid "Last seen"
+msgstr "Última vez"
+
+#: src/privacy.rs:43
+msgctxt "privacy"
+msgid "Online"
+msgstr "En línea"
+
+#: src/privacy.rs:44
+msgctxt "privacy"
+msgid "Profile photo"
+msgstr "Foto del perfil"
+
+#: src/privacy.rs:45
+msgctxt "privacy"
+msgid "About"
+msgstr "Info."
+
+#: src/privacy.rs:46
+msgctxt "privacy"
+msgid "Groups"
+msgstr "Grupos"
+
+#: src/privacy.rs:47
+msgctxt "privacy"
+msgid "Read receipts"
+msgstr "Confirmaciones de lectura"
+
+#: src/privacy.rs:48
+msgctxt "privacy"
+msgid "Calls"
+msgstr "Llamadas"
+
+#: src/privacy.rs:54
+msgid "Who can see when you were last on WhatsApp."
+msgstr "Quién puede ver cuándo estuviste en WhatsApp por última vez."
+
+#: src/privacy.rs:55
+msgid "Who can see when you are online."
+msgstr "Quién puede ver cuándo estás en línea."
+
+#: src/privacy.rs:56
+msgid "Who can see your profile photo."
+msgstr "Quién puede ver tu foto del perfil."
+
+#: src/privacy.rs:57
+msgid "Who can see your About text."
+msgstr "Quién puede ver tu info."
+
+#: src/privacy.rs:60
+msgid "Who can add you to groups. Anyone else has to send you an invite."
+msgstr ""
+"Quién puede añadirte a grupos. Los demás tienen que enviarte una invitación."
+
+#: src/privacy.rs:64
+msgid ""
+"For your whole WhatsApp account. When off, you neither send nor see read "
+"receipts in one-to-one chats. Groups always send them."
+msgstr ""
+"Para toda tu cuenta de WhatsApp. Si está desactivado, no envías ni ves "
+"confirmaciones de lectura en chats individuales. Los grupos siempre las "
+"envían."
+
+#: src/privacy.rs:68
+msgid ""
+"Silencing unknown callers keeps calls from people not in your contacts from "
+"ringing."
+msgstr ""
+"Silenciar llamadas desconocidas evita que suenen las llamadas de personas "
+"que no están en tus contactos."
+
+#: src/privacy.rs:147
+msgctxt "privacy"
+msgid "Everyone"
+msgstr "Todos"
+
+#: src/privacy.rs:148
+msgctxt "privacy"
+msgid "My contacts"
+msgstr "Mis contactos"
+
+#: src/privacy.rs:149
+msgctxt "privacy"
+msgid "My contacts except…"
+msgstr "Mis contactos, excepto…"
+
+#: src/privacy.rs:150
+msgctxt "privacy"
+msgid "Nobody"
+msgstr "Nadie"
+
+#: src/privacy.rs:151
+msgctxt "privacy"
+msgid "Same as last seen"
+msgstr "Igual que la última vez"
+
+#: src/privacy.rs:152
+msgctxt "privacy"
+msgid "Silence unknown callers"
+msgstr "Silenciar llamadas desconocidas"
+
 #~ msgid ""
 #~ "Recent stickers appear here. Right-click one to save it. To import a "
 #~ "pack, paste a signal.art link or open a .wastickers file."

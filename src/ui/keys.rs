@@ -11,6 +11,7 @@ pub fn handle(app: &mut App, ctx: &egui::Context) {
         return;
     }
     let editing_text = ctx.text_edit_focused();
+    let find = find_action(app);
     let mut actions = Vec::new();
     ctx.input_mut(|input| {
         let mut key = |modifiers: Modifiers, key: Key, action: Action| {
@@ -22,9 +23,9 @@ pub fn handle(app: &mut App, ctx: &egui::Context) {
         key(
             Modifiers::COMMAND | Modifiers::SHIFT,
             Key::F,
-            Action::OpenChatSearch,
+            Action::FocusSearch,
         );
-        key(Modifiers::COMMAND, Key::F, Action::FocusSearch);
+        key(Modifiers::COMMAND, Key::F, find);
         key(Modifiers::COMMAND, Key::K, Action::FocusSearch);
         if app.is_linked() {
             key(
@@ -68,12 +69,11 @@ pub fn handle(app: &mut App, ctx: &egui::Context) {
     // Escape cancels the topmost state. Menus handle Escape themselves.
     let menu_open = egui::Popup::is_any_open(ctx);
     let search_focused = ctx.memory(|memory| memory.has_focus(egui::Id::new("chat-search")));
+    let composer_focused = ctx.memory(|memory| memory.has_focus(egui::Id::new("composer-text")));
     let escape = (!menu_open || app.reaction_target.is_some())
         && ctx.input_mut(|input| input.consume_key(Modifiers::NONE, Key::Escape));
     if escape {
-        if app.chat_search_open {
-            actions.push(Action::CloseChatSearch);
-        } else if app.show_update {
+        if app.show_update {
             actions.push(Action::CloseUpdate);
         } else if app.dialog.is_some() {
             actions.push(Action::CloseDialog);
@@ -81,6 +81,11 @@ pub fn handle(app: &mut App, ctx: &egui::Context) {
             actions.push(Action::CancelRecording);
         } else if app.picker.is_some() || app.reaction_target.is_some() {
             actions.push(Action::ClosePicker);
+        } else if app.chat_search_visible() && app.chat_search_calendar {
+            // The day filter first, then the pane it hangs from.
+            app.chat_search_calendar = false;
+        } else if app.chat_search_visible() && !composer_focused {
+            actions.push(Action::CloseChatSearch);
         } else if app.emoji_start.is_some() {
             actions.push(Action::CloseEmojiSuggestions);
         } else if app.mention_start.is_some() {
@@ -93,6 +98,8 @@ pub fn handle(app: &mut App, ctx: &egui::Context) {
             actions.push(Action::CancelReply);
         } else if app.page == Page::Wallpaper {
             actions.push(Action::Open(Page::Settings));
+        } else if app.page == Page::Settings && !app.settings_search.is_empty() {
+            actions.push(Action::SearchSettings(String::new()));
         } else if app.page == Page::Settings {
             actions.push(Action::Open(Page::Chats));
         } else if search_focused || !app.search.is_empty() {
@@ -102,28 +109,12 @@ pub fn handle(app: &mut App, ctx: &egui::Context) {
             if app.open_chat.is_some() {
                 actions.push(Action::FocusComposer);
             }
+        } else if app.chat_search_visible() {
+            actions.push(Action::CloseChatSearch);
         } else if app.open_chat.is_some() {
             actions.push(Action::CloseChat);
         } else if app.locked_folder {
             actions.push(Action::CloseLockedFolder);
-        }
-    }
-    // Enter walks the open chat's matches while its field has focus; with the
-    // composer focused, Enter keeps sending.
-    if app.chat_search_open
-        && ctx.memory(|memory| memory.has_focus(egui::Id::new("chat-search-in-chat")))
-    {
-        let step = ctx.input_mut(|input| {
-            if input.consume_key(Modifiers::SHIFT, Key::Enter) {
-                Some(-1)
-            } else if input.consume_key(Modifiers::NONE, Key::Enter) {
-                Some(1)
-            } else {
-                None
-            }
-        });
-        if let Some(step) = step {
-            actions.push(Action::StepChatSearch(step));
         }
     }
     // Enter sends a recording because the text field is hidden.
@@ -166,7 +157,6 @@ pub fn handle(app: &mut App, ctx: &egui::Context) {
     // message, as WhatsApp does. The key keeps its normal meaning everywhere
     // else: it navigates open overlays and moves the cursor in a non-empty
     // field.
-    let composer_focused = ctx.memory(|memory| memory.has_focus(egui::Id::new("composer-text")));
     let edit_previous = composer_focused
         && app.page == Page::Chats
         && app.open_chat.is_some()
@@ -239,12 +229,23 @@ fn preview_keys(app: &mut App, ctx: &egui::Context) {
     app.actions.extend(actions);
 }
 
+/// Ctrl+F searches the open chat, as in WhatsApp, the chat list when no
+/// chat is open, and the settings on the Settings page.
+fn find_action(app: &App) -> Action {
+    match app.page {
+        Page::Settings => Action::FocusSettingsSearch,
+        Page::Chats if app.open_chat.is_some() => Action::OpenChatSearch,
+        _ => Action::FocusSearch,
+    }
+}
+
 /// Shortcuts shown in the help dialog.
 pub const SHORTCUTS: &[(&str, &str)] = &[
-    ("Ctrl+F / Ctrl+K", "Search chats"),
+    ("Ctrl+K / Ctrl+Shift+F", "Search chats"),
+    ("Ctrl+F", "Search the open chat or the settings"),
     (
-        "Ctrl+Shift+F",
-        "Search the open chat (Enter for the next match)",
+        "↑ / ↓, Enter",
+        "Walk the open chat's search results and jump to one",
     ),
     ("Ctrl+L", "Focus the message input"),
     ("Alt+↑ / Alt+↓", "Previous / next chat"),
@@ -282,6 +283,48 @@ pub fn label(keys: &str) -> String {
 mod tests {
     use super::*;
 
+    #[test]
+    fn ctrl_f_searches_the_open_chat_the_list_or_the_settings() {
+        let root = tempfile::tempdir().unwrap();
+        let mut app = App::headless(
+            crate::paths::AppDirs::under(root.path()),
+            crate::settings::Settings::default(),
+        )
+        .0;
+        assert!(matches!(find_action(&app), Action::FocusSearch));
+        app.open_chat = Some("1@s.whatsapp.net".into());
+        app.page = Page::Chats;
+        assert!(matches!(find_action(&app), Action::OpenChatSearch));
+        app.page = Page::Settings;
+        assert!(matches!(find_action(&app), Action::FocusSettingsSearch));
+        app.page = Page::Wallpaper;
+        assert!(matches!(find_action(&app), Action::FocusSearch));
+    }
+
+    #[test]
+    fn escape_clears_the_settings_search_before_leaving_settings() {
+        let root = tempfile::tempdir().unwrap();
+        let mut app = App::headless(
+            crate::paths::AppDirs::under(root.path()),
+            crate::settings::Settings::default(),
+        )
+        .0;
+        app.page = Page::Settings;
+        app.settings_search = "sound".into();
+        let ctx = egui::Context::default();
+        escape(&mut app, &ctx);
+        assert!(
+            matches!(app.actions.as_slice(), [Action::SearchSettings(text)] if text.is_empty())
+        );
+        app.actions.clear();
+        app.settings_search.clear();
+        escape(&mut app, &ctx);
+        assert!(matches!(
+            app.actions.as_slice(),
+            [Action::Open(Page::Chats)]
+        ));
+    }
+
     fn escape(app: &mut App, ctx: &egui::Context) {
         let mut output = ctx.run_ui(
             egui::RawInput {
@@ -297,6 +340,34 @@ mod tests {
             |ui| handle(app, ui.ctx()),
         );
         output.textures_delta.clear();
+    }
+
+    #[test]
+    fn escape_folds_the_day_filter_then_the_search_pane_then_the_chat() {
+        let root = tempfile::tempdir().unwrap();
+        let mut app = App::headless(
+            crate::paths::AppDirs::under(root.path()),
+            crate::settings::Settings::default(),
+        )
+        .0;
+        app.page = Page::Chats;
+        app.open_chat = Some("fixture".into());
+        app.chat_search_open = true;
+        app.chat_search_calendar = true;
+        let ctx = egui::Context::default();
+        escape(&mut app, &ctx);
+        assert!(!app.chat_search_calendar);
+        assert!(app.actions.is_empty(), "the pane stays for now");
+        escape(&mut app, &ctx);
+        assert!(matches!(app.actions.as_slice(), [Action::CloseChatSearch]));
+        app.actions.clear();
+        // Settings hide the pane, so Escape leaves them instead.
+        app.page = Page::Settings;
+        escape(&mut app, &ctx);
+        assert!(matches!(
+            app.actions.as_slice(),
+            [Action::Open(Page::Chats)]
+        ));
     }
 
     #[test]

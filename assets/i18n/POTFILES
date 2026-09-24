@@ -10,3 +10,5 @@ src/app.rs
 src/ui/labels.rs
 src/ui/picker.rs
 src/i18n_extra.rs
+src/ui/pane.rs
+src/privacy.rs
