@@ -610,13 +610,12 @@ msgid "Updated {time}"
 msgstr "Actualizada a las {time}"
 
 #: src/ui/conversation.rs:4175
-#, fuzzy
 msgid "Chat"
-msgstr "Chats"
+msgstr "Chatear"
 
 #: src/ui/conversation.rs:4189
 msgid "Add"
-msgstr ""
+msgstr "Agregar"
 
 #: src/ui/conversation.rs:4234
 #, rust-format
@@ -2235,11 +2234,11 @@ msgstr "Silenciar llamadas desconocidas"
 
 #: src/ui/image_preview.rs:27
 msgid "Image"
-msgstr ""
+msgstr "Imagen"
 
 #: src/ui/image_preview.rs:41
 msgid "Close preview (Esc)"
-msgstr ""
+msgstr "Cerrar vista previa (Esc)"
 
 #: src/ui/image_preview.rs:53 src/ui/image_preview.rs:159
 msgid "Open in another app"
@@ -2250,35 +2249,32 @@ msgid "Copy image"
 msgstr "Copiar imagen"
 
 #: src/ui/image_preview.rs:86
-#, fuzzy
 msgid "Zoom in"
-msgstr "Zoom"
+msgstr "Acercar"
 
 #: src/ui/image_preview.rs:96
 msgid "Fit"
-msgstr ""
+msgstr "Ajustar"
 
 #: src/ui/image_preview.rs:97
 msgid "Show at original size"
-msgstr ""
+msgstr "Ver en tamaño original"
 
 #: src/ui/image_preview.rs:103
 msgid "Fit to the window (0)"
-msgstr ""
+msgstr "Ajustar a la ventana (0)"
 
 #: src/ui/image_preview.rs:119
-#, fuzzy
 msgid "Zoom out"
-msgstr "Acercar / alejar"
+msgstr "Alejar"
 
 #: src/ui/image_preview.rs:223
-#, fuzzy
 msgid "This image could not be displayed in ZapFast."
-msgstr "Este tipo de enlace no se puede abrir desde ZapFast"
+msgstr "ZapFast no pudo mostrar esta imagen."
 
 #: src/ui/image_preview.rs:226
 msgid "Open externally"
-msgstr ""
+msgstr "Abrir en otra app"
 
 #~ msgid "Show the chat list (Ctrl+B)"
 #~ msgstr "Mostrar la lista de chats (Ctrl+B)"
