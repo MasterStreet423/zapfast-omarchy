@@ -2375,6 +2375,177 @@ msgctxt "privacy"
 msgid "Silence unknown callers"
 msgstr "Silenciar llamadas desconocidas"
 
+#: src/ui/conversation.rs:1245
+msgid "Hide shortcut hints (bring them back from Keyboard shortcuts)"
+msgstr "Ocultar sugerencias de atajos (se recuperan en Atajos de teclado)"
+
+#: src/ui/conversation.rs:4020
+#, fuzzy
+msgid "Chat"
+msgstr "Chats"
+
+#: src/ui/conversation.rs:4034
+msgid "Add"
+msgstr ""
+
+#: src/ui/dialogs.rs:623
+msgid "Show shortcut hints under the message box"
+msgstr "Mostrar sugerencias de atajos bajo el cuadro de mensaje"
+
+#: src/ui/dialogs.rs:1306
+msgid "Also save to your phone's contacts"
+msgstr "Guardar también en los contactos de tu teléfono"
+
+#: src/ui/settings.rs:311
+msgid "Ctrl+Plus and Ctrl+Minus work anywhere, and Ctrl+0 resets it."
+msgstr ""
+"Ctrl+Más y Ctrl+Menos funcionan en cualquier lugar, y Ctrl+0 lo restablece."
+
+#: src/ui/settings.rs:351
+msgid "When off, Ctrl+Enter sends."
+msgstr "Si está desactivado, se envía con Ctrl+Intro."
+
+#: src/ui/settings.rs:355
+msgid "Download files automatically"
+msgstr "Descargar archivos automáticamente"
+
+#: src/ui/settings.rs:358
+msgid "Files up to 64 MiB download as they come into view."
+msgstr "Los archivos de hasta 64 MiB se descargan al aparecer en pantalla."
+
+#: src/ui/settings.rs:365
+msgid "Pause other media while recording or playing"
+msgstr "Pausar otros medios al grabar o reproducir"
+
+#: src/ui/settings.rs:366
+msgid "Music and videos in other apps resume afterwards."
+msgstr "La música y los vídeos de otras apps se reanudan después."
+
+#: src/ui/settings.rs:371
+msgid "Locked chats code"
+msgstr "Código de chats bloqueados"
+
+#: src/ui/settings.rs:374
+msgid ""
+"Opens the Locked tab on this computer. It hides chats, it does not encrypt "
+"them."
+msgstr ""
+"Abre la pestaña Bloqueados en este ordenador. Oculta chats, no los cifra."
+
+#: src/ui/settings.rs:405 src/ui/settings.rs:1475
+msgid "Notifications"
+msgstr "Notificaciones"
+
+#: src/ui/settings.rs:407
+msgid "Desktop notifications"
+msgstr "Notificaciones de escritorio"
+
+#: src/ui/settings.rs:410
+msgid "For chats you are not looking at. Muted chats stay quiet."
+msgstr "Para los chats que no estás mirando. Los chats silenciados no avisan."
+
+#: src/ui/settings.rs:421
+msgid "When off, only mentions and replies to you make a sound."
+msgstr "Si está desactivado, solo suenan las menciones y las respuestas a ti."
+
+#: src/ui/settings.rs:431
+msgid "Off for your account, so only groups get them."
+msgstr "Desactivadas en tu cuenta, así que solo las reciben los grupos."
+
+#: src/ui/settings.rs:433
+msgid "Let people see when you read their messages."
+msgstr "Permite que otros vean cuándo lees sus mensajes."
+
+#: src/ui/settings.rs:451
+msgid ""
+"Could not load your account privacy. Trying again when ZapFast reconnects."
+msgstr ""
+"No se pudo cargar la privacidad de tu cuenta. Se reintentará cuando ZapFast "
+"se vuelva a conectar."
+
+#: src/ui/settings.rs:456
+msgid "Connect to WhatsApp to change your account privacy."
+msgstr "Conéctate a WhatsApp para cambiar la privacidad de tu cuenta."
+
+#: src/ui/settings.rs:504
+msgid "System"
+msgstr "Sistema"
+
+#: src/ui/settings.rs:507
+msgid "Quit from the tray or with Ctrl+Q."
+msgstr "Sal desde la bandeja del sistema o con Ctrl+Q."
+
+#: src/ui/settings.rs:513
+msgid "Starts in the tray, without a window."
+msgstr "Se inicia en la bandeja del sistema, sin ventana."
+
+#: src/ui/settings.rs:539
+msgid "Asks GitHub once a day, sending only the ZapFast version."
+msgstr "Consulta GitHub una vez al día y solo envía la versión de ZapFast."
+
+#: src/ui/settings.rs:547
+msgid ""
+"You still choose when to restart. Package managers and Flatpak update "
+"ZapFast themselves."
+msgstr ""
+"Tú decides cuándo reiniciar. Los gestores de paquetes y Flatpak actualizan "
+"ZapFast por su cuenta."
+
+#: src/ui/settings.rs:560
+#, rust-format
+msgid "Using {proxy} from the environment."
+msgstr "Se usa {proxy} del entorno."
+
+#: src/ui/settings.rs:568
+msgid "For WhatsApp, media, and updates. Empty uses ALL_PROXY or HTTPS_PROXY."
+msgstr ""
+"Para WhatsApp, multimedia y actualizaciones. Vacío usa ALL_PROXY o "
+"HTTPS_PROXY."
+
+#: src/ui/settings.rs:595
+msgid "For GIF search. Replaces the key this build includes."
+msgstr "Para buscar GIF. Sustituye la clave incluida en esta versión."
+
+#: src/ui/settings.rs:600
+msgid "For GIF search. Get a free key at developers.giphy.com."
+msgstr "Para buscar GIF. Consigue una clave gratuita en developers.giphy.com."
+
+#: src/ui/settings.rs:647
+msgid "Downloads"
+msgstr "Descargas"
+
+#: src/ui/settings.rs:683
+msgid "Log"
+msgstr "Registro"
+
+#: src/ui/settings.rs:1306
+msgid "When a group mentions you or replies to you."
+msgstr "Cuando alguien te menciona o te responde en un grupo."
+
+#: src/app.rs:5201
+msgid "Copied image"
+msgstr "Imagen copiada"
+
+#: src/app.rs:5204 src/app.rs:5209
+msgid "Failed to copy image"
+msgstr "Error al copiar la imagen"
+
+#: src/privacy.rs:58
+msgid "Who can add you to groups."
+msgstr "Quién puede añadirte a grupos."
+
+#: src/privacy.rs:60
+msgid "For your whole account. Groups always send them."
+msgstr "Para toda tu cuenta. Los grupos siempre las envían."
+
+#: src/ui/image_preview.rs:61 src/ui/image_preview.rs:155
+msgid "Copy image"
+msgstr "Copiar imagen"
+
+#: src/ui/image_preview.rs:158
+msgid "Open in another app"
+msgstr "Abrir en otra aplicación"
+
 #~ msgid "Search in this chat"
 #~ msgstr "Buscar en este chat"
 

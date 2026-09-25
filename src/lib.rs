@@ -10,6 +10,7 @@ pub mod bidi;
 pub mod chat_index;
 #[cfg(any(test, feature = "demo"))]
 pub mod demo;
+pub mod desktop_background;
 pub mod diagnostics;
 pub mod emoji;
 pub mod emoji_words;
@@ -32,19 +33,12 @@ pub mod settings;
 pub mod single_instance;
 pub mod sticker_meta;
 pub mod sticker_search;
-pub mod system_fonts;
 pub mod theme;
 pub mod timestretch;
 pub mod transcript;
-#[cfg(target_os = "linux")]
-pub mod tray;
-#[cfg(not(target_os = "linux"))]
-#[path = "tray_native.rs"]
-pub mod tray;
 pub mod ui;
 pub mod updates;
 pub mod util;
 pub mod video;
 pub mod voice;
-pub mod vsync;
 pub mod wallpaper;

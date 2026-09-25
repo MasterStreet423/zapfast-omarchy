@@ -304,36 +304,31 @@ pub struct Settings {
     pub custom_theme: Option<String>,
     #[serde(
         default,
-        deserialize_with = "crate::theme::custom::read_cached_theme",
+        deserialize_with = "fastframe_theme::read_cached_theme",
         skip_serializing_if = "Option::is_none"
     )]
-    pub custom_theme_cache: Option<crate::theme::custom::CustomTheme>,
+    pub custom_theme_cache: Option<crate::theme::CustomTheme>,
     #[serde(
         default,
-        deserialize_with = "crate::theme::custom::read_cached_theme",
+        deserialize_with = "fastframe_theme::read_cached_theme",
         skip_serializing_if = "Option::is_none"
     )]
-    pub system_theme_cache: Option<crate::theme::custom::CustomTheme>,
+    pub system_theme_cache: Option<crate::theme::CustomTheme>,
     /// egui zoom factor.
     pub zoom: f32,
     pub sidebar_width: f32,
     /// Width of the search pane beside the open chat.
     pub search_pane_width: f32,
-    /// Hiding the chat list collapses it to avatars instead of removing it.
-    pub collapse_chat_list: bool,
-    /// Whether Enter sends and Shift+Enter adds a line. Off swaps them.
+    /// Whether Enter sends. Off, Enter adds a line and Ctrl+Enter (Cmd+Enter
+    /// on macOS) sends.
     pub enter_sends: bool,
     /// Send read receipts, subject to the account privacy setting.
     pub send_read_receipts: bool,
-    /// Show each label as its own filter chip instead of one Labels menu chip.
-    pub label_chips: bool,
     /// Send typing state while composing.
     pub send_typing: bool,
     /// Download attachments when they enter view instead of on click.
     #[serde(alias = "auto_download_images")]
     pub auto_download: bool,
-    /// Show sender avatars outside groups too.
-    pub show_sender_pictures: bool,
     /// Show the default doodle wallpaper behind conversations.
     pub show_wallpaper: bool,
     /// Colour selected in the wallpaper picker.
@@ -345,6 +340,8 @@ pub struct Settings {
     pub chat_wallpaper: bool,
     /// Last open chat, restored at startup.
     pub last_chat: Option<String>,
+    /// The hint bar under the composer, hidden with its × and shown again
+    /// from the Keyboard shortcuts dialog.
     pub show_shortcut_hints: bool,
     /// Recently used emoji, newest first.
     pub recent_emoji: Vec<String>,
@@ -374,15 +371,19 @@ pub struct Settings {
     pub check_for_updates: bool,
     /// Download verified updates in the background; restarting remains explicit.
     pub download_updates_automatically: bool,
-    /// Prefer address-book names over public profile names.
-    pub names_from_contacts: bool,
     /// Voice and audio playback speed multiplier.
     pub voice_speed: f32,
-    /// Pause other apps' media while recording a voice message.
-    pub pause_media_while_recording: bool,
-    /// Pause other apps' media while a voice or audio message plays.
-    pub pause_media_while_playing: bool,
-    /// Also add saved contacts to the phone's address book.
+    /// Pause other apps' media while recording, or while a voice message,
+    /// audio, or video plays with sound.
+    pub pause_other_media: bool,
+    /// The two switches `pause_other_media` replaced, read once and folded
+    /// into it by [`Settings::load`].
+    #[serde(skip_serializing)]
+    pub pause_media_while_recording: Option<bool>,
+    #[serde(skip_serializing)]
+    pub pause_media_while_playing: Option<bool>,
+    /// The last choice of the new-contact dialog's "Save to phone" box, which
+    /// starts the next one and applies when a contact is renamed.
     pub save_contacts_to_phone: bool,
     /// Legacy plaintext code, accepted once and rewritten as a verifier.
     #[serde(skip_serializing)]
@@ -404,13 +405,10 @@ impl Default for Settings {
             zoom: 1.0,
             sidebar_width: 320.0,
             search_pane_width: 380.0,
-            collapse_chat_list: false,
             enter_sends: true,
             send_read_receipts: true,
-            label_chips: false,
             send_typing: true,
             auto_download: true,
-            show_sender_pictures: false,
             show_wallpaper: true,
             wallpaper_color: WallpaperColor::default(),
             dark_wallpaper_color: WallpaperColor::Black,
@@ -429,11 +427,11 @@ impl Default for Settings {
             proxy: String::new(),
             check_for_updates: true,
             download_updates_automatically: false,
-            names_from_contacts: true,
             save_contacts_to_phone: true,
             voice_speed: 1.0,
-            pause_media_while_recording: true,
-            pause_media_while_playing: true,
+            pause_other_media: true,
+            pause_media_while_recording: None,
+            pause_media_while_playing: None,
             chat_lock_code: None,
             chat_lock_code_hash: None,
             chat_lock_hint_dismissed: false,
@@ -484,6 +482,7 @@ impl Settings {
         match std::fs::read_to_string(path) {
             Ok(contents) => match serde_json::from_str::<Self>(&contents) {
                 Ok(mut settings) => {
+                    settings.fold_legacy_media_pause();
                     if let Some(code) = settings.chat_lock_code.take() {
                         settings.set_chat_lock_code(Some(&code));
                         if let Err(error) = settings.save(path) {
@@ -514,6 +513,19 @@ impl Settings {
         let temp = path.with_extension("json.tmp");
         std::fs::write(&temp, contents)?;
         std::fs::rename(&temp, path)
+    }
+
+    /// Folds the former recording and playback switches into
+    /// `pause_other_media`. A file that still has them was last written by a
+    /// version without the merged switch, so they win: media keeps pausing
+    /// only if neither was turned off, which never pauses music for someone
+    /// who asked it not to be. The next save drops them.
+    fn fold_legacy_media_pause(&mut self) {
+        let recording = self.pause_media_while_recording.take();
+        let playing = self.pause_media_while_playing.take();
+        if recording.is_some() || playing.is_some() {
+            self.pause_other_media = recording.unwrap_or(true) && playing.unwrap_or(true);
+        }
     }
 
     pub fn set_chat_lock_code(&mut self, code: Option<&str>) {
@@ -597,10 +609,65 @@ mod tests {
         assert!(!parsed.download_updates_automatically);
         assert!(parsed.show_wallpaper);
         assert_eq!(parsed.wallpaper_color, WallpaperColor::Beige);
-        assert!(
-            !parsed.collapse_chat_list,
-            "hiding the list keeps removing it until asked otherwise"
+        assert!(parsed.pause_other_media);
+    }
+
+    fn load_from(contents: &str) -> (Settings, serde_json::Value) {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("settings.json");
+        std::fs::write(&path, contents).unwrap();
+        let settings = Settings::load(&path);
+        settings.save(&path).unwrap();
+        let stored = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        (settings, stored)
+    }
+
+    #[test]
+    fn removed_settings_are_ignored_and_dropped_on_save() {
+        let (settings, stored) = load_from(
+            r#"{"enter_sends":false,"label_chips":true,"show_sender_pictures":true,
+                "names_from_contacts":false,"collapse_chat_list":false,
+                "save_contacts_to_phone":false}"#,
         );
+        assert!(!settings.enter_sends, "the rest of the file still loads");
+        assert!(
+            !settings.save_contacts_to_phone,
+            "the old switch starts the new-contact box"
+        );
+        for key in [
+            "label_chips",
+            "show_sender_pictures",
+            "names_from_contacts",
+            "collapse_chat_list",
+            "pause_media_while_recording",
+            "pause_media_while_playing",
+        ] {
+            assert!(stored.get(key).is_none(), "{key} is dropped on save");
+        }
+        assert_eq!(stored["pause_other_media"], true);
+    }
+
+    #[test]
+    fn the_two_media_pause_switches_merge_into_one() {
+        let merged = |contents: &str| {
+            let (settings, stored) = load_from(contents);
+            assert!(stored.get("pause_media_while_recording").is_none());
+            assert!(stored.get("pause_media_while_playing").is_none());
+            settings.pause_other_media
+        };
+        assert!(merged(
+            r#"{"pause_media_while_recording":true,"pause_media_while_playing":true}"#
+        ));
+        assert!(!merged(
+            r#"{"pause_media_while_recording":false,"pause_media_while_playing":true}"#
+        ));
+        assert!(!merged(
+            r#"{"pause_media_while_recording":true,"pause_media_while_playing":false}"#
+        ));
+        assert!(!merged(r#"{"pause_media_while_playing":false}"#));
+        assert!(merged(r#"{"pause_media_while_recording":true}"#));
+        assert!(merged("{}"), "on by default");
+        assert!(!merged(r#"{"pause_other_media":false}"#));
     }
 
     #[test]
@@ -619,7 +686,7 @@ mod tests {
             zoom: 1.25,
             enter_sends: false,
             voice_speed: 1.5,
-            collapse_chat_list: true,
+            pause_other_media: false,
             interface_language: Some(crate::i18n::Locale::German),
             message_sound: NotificationSound::None,
             mention_sound: NotificationSound::Custom("/sounds/ding.wav".into()),

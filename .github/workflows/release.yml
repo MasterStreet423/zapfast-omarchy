@@ -71,10 +71,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libxkbcommon-dev libwayland-dev libgl1-mesa-dev libasound2-dev cmake perl
-      - uses: Swatinem/rust-cache@v2
-        with:
-          key: ${{ matrix.target }}
-
+      # No compiler cache: published binaries never build from outputs
+      # restored from an Actions cache.
       - run: cargo build --locked --release --target ${{ matrix.target }}
 
       - name: Package
@@ -153,10 +151,7 @@ jobs:
         with:
           targets: aarch64-apple-darwin,x86_64-apple-darwin
       - run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
-      - uses: Swatinem/rust-cache@v2
-        with:
-          key: macos-universal
-
+      # No compiler cache, as in the build job above.
       - name: Build both architectures
         run: |
           cargo build --locked --release --target aarch64-apple-darwin

@@ -5,12 +5,52 @@
 
 use egui::{Color32, CornerRadius, Response, Sense, Stroke, Vec2};
 
-pub mod custom;
-#[cfg(target_os = "linux")]
-mod omarchy;
-pub(crate) mod presets;
-#[cfg(target_os = "linux")]
-mod watch;
+/// A local JSON palette, known by its filename in the themes directory.
+pub type CustomTheme = fastframe_theme::CustomTheme<Palette>;
+
+/// The palettes Settings offers: local files, the shared presets, and on
+/// Linux the live Omarchy palette.
+pub type Catalog = fastframe_theme::Catalog<Palette>;
+
+/// What a normal launch adds to the catalogue. Demos and tests leave it out
+/// and stay isolated from the desktop and its files.
+pub const DESKTOP_THEMES: fastframe_theme::DesktopThemes = fastframe_theme::DesktopThemes {
+    slug: "zapfast",
+    omarchy_template: include_str!("../contrib/omarchy/zapfast.json.tpl"),
+    presets: true,
+};
+
+/// The shared palettes, as ZapFast reads them.
+pub fn presets() -> impl Iterator<Item = CustomTheme> {
+    fastframe_theme::presets::themes::<Palette>()
+}
+
+/// What the theme setting says under it while the catalogue loads or when
+/// something went wrong.
+pub fn theme_status(status: fastframe_theme::Status) -> &'static str {
+    use fastframe_theme::{Problem, Status};
+    match status {
+        Status::Loading => "Loading local themes…",
+        Status::SelectedUnavailable => {
+            "The selected theme is unavailable. Keeping the last usable appearance. See the log for details."
+        }
+        Status::Problem(Problem::Unreadable) => {
+            "The themes folder could not be read. See the log for details."
+        }
+        Status::Problem(Problem::TooManyEntries) => {
+            "The themes folder has more than 512 entries. Keep fewer files there to list the custom palettes."
+        }
+        Status::Problem(Problem::TooManyThemes) => {
+            "Only 128 custom palettes can be listed. Keep fewer JSON files in the themes folder to see the rest."
+        }
+        Status::Problem(Problem::OmarchyUnreadable) => {
+            "The Omarchy palette could not be loaded. Keeping the last usable appearance. See the log for details."
+        }
+        Status::Problem(Problem::LoaderFailed | _) => {
+            "Custom themes could not be loaded. Run zapfast reload-themes to try again."
+        }
+    }
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Palette {
@@ -139,6 +179,69 @@ impl Palette {
     }
 }
 
+impl fastframe_theme::Palette for Palette {
+    fn base(base: fastframe_theme::Base) -> Self {
+        match base {
+            fastframe_theme::Base::Dark => Self::dark(),
+            fastframe_theme::Base::Light => Self::light(),
+        }
+    }
+
+    fn set(&mut self, name: &str, color: Color32) -> bool {
+        match name {
+            "window" => self.window = color,
+            "panel" => self.panel = color,
+            "surface" => self.surface = color,
+            "surface_hover" => self.surface_hover = color,
+            "surface_active" => self.surface_active = color,
+            "outline" => self.outline = color,
+            "text" => self.text = color,
+            "secondary" => self.secondary = color,
+            "dim" => self.dim = color,
+            "accent" => self.accent = color,
+            "accent_hover" => self.accent_hover = color,
+            "on_accent" => self.on_accent = color,
+            "danger" => self.danger = color,
+            "warning" => self.warning = color,
+            "overlay" => self.overlay = color,
+            "shadow" => self.shadow = color,
+            "chat" => self.chat = color,
+            "bubble_in" => self.bubble_in = color,
+            "bubble_out" => self.bubble_out = color,
+            "link" => self.link = color,
+            "read" => self.read = color,
+            _ => return false,
+        }
+        true
+    }
+
+    /// Spotifast palettes share the sixteen interface colours. Derive the
+    /// chat-only colours when importing one, while keeping explicit ZapFast
+    /// overrides.
+    fn derive(&mut self, given: &std::collections::BTreeSet<&str>) {
+        if given.contains("window") && !given.contains("chat") {
+            self.chat = self.window;
+        }
+        if given.contains("surface") && !given.contains("bubble_in") {
+            self.bubble_in = self.surface;
+        }
+        if given.contains("accent") {
+            if !given.contains("bubble_out") {
+                self.bubble_out = self.surface.lerp_to_gamma(self.accent, 0.18);
+            }
+            if !given.contains("link") {
+                self.link = self.accent;
+            }
+            if !given.contains("read") {
+                self.read = self.accent;
+            }
+        }
+        if given.contains("panel") && !given.contains("overlay") {
+            self.overlay = self.panel;
+        }
+    }
+}
+
 /// Converts HSL to color bytes for non-egui drawing.
 pub fn hsl_rgb(hue: f32, saturation: f32, lightness: f32) -> [u8; 3] {
     let color = hsl(hue, saturation, lightness);
@@ -168,31 +271,29 @@ pub const FOCUS_STROKE_WIDTH: f32 = 1.0;
 pub const ROW_HEIGHT: f32 = 68.0;
 pub const TOP_BAR_HEIGHT: f32 = 60.0;
 
-const INTER_MEDIUM: &str = "inter-medium";
-const INTER_SEMIBOLD: &str = "inter-semibold";
-const INTER_BOLD: &str = "inter-bold";
-
 pub fn regular(size: f32) -> egui::FontId {
-    egui::FontId::new(size, egui::FontFamily::Proportional)
+    fastframe_fonts::Weight::Regular.font_id(size)
 }
 
 pub fn medium(size: f32) -> egui::FontId {
-    egui::FontId::new(size, egui::FontFamily::Name(INTER_MEDIUM.into()))
+    fastframe_fonts::Weight::Medium.font_id(size)
 }
 
 pub fn semibold(size: f32) -> egui::FontId {
-    egui::FontId::new(size, egui::FontFamily::Name(INTER_SEMIBOLD.into()))
+    fastframe_fonts::Weight::SemiBold.font_id(size)
 }
 
 pub fn bold(size: f32) -> egui::FontId {
-    egui::FontId::new(size, egui::FontFamily::Name(INTER_BOLD.into()))
+    fastframe_fonts::Weight::Bold.font_id(size)
 }
 
 /// Installs fonts, icons, and base style.
 pub fn install(ctx: &egui::Context) {
     install_fonts(ctx);
-    register_icons(ctx);
     egui_extras::install_image_loaders(ctx);
+    // Served by a loader that never forgets them, so `reduce_texture_memory`
+    // below cannot leave an icon drawn at two sizes without bytes.
+    fastframe_icons::install::<Icon>(ctx);
     // Drop the raw bytes and the decoded pixels once a texture is on the GPU.
     // egui keeps all three copies of every image otherwise, and only ever
     // evicts the textures of SVGs.
@@ -209,6 +310,10 @@ pub fn apply(ctx: &egui::Context, palette: &Palette) {
         egui::Visuals::light()
     };
     visuals.dark_mode = palette.dark;
+    // Hinting, sub-pixel positions and glyph coverage as the desktop draws
+    // them. On Linux coverage stays linear in both themes, as FreeType and
+    // cairo draw it; egui's dark curve (2c - c²) made text heavier than GTK's.
+    text_rendering().apply_to_visuals(visuals);
     visuals.panel_fill = palette.panel;
     visuals.window_fill = palette.overlay;
     visuals.extreme_bg_color = palette.surface;
@@ -300,278 +405,150 @@ pub fn apply(ctx: &egui::Context, palette: &Palette) {
     ctx.set_global_style(style);
 }
 
+/// Inter at four weights, egui's own fonts behind it, and installed fonts
+/// for the scripts Inter lacks, hinted as the desktop asks.
 fn install_fonts(ctx: &egui::Context) {
-    use egui::epaint::text::VariationCoords;
-    use egui::{FontData, FontDefinitions, FontFamily};
-    use std::sync::Arc;
-
-    let mut fonts = FontDefinitions::default();
-    let inter = include_bytes!("../assets/fonts/InterVariable.ttf");
-    let weighted = |weight: f32| {
-        let mut data = FontData::from_static(inter);
-        data.tweak.coords = VariationCoords::new([(b"wght", weight)]);
-        Arc::new(data)
-    };
-    fonts.font_data.insert("inter".to_owned(), weighted(400.0));
-    fonts
-        .font_data
-        .insert(INTER_MEDIUM.to_owned(), weighted(500.0));
-    fonts
-        .font_data
-        .insert(INTER_SEMIBOLD.to_owned(), weighted(600.0));
-    fonts
-        .font_data
-        .insert(INTER_BOLD.to_owned(), weighted(700.0));
-
-    fonts
-        .families
-        .entry(FontFamily::Proportional)
-        .or_default()
-        .insert(0, "inter".to_owned());
-    let fallbacks: Vec<String> = fonts.families[&FontFamily::Proportional]
-        .iter()
-        .skip(1)
-        .cloned()
-        .collect();
-    for name in [INTER_MEDIUM, INTER_SEMIBOLD, INTER_BOLD] {
-        let mut family = vec![name.to_owned()];
-        family.extend(fallbacks.iter().cloned());
-        fonts.families.insert(FontFamily::Name(name.into()), family);
-    }
-
-    // Append system fallbacks after Inter and emoji fonts.
-    for font in crate::system_fonts::fallbacks() {
-        let mut data = FontData::from_static(&font.bytes);
-        data.index = font.index;
-        data.tweak.scale = font.scale;
-        fonts.font_data.insert(font.name.clone(), Arc::new(data));
-        for family in fonts.families.values_mut() {
-            family.push(font.name.clone());
-        }
-    }
-
+    let mut fonts = fastframe_fonts::FontSetup::default().definitions();
+    text_rendering().apply_to(&mut fonts);
     ctx.set_fonts(fonts);
 }
 
-macro_rules! icons {
-    ($($variant:ident => $file:literal),* $(,)?) => {
-        &[$((
-            Icon::$variant,
-            concat!("bytes://zapfast-icon-", $file, ".svg"),
-            include_bytes!(concat!("../assets/icons/", $file, ".svg")).as_slice(),
-        )),*]
-    };
+/// The desktop's text rendering: read once, on the first window, and kept
+/// current by [`follow_text_rendering`].
+static TEXT_RENDERING: std::sync::Mutex<Option<fastframe_text::TextRendering>> =
+    std::sync::Mutex::new(None);
+
+/// Set when the desktop's text rendering changed and no window has applied
+/// it yet.
+static TEXT_RENDERING_CHANGED: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
+/// How the desktop draws text. The first call reads its settings, which can
+/// block for about a second on Linux when the desktop portal does not answer;
+/// tests use the platform's defaults, so the machine does not decide them.
+pub fn text_rendering() -> fastframe_text::TextRendering {
+    *TEXT_RENDERING
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .get_or_insert_with(|| {
+            if cfg!(test) {
+                fastframe_text::TextRendering::platform_default()
+            } else {
+                fastframe_text::detect()
+            }
+        })
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
-pub enum Icon {
-    Archive,
-    ArrowDown,
-    ArrowLeft,
-    Ban,
-    Bell,
-    BellOff,
-    Calendar,
-    Check,
-    CheckCheck,
-    ChevronDown,
-    ChevronLeft,
-    ChevronRight,
-    ChevronUp,
-    ListChecks,
-    CircleAlert,
-    CircleCheck,
-    CircleX,
-    Clock,
-    Contact,
-    Copy,
-    Download,
-    Timer,
-    Ellipsis,
-    ExternalLink,
-    Eye,
-    EyeOff,
-    FileText,
-    Forward,
-    Gif,
-    Heart,
-    Image,
-    Info,
-    Keyboard,
-    Lock,
-    LockOpen,
-    LogOut,
-    MapPin,
-    Maximize,
-    MessageCircle,
-    Mic,
-    Minimize,
-    Minus,
-    Monitor,
-    Moon,
-    PanelLeft,
-    Paperclip,
-    Pause,
-    Pencil,
-    Phone,
-    Pin,
-    PinOff,
-    Play,
-    Plus,
-    QrCode,
-    Refresh,
-    Reply,
-    Search,
-    Send,
-    Settings,
-    Smartphone,
-    Smile,
-    SquarePen,
-    Star,
-    StarOff,
-    Sticker,
-    Sun,
-    Tag,
-    Trash,
-    User,
-    Users,
-    Video,
-    Volume2,
-    VolumeX,
-    WifiOff,
-    X,
-}
-
-const ICONS: &[(Icon, &str, &[u8])] = icons! {
-    Archive => "archive",
-    ArrowDown => "arrow-down",
-    ArrowLeft => "arrow-left",
-    Ban => "ban",
-    Bell => "bell",
-    BellOff => "bell-off",
-    Calendar => "calendar",
-    Check => "check",
-    CheckCheck => "check-check",
-    ChevronDown => "chevron-down",
-    ChevronLeft => "chevron-left",
-    ChevronRight => "chevron-right",
-    ChevronUp => "chevron-up",
-    ListChecks => "list-checks",
-    CircleAlert => "circle-alert",
-    CircleCheck => "circle-check",
-    CircleX => "circle-x",
-    Clock => "clock",
-    Contact => "contact",
-    Copy => "copy",
-    Download => "download",
-    Timer => "timer",
-    Ellipsis => "ellipsis",
-    ExternalLink => "external-link",
-    Eye => "eye",
-    EyeOff => "eye-off",
-    FileText => "file-text",
-    Forward => "forward",
-    Gif => "gif",
-    Heart => "heart",
-    Image => "image",
-    Info => "info",
-    Keyboard => "keyboard",
-    Lock => "lock",
-    LockOpen => "lock-open",
-    LogOut => "log-out",
-    MapPin => "map-pin",
-    Maximize => "maximize-2",
-    MessageCircle => "message-circle",
-    Mic => "mic",
-    Minimize => "minimize-2",
-    Minus => "minus",
-    Monitor => "monitor",
-    Moon => "moon",
-    PanelLeft => "panel-left",
-    Paperclip => "paperclip",
-    Pause => "pause",
-    Pencil => "pencil",
-    Phone => "phone",
-    Pin => "pin",
-    PinOff => "pin-off",
-    Play => "play",
-    Plus => "plus",
-    QrCode => "qr-code",
-    Refresh => "refresh-cw",
-    Reply => "reply",
-    Search => "search",
-    Send => "send",
-    Settings => "settings",
-    Smartphone => "smartphone",
-    Smile => "smile",
-    SquarePen => "square-pen",
-    Star => "star",
-    StarOff => "star-off",
-    Sticker => "sticker",
-    Sun => "sun",
-    Tag => "tag",
-    Trash => "trash-2",
-    User => "user",
-    Users => "users",
-    Video => "video",
-    Volume2 => "volume-2",
-    VolumeX => "volume-x",
-    WifiOff => "wifi-off",
-    X => "x",
-};
-
-impl Icon {
-    pub fn uri(self) -> &'static str {
-        ICONS
-            .iter()
-            .find(|(icon, _, _)| *icon == self)
-            .map_or("", |(_, uri, _)| *uri)
-    }
-
-    pub fn image(self, color: Color32, size: f32) -> egui::Image<'static> {
-        egui::Image::new(self.uri())
-            .tint(color)
-            .fit_to_exact_size(Vec2::splat(size))
+/// Follows changes to the desktop's font settings (the desktop portal on
+/// Linux) and calls `wake` so a window picks them up through
+/// [`apply_text_rendering_change`]. Elsewhere, and without a portal, the
+/// settings read at start stay.
+pub fn follow_text_rendering(wake: impl Fn() + Send + 'static) {
+    let current = text_rendering();
+    let watched = fastframe_text::watch::watch(current, move |rendering| {
+        *TEXT_RENDERING
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(rendering);
+        TEXT_RENDERING_CHANGED.store(true, std::sync::atomic::Ordering::Release);
+        wake();
+    });
+    if let Err(error) = watched {
+        log::debug!("not following the desktop's font settings: {error}");
     }
 }
 
-/// Serves the embedded icon SVGs for the life of the context.
-///
-/// `reduce_texture_memory` makes egui drop an image's bytes once its texture
-/// is uploaded. An icon drawn at more than one size loses that texture when
-/// egui prunes the extra size variants, and with the bytes gone the next draw
-/// finds neither and paints egui's red "failed" placeholder. A loader whose
-/// `forget` does nothing keeps them: the icons are 71 small SVGs, so holding
-/// them costs nothing next to a single photo.
-struct IconBytes;
-
-impl egui::load::BytesLoader for IconBytes {
-    fn id(&self) -> &str {
-        egui::generate_loader_id!(IconBytes)
+/// Reinstalls the fonts when the desktop's text rendering changed since the
+/// last call. Returns whether it did, so the caller reapplies its visuals.
+pub fn apply_text_rendering_change(ctx: &egui::Context) -> bool {
+    let changed = TEXT_RENDERING_CHANGED.swap(false, std::sync::atomic::Ordering::AcqRel);
+    if changed {
+        install_fonts(ctx);
     }
-
-    fn load(&self, _: &egui::Context, uri: &str) -> egui::load::BytesLoadResult {
-        match ICONS.iter().find(|(_, icon, _)| *icon == uri) {
-            Some((_, _, bytes)) => Ok(egui::load::BytesPoll::Ready {
-                size: None,
-                bytes: (*bytes).into(),
-                mime: Some("image/svg+xml".to_owned()),
-            }),
-            None => Err(egui::load::LoadError::NotSupported),
-        }
-    }
-
-    fn forget(&self, _uri: &str) {}
-
-    fn forget_all(&self) {}
-
-    fn byte_size(&self) -> usize {
-        ICONS.iter().map(|(_, _, bytes)| bytes.len()).sum()
-    }
+    changed
 }
 
-fn register_icons(ctx: &egui::Context) {
-    ctx.add_bytes_loader(std::sync::Arc::new(IconBytes));
+fastframe_icons::icons! {
+    /// Every icon the interface draws. Icons Spotifast ships too come from
+    /// fastframe-icons (`lucide`); the rest are ZapFast's own files.
+    pub enum Icon {
+        prefix: "zapfast-icon-",
+        directory: "../assets/icons/",
+        Archive => "archive",
+        ArrowDown => "arrow-down",
+        ArrowLeft => lucide "arrow-left",
+        Ban => "ban",
+        Bell => "bell",
+        BellOff => "bell-off",
+        Calendar => "calendar",
+        Check => lucide "check",
+        CheckCheck => "check-check",
+        ChevronDown => lucide "chevron-down",
+        ChevronLeft => lucide "chevron-left",
+        ChevronRight => lucide "chevron-right",
+        ChevronUp => lucide "chevron-up",
+        ListChecks => "list-checks",
+        CircleAlert => lucide "circle-alert",
+        CircleCheck => lucide "circle-check",
+        CircleX => lucide "circle-x",
+        Clock => lucide "clock",
+        Contact => "contact",
+        Copy => lucide "copy",
+        Download => "download",
+        Timer => "timer",
+        Ellipsis => lucide "ellipsis",
+        ExternalLink => lucide "external-link",
+        Eye => lucide "eye",
+        EyeOff => lucide "eye-off",
+        FileText => "file-text",
+        Forward => "forward",
+        Gif => "gif",
+        Heart => "heart",
+        Image => "image",
+        Info => lucide "info",
+        Keyboard => "keyboard",
+        Lock => lucide "lock",
+        LockOpen => "lock-open",
+        LogOut => lucide "log-out",
+        MapPin => "map-pin",
+        Maximize => lucide "maximize-2",
+        MessageCircle => "message-circle",
+        Mic => lucide "mic",
+        Minimize => lucide "minimize-2",
+        Minus => lucide "minus",
+        Monitor => lucide "monitor",
+        Moon => lucide "moon",
+        PanelLeft => lucide "panel-left",
+        Paperclip => "paperclip",
+        Pause => lucide "pause",
+        Pencil => lucide "pencil",
+        Phone => "phone",
+        Pin => lucide "pin",
+        PinOff => lucide "pin-off",
+        Play => lucide "play",
+        Plus => lucide "plus",
+        QrCode => "qr-code",
+        Refresh => lucide "refresh-cw",
+        Reply => "reply",
+        Search => lucide "search",
+        Send => "send",
+        Settings => lucide "settings",
+        Smartphone => lucide "smartphone",
+        Smile => "smile",
+        SquarePen => lucide "square-pen",
+        Star => "star",
+        StarOff => "star-off",
+        Sticker => "sticker",
+        Sun => lucide "sun",
+        Tag => "tag",
+        Trash => lucide "trash-2",
+        User => lucide "user",
+        Users => lucide "users",
+        Video => "video",
+        Volume2 => lucide "volume-2",
+        VolumeX => lucide "volume-x",
+        WifiOff => "wifi-off",
+        X => lucide "x",
+    }
 }
 
 /// A static icon.
@@ -994,8 +971,12 @@ pub fn preview_macos(ctx: &egui::Context) {
 
 /// Horizontal clearance for native buttons; they do not scale with UI zoom.
 pub fn traffic_light_inset(ctx: &egui::Context) -> f32 {
-    if macos_chrome(ctx) && !ctx.input(|input| input.viewport().fullscreen.unwrap_or(false)) {
-        84.0 / ctx.zoom_factor()
+    if cfg!(target_os = "macos") {
+        fastframe_macos::traffic_light_inset(ctx)
+    } else if macos_chrome(ctx) && !ctx.input(|input| input.viewport().fullscreen.unwrap_or(false))
+    {
+        // The demo's preview of the macOS layout on other platforms.
+        fastframe_macos::TRAFFIC_LIGHTS_WIDTH / ctx.zoom_factor()
     } else {
         0.0
     }
@@ -1014,65 +995,28 @@ pub fn titlebar_inset(ctx: &egui::Context) -> f32 {
 mod tests {
     use super::*;
 
+    /// The palette decides the theme, and the desktop's rendering its text
+    /// options: linear coverage in both themes on Linux, as GTK draws it.
     #[test]
-    fn inter_figures_are_tabular() {
-        let ctx = egui::Context::default();
-        install(&ctx);
-        let mut output = ctx.run_ui(egui::RawInput::default(), |ui| {
-            let width = |text: &str| {
-                ui.painter()
-                    .layout_no_wrap(text.to_owned(), regular(13.0), Color32::WHITE)
-                    .rect
-                    .width()
-            };
-            // With proportional figures "1:11" is far narrower than "8:88",
-            // so timers and durations jitter as they count.
-            assert!(
-                (width("1:11") - width("8:88")).abs() < 0.01,
-                "bundled Inter should draw tabular figures"
+    fn text_follows_the_desktop_rendering_in_both_themes() {
+        let rendering = text_rendering();
+        for palette in [Palette::dark(), Palette::light()] {
+            let ctx = egui::Context::default();
+            apply(&ctx, &palette);
+            let options = ctx.global_style().visuals.text_options;
+            assert_eq!(
+                options.color_transfer_function,
+                rendering.color_transfer_function(palette.dark),
+                "dark: {}",
+                palette.dark
             );
-        });
-        output.textures_delta.clear();
-    }
-
-    #[test]
-    fn every_icon_has_a_file() {
-        for (icon, uri, bytes) in ICONS {
-            assert!(!bytes.is_empty(), "{icon:?} is empty");
-            assert!(uri.ends_with(".svg"));
-            assert_eq!(icon.uri(), *uri);
+            assert_eq!(options.subpixel_binning, rendering.subpixel_positioning);
+            #[cfg(target_os = "linux")]
+            assert_eq!(
+                options.color_transfer_function,
+                egui::epaint::FontColorTransferFunction::Off
+            );
         }
-    }
-
-    /// egui drops an image's bytes after the texture upload when
-    /// `reduce_texture_memory` is on, and then prunes the SVG's extra size
-    /// variants. A loader that survives both is what keeps an icon that is
-    /// drawn at two sizes from falling back to egui's red placeholder.
-    #[test]
-    fn icon_bytes_outlive_forgetting() {
-        use egui::load::{BytesLoader as _, BytesPoll};
-        let loader = IconBytes;
-        let (icon, uri, bytes) = ICONS[0];
-        let served =
-            |loader: &IconBytes, uri: &str| match loader.load(&egui::Context::default(), uri) {
-                Ok(BytesPoll::Ready { bytes, .. }) => Some(bytes),
-                _ => None,
-            };
-        let loaded = served(&loader, uri).expect("the icon loader serves every icon");
-        assert_eq!(&*loaded, bytes, "{icon:?} bytes differ");
-        loader.forget(uri);
-        loader.forget_all();
-        assert!(
-            served(&loader, uri).is_some(),
-            "{icon:?} must survive a forget"
-        );
-        assert!(
-            matches!(
-                loader.load(&egui::Context::default(), "bytes://zapfast-icon-nope.svg"),
-                Err(egui::load::LoadError::NotSupported)
-            ),
-            "other URIs must fall through to the default loader"
-        );
     }
 
     fn assert_readable(name: &str, pairs: &[(&str, Color32, Color32)], target: f32) {
@@ -1129,7 +1073,7 @@ mod tests {
         let palettes = [("dark", Palette::dark()), ("light", Palette::light())]
             .into_iter()
             .map(|(name, palette)| (name.to_owned(), palette))
-            .chain(presets::themes().map(|theme| (theme.filename.clone(), theme.palette)));
+            .chain(presets().map(|theme| (theme.filename.clone(), theme.palette)));
         for (name, palette) in palettes {
             for own in [false, true] {
                 let fill = if own {
@@ -1150,6 +1094,120 @@ mod tests {
                 assert_readable(&name, &[("read ticks", bubble.read, fill)], 3.0);
             }
         }
+    }
+
+    #[test]
+    fn spotifast_palettes_also_colour_the_conversation() {
+        let themes: Vec<_> = presets().collect();
+        assert_eq!(themes.len(), 8);
+        for theme in themes {
+            let palette = theme.palette;
+            assert_eq!(palette.chat, palette.window);
+            assert_eq!(palette.bubble_in, palette.surface);
+            assert_ne!(palette.bubble_out, palette.bubble_in);
+            assert_eq!(palette.link, palette.accent);
+            assert_eq!(
+                palette.dark,
+                !matches!(
+                    theme.filename.as_str(),
+                    "Catppuccin Latte.json" | "Rose Pine Dawn.json"
+                )
+            );
+        }
+    }
+
+    #[test]
+    fn rose_pine_dawn_hovered_primary_buttons_keep_readable_content() {
+        let palette = presets()
+            .find(|theme| theme.filename == "Rose Pine Dawn.json")
+            .unwrap()
+            .palette;
+        let ratio = contrast(palette.on_accent, palette.accent_hover);
+        assert!(ratio >= 4.5, "hover contrast is only {ratio:.2}:1");
+    }
+
+    /// Every colour ZapFast has can be set by name, including the chat
+    /// colours Spotifast's palettes lack; explicit ones win over derived ones.
+    #[test]
+    fn palette_files_set_every_colour_and_keep_explicit_chat_colours() {
+        let palette: Palette = fastframe_theme::parse_palette(
+            r##"{"base":"light","colors":{"window":"#101010","accent":"#203040","chat":"#010203","bubble_out":"#040506","shadow":"#00000080"}}"##,
+        )
+        .unwrap();
+        assert!(!palette.dark);
+        assert_eq!(palette.chat, Color32::from_rgb(1, 2, 3));
+        assert_eq!(palette.bubble_out, Color32::from_rgb(4, 5, 6));
+        assert_eq!(palette.link, Color32::from_rgb(0x20, 0x30, 0x40));
+        assert_eq!(palette.shadow, Color32::from_black_alpha(128));
+        assert_eq!(palette.panel, Palette::light().panel);
+        for name in [
+            "window",
+            "panel",
+            "surface",
+            "surface_hover",
+            "surface_active",
+            "outline",
+            "text",
+            "secondary",
+            "dim",
+            "accent",
+            "accent_hover",
+            "on_accent",
+            "danger",
+            "warning",
+            "overlay",
+            "shadow",
+            "chat",
+            "bubble_in",
+            "bubble_out",
+            "link",
+            "read",
+        ] {
+            let mut palette = Palette::dark();
+            assert!(
+                fastframe_theme::Palette::set(&mut palette, name, Color32::RED),
+                "{name}"
+            );
+        }
+        assert!(
+            fastframe_theme::parse_palette::<Palette>(r##"{"colors":{"typo":"#ffffff"}}"##)
+                .is_err()
+        );
+    }
+
+    /// ZapFast's Omarchy template adds the chat colours to the base ones and
+    /// renders as Omarchy's own renderer does.
+    #[test]
+    fn the_omarchy_template_renders_like_omarchy_in_light_and_dark_themes() {
+        const TEMPLATE: &str = include_str!("../contrib/omarchy/zapfast.json.tpl");
+        for (colors, expected) in [
+            (
+                include_str!("../tests/fixtures/omarchy/catppuccin.tsv"),
+                include_str!("../tests/fixtures/omarchy/catppuccin.json"),
+            ),
+            (
+                include_str!("../tests/fixtures/omarchy/catppuccin-latte.tsv"),
+                include_str!("../tests/fixtures/omarchy/catppuccin-latte.json"),
+            ),
+        ] {
+            let actual =
+                fastframe_theme::omarchy::render_seed::<Palette>(TEMPLATE, colors).unwrap();
+            assert_eq!(
+                serde_json::from_str::<serde_json::Value>(&actual).unwrap(),
+                serde_json::from_str::<serde_json::Value>(expected).unwrap()
+            );
+        }
+        assert_eq!(DESKTOP_THEMES.omarchy_template, TEMPLATE);
+    }
+
+    /// The hook packages install must be the one fastframe-theme describes.
+    /// A Windows checkout may turn its line endings into CRLF.
+    #[test]
+    fn the_shipped_omarchy_hook_has_not_drifted() {
+        assert_eq!(
+            include_str!("../contrib/omarchy/zapfast-theme").replace("\r\n", "\n"),
+            fastframe_theme::omarchy::hook_script("zapfast")
+        );
     }
 
     #[test]

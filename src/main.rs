@@ -12,10 +12,6 @@ use clap::Parser;
 struct Cli {
     #[command(subcommand)]
     command: Option<Control>,
-    #[arg(long, hide = true)]
-    update_receipt: Option<std::path::PathBuf>,
-    #[arg(long, hide = true)]
-    update_error: Option<String>,
     /// Log more from the WhatsApp library.
     #[arg(short, long)]
     verbose: bool,
@@ -127,12 +123,11 @@ fn default_log_filter(verbose: bool) -> &'static str {
 }
 
 fn main() -> eframe::Result<()> {
-    let arguments: Vec<_> = std::env::args_os().collect();
-    if arguments.len() == 3 && arguments[1] == "--apply-update" {
-        return zapfast::updates::install::run_helper(std::path::Path::new(&arguments[2]))
-            .map_err(|error| eframe::Error::AppCreation(error.into()));
-    }
-    let cli = Cli::parse();
+    // First, before parsing the command line or touching any state: run the
+    // update helper when asked (`--apply-update <job>`, then exit), and take
+    // `--update-receipt` and `--update-error` off the command line.
+    let launch = fastframe_update::intercept(&zapfast::updates::CONFIG);
+    let cli = Cli::parse_from(&launch.arguments);
     let discovered = paths::AppDirs::discover();
     if matches!(cli.command, Some(Control::ReloadThemes)) {
         if let Err(error) = single_instance::send(&discovered.runtime, "reload-themes") {
@@ -201,39 +196,20 @@ fn main() -> eframe::Result<()> {
     // directories have been created and secured successfully.
     dirs.ensure()
         .map_err(|error| eframe::Error::AppCreation(error.into()))?;
-    let mut logger =
-        env_logger::Builder::from_env(env_logger::Env::default().default_filter_or(default_filter));
+    let logging = fastframe_log::Logging::new("zapfast", env!("CARGO_PKG_VERSION"))
+        .filter(default_filter)
+        .panic_log(dirs.panic_log())
+        .redact(redact_protocol);
     // Write desktop-session logs to disk. Demo runs use stderr so they do not
     // replace a live session's log.
-    if !demo {
-        match std::fs::File::create(dirs.log_file()) {
-            Ok(file) => {
-                logger.target(env_logger::Target::Pipe(Box::new(Tee(file))));
-            }
-            Err(error) => eprintln!("not keeping a log file: {error}"),
-        }
-    }
-    logger.format(|buffer, record| {
-        use std::io::Write;
-        let message = record.args().to_string();
-        let message = if zapfast::diagnostics::is_protocol_target(record.target())
-            || zapfast::diagnostics::is_protocol_target(record.module_path().unwrap_or_default())
-        {
-            zapfast::diagnostics::protocol_summary(&message)
-        } else {
-            &message
-        };
-        writeln!(
-            buffer,
-            "[{} {} {}] {}",
-            buffer.timestamp(),
-            record.level(),
-            record.target(),
-            message
-        )
-    });
-    logger.init();
-    log_panics(dirs.panic_log());
+    let logging = if demo {
+        logging
+    } else {
+        logging.file(dirs.log_file())
+    };
+    logging
+        .init()
+        .map_err(|error| eframe::Error::AppCreation(error.into()))?;
     let settings = settings::Settings::load(&dirs.settings_file());
     let demo_persistence = demo.then(|| dirs.state.join("window.ron"));
 
@@ -246,7 +222,7 @@ fn main() -> eframe::Result<()> {
     if cli.verbose {
         app.update_arguments.push("--verbose".into());
     }
-    if let Some(error) = cli.update_error {
+    if let Some(error) = launch.error {
         app.toast_error(error);
     }
     if let Some(guard) = &instance {
@@ -271,170 +247,70 @@ fn main() -> eframe::Result<()> {
         let (x, y) = value.split_once(',')?;
         Some(egui::pos2(x.trim().parse().ok()?, y.trim().parse().ok()?))
     });
-    let slot = std::sync::Arc::new(std::sync::Mutex::new(Some(app)));
-
-    let mut update_receipt = cli.update_receipt;
-    // Without a tray there is no way back to a hidden window, so show it.
-    let mut start_hidden = cli.start_hidden
-        && !demo
-        && update_receipt.is_none()
-        && slot
-            .lock()
-            .unwrap_or_else(|p| p.into_inner())
-            .as_ref()
-            .is_some_and(app::App::hides_to_tray);
-
-    // The link, archive, and tray outlive windows. Recreate a window when the
-    // tray, notification, or another launch requests one.
-    loop {
-        if std::mem::take(&mut start_hidden) {
-            slot.lock()
-                .unwrap_or_else(|p| p.into_inner())
-                .as_mut()
-                .expect("application state present")
-                .hide_intent = true;
-        } else {
-            let creator_slot = std::sync::Arc::clone(&slot);
-            let creator_waker = waker.clone();
-            let creator_receipt = update_receipt.take();
+    let mut update_receipt = launch.receipt;
+    // The link, archive, and tray outlive windows. The shell recreates a
+    // window when the tray, a notification, or another launch requests one;
+    // without a tray a hidden start shows the window (App::start_hidden).
+    let start_hidden = cli.start_hidden && !demo && update_receipt.is_none();
+    fastframe_shell::Shell::new(app, &waker)
+        .start_hidden(start_hidden)
+        .idle(fastframe_tray::idle)
+        .run(|lease| {
+            let receipt = update_receipt.take();
             #[cfg(feature = "demo")]
-            let creator_shot = shot.clone();
+            let shot = shot.clone();
             #[cfg(feature = "demo")]
-            let creator_tour_events = cli.demo_tour_events.clone();
-            #[cfg(feature = "demo")]
-            let creator_tour = (
-                tour_script(&cli.demo_tour_script),
-                cli.demo_tour_frames
-                    .clone()
-                    .map(|dir| zapfast::demo::tour::Capture {
-                        dir,
-                        fps: cli.demo_fps.unwrap_or(30),
-                    }),
-            );
+            let tour = cli.demo_tour.then(|| {
+                zapfast::demo::tour::Tour::scripted(
+                    tour_script(&cli.demo_tour_script),
+                    cli.demo_tour_delay.map(std::time::Duration::from_millis),
+                    cli.demo_tour_events.clone(),
+                    cli.demo_tour_frames
+                        .clone()
+                        .map(|dir| zapfast::demo::tour::Capture {
+                            dir,
+                            fps: cli.demo_fps.unwrap_or(30),
+                        }),
+                )
+            });
             eframe::run_native(
                 "ZapFast",
                 native_options(demo_persistence.clone()),
                 Box::new(move |cc| {
-                    creator_waker.attach(&cc.egui_ctx);
-                    let mut app = creator_slot
-                        .lock()
-                        .unwrap_or_else(|p| p.into_inner())
-                        .take()
-                        .expect("application state present");
+                    let mut app = lease.take(&cc.egui_ctx);
                     app.attach(&cc.egui_ctx);
                     #[cfg(feature = "demo")]
                     if cli.demo_macos {
                         zapfast::theme::preview_macos(&cc.egui_ctx);
                     }
                     Ok(Box::new(Shell {
-                        app: Some(app),
+                        app,
                         window_recovery_checked: false,
-                        update_receipt: creator_receipt,
-                        slot: std::sync::Arc::clone(&creator_slot),
+                        update_receipt: receipt,
                         #[cfg(feature = "demo")]
-                        shot: creator_shot,
+                        shot,
                         #[cfg(feature = "demo")]
                         hover: demo_hover,
                         #[cfg(feature = "demo")]
-                        tour: cli.demo_tour.then(|| {
-                            zapfast::demo::tour::Tour::scripted(
-                                creator_tour.0,
-                                cli.demo_tour_delay.map(std::time::Duration::from_millis),
-                                creator_tour_events,
-                                creator_tour.1,
-                            )
-                        }),
+                        tour,
                     }))
                 }),
-            )?;
-            waker.detach();
-        }
-
-        let hide = {
-            let guard = slot.lock().unwrap_or_else(|p| p.into_inner());
-            let app = guard.as_ref().expect("application state present");
-            !app.quit_requested && app.hide_intent
-        };
-        if !hide {
-            break;
-        }
-
-        // Keep updating link, archive, and tray while no window exists.
-        let headless = egui::Context::default();
-        slot.lock()
-            .unwrap_or_else(|p| p.into_inner())
-            .as_mut()
-            .expect("application state present")
-            .window_gone();
-        loop {
-            {
-                let mut guard = slot.lock().unwrap_or_else(|p| p.into_inner());
-                let app = guard.as_mut().expect("application state present");
-                app.background_frame(&headless);
-                if app.quit_requested || app.wants_show {
-                    break;
-                }
-            }
-            zapfast::tray::idle(std::time::Duration::from_millis(150));
-        }
-        let quit = slot
-            .lock()
-            .unwrap_or_else(|p| p.into_inner())
-            .as_ref()
-            .expect("application state present")
-            .quit_requested;
-        if quit {
-            break;
-        }
-    }
-
-    if let Some(mut app) = slot.lock().unwrap_or_else(|p| p.into_inner()).take() {
-        app.shutdown();
-    }
+            )
+        })?;
     drop(instance);
     Ok(())
 }
 
-/// Logger that writes to stderr and the current-run log file.
-struct Tee(std::fs::File);
-
-impl std::io::Write for Tee {
-    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        let _ = std::io::stderr().write_all(buf);
-        self.0.write_all(buf)?;
-        Ok(buf.len())
-    }
-
-    fn flush(&mut self) -> std::io::Result<()> {
-        let _ = std::io::stderr().flush();
-        self.0.flush()
-    }
-}
-
-/// Writes panics to `path` before process exit.
-fn log_panics(path: std::path::PathBuf) {
-    std::panic::set_hook(Box::new(move |info| {
-        let thread = std::thread::current();
-        let entry = format!(
-            "{} zapfast {} on thread {:?}, panic at {} (payload omitted)\n",
-            jiff::Timestamp::now(),
-            env!("CARGO_PKG_VERSION"),
-            thread.name().unwrap_or("unnamed"),
-            info.location().map_or_else(
-                || "unknown location".to_owned(),
-                |location| location.to_string()
-            ),
-        );
-        eprint!("{entry}");
-        let file = std::fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&path);
-        if let Ok(mut file) = file {
-            use std::io::Write;
-            let _ = file.write_all(entry.as_bytes());
-        }
-    }));
+/// Summarises the WhatsApp library's lines, which can quote protocol
+/// payloads, into fixed categories.
+fn redact_protocol(
+    record: &log::Record<'_>,
+    message: &str,
+) -> Option<std::borrow::Cow<'static, str>> {
+    use zapfast::diagnostics::{is_protocol_target, protocol_summary};
+    (is_protocol_target(record.target())
+        || is_protocol_target(record.module_path().unwrap_or_default()))
+    .then(|| protocol_summary(message).into())
 }
 
 /// Parses `--demo-size WxH`.
@@ -477,116 +353,23 @@ fn native_options(demo_persistence: Option<std::path::PathBuf>) -> eframe::Nativ
         persistence_path: demo_persistence,
         // Do not restore window size during fixed-size screenshot runs.
         persist_window: !demo,
-        // Hidden Wayland windows stop receiving frame callbacks, so vsync is
-        // only on where the patched winit can report them as occluded.
-        glow_options: eframe::egui_glow::GlowConfiguration {
-            vsync: zapfast::vsync::enabled(),
-            ..Default::default()
-        },
         ..Default::default()
     }
 }
 
-/// Where to move a restored window that no connected monitor shows, in
-/// physical virtual-desktop pixels, or `None` to leave it where it is.
-///
-/// eframe already clamps a saved position on Windows, but a window can still
-/// open on no monitor when displays are rearranged or a secondary display
-/// comes up late after a restart, and Windows then leaves it unreachable.
-/// Any overlap with any monitor counts as visible, so a valid position on a
-/// secondary display (including negative coordinates left of or above the
-/// primary one) is never moved. The window goes to the middle of the first
-/// monitor listed (the caller puts the primary one first), pinned to its
-/// top-left corner when it is larger than that monitor.
-#[cfg(any(not(target_os = "macos"), test))]
-fn recovered_window_position(window: egui::Rect, monitors: &[egui::Rect]) -> Option<egui::Pos2> {
-    if monitors.is_empty()
-        || monitors
-            .iter()
-            .any(|monitor| window.intersect(*monitor).area() > 0.0)
-    {
-        return None;
-    }
-    let target = monitors[0];
-    let slack = (target.size() - window.size()).max(egui::Vec2::ZERO);
-    Some((target.min + slack / 2.0).round())
-}
-
-/// Moves the window onto the primary monitor when its restored position is
-/// on none of the connected ones. Checked once, on a new window's first
-/// frame.
-///
-/// Wayland does not reveal global window positions, so `outer_position`
-/// fails there and nothing happens. macOS keeps windows on a screen itself,
-/// and winit's macOS coordinates disagree between displays with different
-/// scale factors, so it is left alone. Windows and X11 report the window and
-/// every monitor in the same physical pixels.
-#[cfg(not(target_os = "macos"))]
-fn recover_offscreen_window(ctx: &egui::Context, frame: &eframe::Frame) {
-    let Some(window) = frame.winit_window() else {
-        return;
-    };
-    // A minimized window on Windows reports a parking position far off
-    // screen; restoring it brings back its real one.
-    if window.is_minimized() == Some(true) {
-        return;
-    }
-    let Ok(position) = window.outer_position() else {
-        return;
-    };
-    let size = window.outer_size();
-    let rect = |x: i32, y: i32, width: u32, height: u32| {
-        egui::Rect::from_min_size(
-            egui::pos2(x as f32, y as f32),
-            egui::vec2(width as f32, height as f32),
-        )
-    };
-    // The primary monitor comes first, as the place a lost window goes; a
-    // platform without one falls back to the first connected monitor.
-    let monitors: Vec<_> = window
-        .primary_monitor()
-        .into_iter()
-        .chain(window.available_monitors())
-        .map(|monitor| {
-            let (position, size) = (monitor.position(), monitor.size());
-            rect(position.x, position.y, size.width, size.height)
-        })
-        .collect();
-    let Some(target) = recovered_window_position(
-        rect(position.x, position.y, size.width, size.height),
-        &monitors,
-    ) else {
-        return;
-    };
-    log::warn!("the restored window was on no connected monitor; moving it to the primary one");
-    // egui-winit multiplies the position by the window's pixels per point,
-    // so dividing by the same factor asks for exactly these physical pixels,
-    // whatever the scale of the monitor the window is on now.
-    let pixels_per_point = ctx.input(|input| input.pixels_per_point);
-    ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(
-        target / pixels_per_point,
-    ));
-}
-
-/// eframe adapter that returns the long-lived [`app::App`] when a window closes.
+/// eframe adapter holding the long-lived [`app::App`] for one window; it goes
+/// back to the shell when the window closes.
 struct Shell {
     /// Whether this window's first frame checked that a monitor shows it.
     window_recovery_checked: bool,
-    update_receipt: Option<std::path::PathBuf>,
-    app: Option<app::App>,
-    slot: std::sync::Arc<std::sync::Mutex<Option<app::App>>>,
+    update_receipt: Option<fastframe_update::Receipt>,
+    app: fastframe_shell::Held<app::App>,
     #[cfg(feature = "demo")]
     shot: Option<Shot>,
     #[cfg(feature = "demo")]
     tour: Option<zapfast::demo::tour::Tour>,
     #[cfg(feature = "demo")]
     hover: Option<egui::Pos2>,
-}
-
-impl Drop for Shell {
-    fn drop(&mut self) {
-        *self.slot.lock().unwrap_or_else(|p| p.into_inner()) = self.app.take();
-    }
 }
 
 /// Pending screenshot request.
@@ -639,8 +422,8 @@ impl Shell {
 impl eframe::App for Shell {
     #[cfg(feature = "demo")]
     fn raw_input_hook(&mut self, ctx: &egui::Context, input: &mut egui::RawInput) {
-        if let (Some(tour), Some(app)) = (&mut self.tour, &mut self.app) {
-            tour.input(app, ctx, input);
+        if let Some(tour) = &mut self.tour {
+            tour.input(&mut self.app, ctx, input);
         }
         // Moves the pointer only while it is elsewhere: each move restarts
         // egui's tooltip delay, so a fake pointer that kept moving in place
@@ -659,20 +442,23 @@ impl eframe::App for Shell {
     }
 
     fn logic(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
-        if !self.window_recovery_checked {
-            self.window_recovery_checked = true;
-            #[cfg(not(target_os = "macos"))]
-            recover_offscreen_window(ctx, frame);
+        if !std::mem::replace(&mut self.window_recovery_checked, true) {
+            fastframe_shell::window::recover_offscreen(ctx, frame);
         }
-        if let Some(app) = self.app.as_mut() {
-            #[cfg(feature = "demo")]
-            if let Some(tour) = self.tour.as_mut() {
-                tour.drive(app, ctx);
-            }
-            app.background_frame(ctx);
-            #[cfg(target_os = "macos")]
-            zapfast::macos::update_window(frame, ctx, app.is_linked());
+        let app = &mut *self.app;
+        #[cfg(feature = "demo")]
+        if let Some(tour) = self.tour.as_mut() {
+            tour.drive(app, ctx);
         }
+        app.background_frame(ctx);
+        // The chat header is 60 points and zooms; the linking screen keeps
+        // AppKit's own 28-point strip.
+        let title_bar = if app.is_linked() {
+            zapfast::theme::TOP_BAR_HEIGHT
+        } else {
+            28.0 / ctx.zoom_factor()
+        };
+        fastframe_macos::align_traffic_lights(frame, ctx, title_bar);
         #[cfg(feature = "demo")]
         {
             // Keep requesting the configured screenshot size until it is applied.
@@ -689,34 +475,31 @@ impl eframe::App for Shell {
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
-        if let Some(app) = self.app.as_mut() {
-            app.frame_ui(ui);
-            let startup = app.backend.take_startup();
-            if let Some(receipt) = self.update_receipt.take() {
-                std::thread::spawn(move || {
-                    if let Err(error) = zapfast::updates::install::acknowledge(&receipt) {
-                        log::warn!("could not acknowledge the update: {error:#}");
-                        return;
-                    }
-                    if let Some(startup) = startup {
-                        let _ = startup.send(());
-                    }
-                });
-            } else if let Some(startup) = startup {
-                let _ = startup.send(());
-            }
-            #[cfg(feature = "demo")]
-            if let Some(tour) = self.tour.as_mut() {
-                tour.observe(app, ui.ctx());
-            }
+        let app = &mut *self.app;
+        app.frame_ui(ui);
+        let startup = app.backend.take_startup();
+        if let Some(receipt) = self.update_receipt.take() {
+            std::thread::spawn(move || {
+                if let Err(error) = receipt.acknowledge() {
+                    log::warn!("could not acknowledge the update: {error:#}");
+                    return;
+                }
+                if let Some(startup) = startup {
+                    let _ = startup.send(());
+                }
+            });
+        } else if let Some(startup) = startup {
+            let _ = startup.send(());
+        }
+        #[cfg(feature = "demo")]
+        if let Some(tour) = self.tour.as_mut() {
+            tour.observe(app, ui.ctx());
         }
     }
 
     /// Saves essential state before the window closes.
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
-        if let Some(app) = self.app.as_mut() {
-            app.save_state();
-        }
+        self.app.save_state();
     }
 }
 
@@ -851,76 +634,5 @@ mod log_filter_tests {
             log::Level::Warn,
             "arboard::platform::linux"
         ));
-    }
-}
-
-#[cfg(test)]
-mod window_tests {
-    use super::recovered_window_position;
-    use egui::{Rect, pos2, vec2};
-
-    fn monitor(x: f32, y: f32, width: f32, height: f32) -> Rect {
-        Rect::from_min_size(pos2(x, y), vec2(width, height))
-    }
-
-    #[test]
-    fn a_window_above_every_monitor_moves_to_the_middle_of_the_first() {
-        let window = Rect::from_min_size(pos2(100.0, -500.0), vec2(400.0, 300.0));
-        assert_eq!(
-            recovered_window_position(window, &[monitor(0.0, 0.0, 1920.0, 1080.0)]),
-            Some(pos2(760.0, 390.0))
-        );
-    }
-
-    #[test]
-    fn a_window_partly_on_a_monitor_stays() {
-        let window = Rect::from_min_size(pos2(-100.0, 100.0), vec2(400.0, 300.0));
-        assert_eq!(
-            recovered_window_position(window, &[monitor(0.0, 0.0, 1920.0, 1080.0)]),
-            None
-        );
-    }
-
-    #[test]
-    fn a_window_on_a_monitor_left_of_or_above_the_primary_stays() {
-        let monitors = [
-            monitor(0.0, 0.0, 1920.0, 1080.0),
-            monitor(-1920.0, 0.0, 1920.0, 1080.0),
-            monitor(0.0, -1440.0, 2560.0, 1440.0),
-        ];
-        let left = Rect::from_min_size(pos2(-1600.0, 100.0), vec2(800.0, 600.0));
-        let above = Rect::from_min_size(pos2(200.0, -1300.0), vec2(800.0, 600.0));
-        assert_eq!(recovered_window_position(left, &monitors), None);
-        assert_eq!(recovered_window_position(above, &monitors), None);
-    }
-
-    #[test]
-    fn a_window_left_where_a_disconnected_monitor_was_moves_to_the_primary() {
-        // The reported case: a window saved on a display to the right, which
-        // is gone after a restart. The primary one here is not at the origin.
-        let window = Rect::from_min_size(pos2(3891.0, -358.0), vec2(1180.0, 780.0));
-        let monitors = [
-            monitor(1920.0, 0.0, 1920.0, 1080.0),
-            monitor(0.0, 0.0, 1920.0, 1080.0),
-        ];
-        assert_eq!(
-            recovered_window_position(window, &monitors),
-            Some(pos2(2290.0, 150.0))
-        );
-    }
-
-    #[test]
-    fn a_window_larger_than_the_monitor_is_pinned_to_its_corner() {
-        let window = Rect::from_min_size(pos2(5000.0, 5000.0), vec2(2000.0, 1200.0));
-        assert_eq!(
-            recovered_window_position(window, &[monitor(-1280.0, 0.0, 1280.0, 1024.0)]),
-            Some(pos2(-1280.0, 0.0))
-        );
-    }
-
-    #[test]
-    fn without_monitors_nothing_moves() {
-        let window = Rect::from_min_size(pos2(-5000.0, -5000.0), vec2(400.0, 300.0));
-        assert_eq!(recovered_window_position(window, &[]), None);
     }
 }

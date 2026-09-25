@@ -193,7 +193,6 @@ impl Section {
 }
 
 pub fn show(app: &mut App, ui: &mut egui::Ui) {
-    super::standalone_header(app, ui);
     if theme::macos_chrome(ui.ctx()) {
         super::banner(app, ui);
     }
@@ -277,23 +276,20 @@ fn sections(app: &App) -> Vec<Section> {
     let palette = app.palette;
 
     let mut appearance = Section::new(translated(locale, "Appearance"));
-    let detail = app
+    let status = app
         .custom_themes
-        .detail(app.settings.custom_theme.as_deref());
-    let detail = if !detail.is_empty() {
-        Text::from(detail.to_owned())
+        .status(app.settings.custom_theme.as_deref());
+    let detail = if let Some(status) = status {
+        theme::theme_status(status).to_owned().into()
     } else if app.custom_themes.follows_omarchy() {
         translated(locale, "Follow system uses your Omarchy colours.")
     } else {
-        translated(
-            locale,
-            "Follow system uses your desktop's light or dark appearance.",
-        )
+        Text::default()
     };
     appearance.row(translated(locale, "Theme"), detail, theme_picker);
     appearance.row(
         translated(locale, "Wallpaper"),
-        app.settings.wallpaper_color_for(palette.dark).label(),
+        Text::default(),
         move |ui, app| {
             if theme::soft_button(
                 ui,
@@ -320,7 +316,10 @@ fn sections(app: &App) -> Vec<Section> {
     }
     appearance.row(
         translated(locale, "Zoom"),
-        translated(locale, "You can also use Ctrl+plus and Ctrl+minus."),
+        keyed(translated(
+            locale,
+            "Ctrl+Plus and Ctrl+Minus work anywhere, and Ctrl+0 resets it.",
+        )),
         move |ui, app| {
             if theme::icon_button(
                 ui,
@@ -328,7 +327,7 @@ fn sections(app: &App) -> Vec<Section> {
                 16.0,
                 palette.secondary,
                 palette.text,
-                &crate::i18n::gettext(locale, "Larger"),
+                &crate::i18n::gettext(app.locale, "Larger"),
             )
             .clicked()
             {
@@ -346,7 +345,7 @@ fn sections(app: &App) -> Vec<Section> {
                 16.0,
                 palette.secondary,
                 palette.text,
-                &crate::i18n::gettext(locale, "Smaller"),
+                &crate::i18n::gettext(app.locale, "Smaller"),
             )
             .clicked()
             {
@@ -359,67 +358,31 @@ fn sections(app: &App) -> Vec<Section> {
     let mut chats = Section::new(translated(locale, "Chats"));
     chats.toggle(
         translated(locale, "Enter sends"),
-        translated(locale, "When off, Enter adds a line and Ctrl+Enter sends."),
+        keyed(translated(locale, "When off, Ctrl+Enter sends.")),
         |settings| &mut settings.enter_sends,
     );
     chats.toggle(
-        translated(locale, "Download attachments automatically"),
-        translated(locale, "Download non-sticker attachments up to 64 MiB when they enter view. Visible stickers also download automatically up to this limit. When off, click an attachment up to this limit to download it."),
-        |settings| &mut settings.auto_download,
-    );
-    chats.toggle(
-        translated(locale, "Show labels as chips"),
+        translated(locale, "Download files automatically"),
         translated(
             locale,
-            "Give each label its own chip, in a row under All, Unread and Groups. When off, they share one Labels chip.",
+            "Files up to 64 MiB download as they come into view.",
         ),
-        |settings| &mut settings.label_chips,
-    );
-    chats.toggle(
-        translated(locale, "Show sender pictures in every chat"),
-        translated(locale, "WhatsApp shows them in groups only."),
-        |settings| &mut settings.show_sender_pictures,
-    );
-    chats.toggle(
-        translated(locale, "Names from your address book"),
-        translated(locale, "Prefer saved contact names. When off, prefer public WhatsApp profile names. This applies throughout the app."),
-        |settings| &mut settings.names_from_contacts,
-    );
-    chats.toggle(
-        translated(locale, "Save contacts to the phone's address book"),
-        translated(locale, "Also add contacts saved here to your phone's address book. When off, they remain WhatsApp contacts. Names sync to linked devices either way."),
-        |settings| &mut settings.save_contacts_to_phone,
-    );
-    chats.toggle(translated(locale, "Show shortcut hints"), "", |settings| {
-        &mut settings.show_shortcut_hints
-    });
-    chats.toggle(
-        translated(locale, "Collapse the chat list to icons"),
-        translated(locale, "Hiding the chat list (Ctrl+B) leaves a narrow column of avatars with unread badges instead of removing it. Clicking an avatar opens that chat, and Ctrl+B brings the full list back."),
-        |settings| &mut settings.collapse_chat_list,
+        |settings| &mut settings.auto_download,
     );
     // macOS has no public API to pause other apps' media.
     if crate::media_pause::SUPPORTED {
         chats.toggle(
-            translated(locale, "Pause music while recording"),
-            translated(
-                locale,
-                "Pause media players while you record a voice message and resume them afterwards.",
-            ),
-            |settings| &mut settings.pause_media_while_recording,
-        );
-        chats.toggle(
-            translated(locale, "Pause music while playing voice messages and videos"),
-            translated(
-                locale,
-                "Pause media players while a voice message, audio, or video plays with sound, and resume them when it stops.",
-            ),
-            |settings| &mut settings.pause_media_while_playing,
+            translated(locale, "Pause other media while recording or playing"),
+            translated(locale, "Music and videos in other apps resume afterwards."),
+            |settings| &mut settings.pause_other_media,
         );
     }
     chats.row(
-        translated(locale, "Secret code for locked chats"),
-        translated(locale, "Open the Locked tab in the chat list and enter this local ZapFast code, separate from your phone's code. Leaving the tab or closing the window locks it again. Locked chats are hidden from ordinary search and notifications. This is a local visibility control, not an extra encryption layer. Keep it empty to remove the code."),
+        translated(locale, "Locked chats code"),
+        translated(
+            locale,
+            "Opens the Locked tab on this computer. It hides chats, it does not encrypt them.",
+        ),
         move |ui, app| {
             // The buffer lives in egui memory: the hash is the only
             // stored form, so there is nothing to read it back from.
@@ -430,14 +393,18 @@ fn sections(app: &App) -> Vec<Section> {
                     .font(theme::regular(13.0))
                     .text_color(palette.text)
                     .desired_width(220.0)
-                    .hint_text("Secret code")
+                    .hint_text(crate::i18n::gettext(app.locale, "Secret code"))
                     .password(true),
             );
             if response.changed() {
                 let trimmed = code.trim().to_owned();
                 app.actions.push(Action::SetChatLockCode(Some(trimmed)));
             }
-            if app.settings.chat_lock_code_hash.is_some() && ui.small_button("Clear").clicked() {
+            if app.settings.chat_lock_code_hash.is_some()
+                && ui
+                    .small_button(crate::i18n::gettext(app.locale, "Clear"))
+                    .clicked()
+            {
                 code.clear();
                 app.actions.push(Action::SetChatLockCode(None));
             }
@@ -445,17 +412,35 @@ fn sections(app: &App) -> Vec<Section> {
         },
     );
 
+    let mut notifications = Section::new(translated(locale, "Notifications"));
+    notifications.toggle(
+        translated(locale, "Desktop notifications"),
+        translated(
+            locale,
+            "For chats you are not looking at. Muted chats stay quiet.",
+        ),
+        |settings| &mut settings.notifications,
+    );
+    if app.settings.notifications {
+        let (title, description) = sound_text(locale, false);
+        notifications.row(title, description, |ui, app| sound_control(ui, app, false));
+        notifications.toggle(
+            translated(locale, "Play sounds for group messages"),
+            translated(
+                locale,
+                "When off, only mentions and replies to you make a sound.",
+            ),
+            |settings| &mut settings.group_sounds,
+        );
+        let (title, description) = sound_text(locale, true);
+        notifications.row(title, description, |ui, app| sound_control(ui, app, true));
+    }
+
     let mut privacy = Section::new(translated(locale, "Privacy"));
     let receipts_note = if app.account_receipts_off {
-        translated(
-            locale,
-            "Read receipts are off for your WhatsApp account (see Read receipts below). Direct chats will not send them. When this switch is on, groups still do. Read state syncs between your devices either way.",
-        )
+        translated(locale, "Off for your account, so only groups get them.")
     } else {
-        translated(
-            locale,
-            "Let people see when you read messages or play voice messages here. The account setting below still applies. Read state syncs between your devices either way.",
-        )
+        translated(locale, "Let people see when you read their messages.")
     };
     privacy.toggle(
         translated(locale, "Send read receipts"),
@@ -473,12 +458,12 @@ fn sections(app: &App) -> Vec<Section> {
     let note = if app.account_privacy.fetch_failed {
         Some(crate::i18n::gettext(
             locale,
-            "Could not load your account privacy. It loads again when ZapFast reconnects.",
+            "Could not load your account privacy. Trying again when ZapFast reconnects.",
         ))
     } else if !app.is_connected() {
         Some(crate::i18n::gettext(
             locale,
-            "Connect to WhatsApp to see and change your account privacy.",
+            "Connect to WhatsApp to change your account privacy.",
         ))
     } else if !app.account_privacy.loaded {
         Some(crate::i18n::gettext(
@@ -509,9 +494,16 @@ fn sections(app: &App) -> Vec<Section> {
         // The people an Except list leaves out are chosen on the phone.
         if current == PrivacyChoice::Except {
             let note = translated(locale, "Change who is excluded on your phone.");
+            let join = |hint: &str, note: &str| {
+                if hint.is_empty() {
+                    note.to_owned()
+                } else {
+                    format!("{hint} {note}")
+                }
+            };
             description = Text {
-                shown: format!("{} {}", description.shown, note.shown).into(),
-                source: format!("{} {}", description.source, note.source).into(),
+                shown: join(&description.shown, &note.shown).into(),
+                source: join(&description.source, &note.source).into(),
             };
         }
         privacy.row(title, description, move |ui, app| {
@@ -519,31 +511,29 @@ fn sections(app: &App) -> Vec<Section> {
         });
     }
 
-    let mut window = Section::new(translated(locale, "Window"));
-    window.toggle(
+    let mut system = Section::new(translated(locale, "System"));
+    system.toggle(
         translated(locale, "Keep running when the window closes"),
-        translated(
-            locale,
-            "Keep ZapFast linked in the system tray. Quit from the tray menu or with Ctrl+Q.",
-        ),
+        keyed(translated(locale, "Quit from the tray or with Ctrl+Q.")),
         |settings| &mut settings.keep_running_in_background,
     );
     if app.start_with_system.is_some() {
-        window.row(
+        system.row(
             translated(locale, "Start at login"),
-            translated(locale, "Start ZapFast when you log in. It waits in the system tray, without a window, while it keeps running in the background."),
+            translated(locale, "Starts in the tray, without a window."),
             move |ui, app| {
                 let Some(mut enabled) = app.start_with_system else {
                     return;
                 };
                 let response = widgets::switch(ui, &palette, &mut enabled);
                 theme::reveal_focus(&response);
+                let label = crate::i18n::gettext(app.locale, "Start at login");
                 response.widget_info(|| {
                     egui::WidgetInfo::selected(
                         egui::WidgetType::Checkbox,
                         ui.is_enabled(),
                         enabled,
-                        crate::i18n::gettext(locale, "Start at login"),
+                        label.as_ref(),
                     )
                 });
                 if response.changed() {
@@ -552,56 +542,22 @@ fn sections(app: &App) -> Vec<Section> {
             },
         );
     }
-    window.toggle(
-        translated(locale, "Notify about new messages"),
-        translated(locale, "Show desktop notifications when the window is hidden, in the background, or showing another chat. Muted chats do not notify you."),
-        |settings| &mut settings.notifications,
-    );
-    if app.settings.notifications {
-        let (title, description) = sound_text(locale, false);
-        window.row(title, description, |ui, app| sound_control(ui, app, false));
-        window.toggle(
-            translated(locale, "Play sounds for group messages"),
-            translated(
-                locale,
-                "When off, group messages notify you silently. Mentions and replies to you still play the mention sound.",
-            ),
-            |settings| &mut settings.group_sounds,
-        );
-        let (title, description) = sound_text(locale, true);
-        window.row(title, description, |ui, app| sound_control(ui, app, true));
-    }
-    window.toggle(
-        translated(locale, "Download updates automatically"),
-        translated(locale, "Download and verify new releases in the background. You choose when to restart. Native packages and Flatpak update through their package manager."),
-        |settings| &mut settings.download_updates_automatically,
-    );
-    window.toggle(
+    system.toggle(
         translated(locale, "Check for updates"),
-        translated(locale, "Ask GitHub once a day whether a newer ZapFast release exists. The request identifies only ZapFast and its version."),
+        translated(
+            locale,
+            "Asks GitHub once a day, sending only the ZapFast version.",
+        ),
         |settings| &mut settings.check_for_updates,
     );
-    window.row(
-        translated(locale, "GIPHY API key"),
-        if crate::settings::BUILT_IN_GIPHY_KEY.is_some() {
-            translated(locale, "Used for GIF search. This build includes a key. Enter a key from developers.giphy.com to replace it.")
-        } else {
-            translated(locale, "Required for GIF search. Get a free key from developers.giphy.com.")
-        },
-        move |ui, app| {
-            let response = ui.add(
-                egui::TextEdit::singleline(&mut app.settings.giphy_key)
-                    .font(theme::regular(13.0))
-                    .text_color(palette.text)
-                    .desired_width(220.0),
-            );
-            if response.changed() {
-                app.actions.push(Action::SettingsChanged);
-            }
-        },
+    system.toggle(
+        translated(locale, "Download updates automatically"),
+        translated(
+            locale,
+            "You still choose when to restart. Package managers and Flatpak update ZapFast themselves.",
+        ),
+        |settings| &mut settings.download_updates_automatically,
     );
-
-    let mut network = Section::new(translated(locale, "Network"));
     let environment = app
         .settings
         .proxy
@@ -609,19 +565,20 @@ fn sections(app: &App) -> Vec<Section> {
         .then(crate::proxy::for_whatsapp)
         .flatten();
     let description = match environment {
-        Some(proxy) => Text::from(
-            crate::i18n::gettext(
-                locale,
-                "Using {} from the environment. Enter a proxy to replace it.",
-            )
-            .replace("{}", &proxy.redacted().to_string()),
-        ),
+        Some(proxy) => {
+            let redacted = proxy.redacted();
+            let text = translated(locale, "Using {proxy} from the environment.");
+            Text {
+                shown: text.shown.replace("{proxy}", &redacted).into(),
+                source: text.source.replace("{proxy}", &redacted).into(),
+            }
+        }
         None => translated(
             locale,
-            "socks5h://, socks5://, or http:// with an optional user:password@. Leave empty to use ALL_PROXY or HTTPS_PROXY.",
+            "For WhatsApp, media, and updates. Empty uses ALL_PROXY or HTTPS_PROXY.",
         ),
     };
-    network.row(translated(locale, "Proxy"), description, move |ui, app| {
+    system.row(translated(locale, "Proxy"), description, move |ui, app| {
         let id = egui::Id::new("settings-proxy-draft");
         let mut draft = ui
             .data(|data| data.get_temp::<String>(id))
@@ -640,6 +597,31 @@ fn sections(app: &App) -> Vec<Section> {
             ui.data_mut(|data| data.insert_temp(id, draft));
         }
     });
+    system.row(
+        translated(locale, "GIPHY API key"),
+        if crate::settings::BUILT_IN_GIPHY_KEY.is_some() {
+            translated(
+                locale,
+                "For GIF search. Replaces the key this build includes.",
+            )
+        } else {
+            translated(
+                locale,
+                "For GIF search. Get a free key at developers.giphy.com.",
+            )
+        },
+        move |ui, app| {
+            let response = ui.add(
+                egui::TextEdit::singleline(&mut app.settings.giphy_key)
+                    .font(theme::regular(13.0))
+                    .text_color(palette.text)
+                    .desired_width(220.0),
+            );
+            if response.changed() {
+                app.actions.push(Action::SettingsChanged);
+            }
+        },
+    );
 
     let mut account_section = Section::new(translated(locale, "Account"));
     account_section.block(
@@ -654,40 +636,53 @@ fn sections(app: &App) -> Vec<Section> {
 
     let mut files = Section::new(translated(locale, "Files"));
     let state = app.dirs.state.clone();
+    let open_folder = crate::i18n::gettext(locale, "Open folder");
     files.row(
         translated(locale, "Message archive"),
         app.dirs.archive_db().display().to_string(),
-        move |ui, app| {
-            if theme::soft_button(ui, &palette, Some(Icon::ExternalLink), "Open folder", false)
-                .clicked()
-            {
-                app.actions.push(Action::OpenFolder(state));
+        {
+            let open_folder = open_folder.clone();
+            move |ui, app| {
+                if theme::soft_button(ui, &palette, Some(Icon::ExternalLink), &open_folder, false)
+                    .clicked()
+                {
+                    app.actions.push(Action::OpenFolder(state));
+                }
             }
         },
     );
     let custom = app.settings.download_folder.clone();
     let media = custom.clone().unwrap_or_else(|| app.dirs.media_cache_dir());
-    let description = if custom.is_some() {
-        crate::i18n::gettext(locale, "{}. Earlier downloads stay where they are.")
-            .replace("{}", &media.display().to_string())
-    } else {
-        media.display().to_string()
-    };
     files.row(
-        translated(locale, "Downloaded attachments"),
-        description,
+        translated(locale, "Downloads"),
+        media.display().to_string(),
         move |ui, app| {
-            if theme::soft_button(ui, &palette, Some(Icon::ExternalLink), "Open folder", false)
+            if theme::soft_button(ui, &palette, Some(Icon::ExternalLink), &open_folder, false)
                 .clicked()
             {
                 let _ = std::fs::create_dir_all(&media);
                 app.actions.push(Action::OpenFolder(media.clone()));
             }
-            if theme::soft_button(ui, &palette, None, "Change…", false).clicked() {
+            if theme::soft_button(
+                ui,
+                &palette,
+                None,
+                &crate::i18n::gettext(app.locale, "Change…"),
+                false,
+            )
+            .clicked()
+            {
                 app.actions.push(Action::PickDownloadFolder);
             }
             if custom.is_some()
-                && theme::soft_button(ui, &palette, None, "Use default", false).clicked()
+                && theme::soft_button(
+                    ui,
+                    &palette,
+                    None,
+                    &crate::i18n::gettext(app.locale, "Use default"),
+                    false,
+                )
+                .clicked()
             {
                 app.actions.push(Action::SetDownloadFolder(None));
             }
@@ -695,10 +690,18 @@ fn sections(app: &App) -> Vec<Section> {
     );
     let log = app.dirs.log_file();
     files.row(
-        translated(locale, "Log of this run"),
+        translated(locale, "Log"),
         log.display().to_string(),
         move |ui, app| {
-            if theme::soft_button(ui, &palette, Some(Icon::FileText), "Open", false).clicked() {
+            if theme::soft_button(
+                ui,
+                &palette,
+                Some(Icon::FileText),
+                &crate::i18n::gettext(app.locale, "Open"),
+                false,
+            )
+            .clicked()
+            {
                 app.actions.push(Action::OpenFile(log));
             }
         },
@@ -717,13 +720,22 @@ fn sections(app: &App) -> Vec<Section> {
     vec![
         appearance,
         chats,
+        notifications,
         privacy,
-        window,
-        network,
+        system,
         account_section,
         files,
         about_section,
     ]
+}
+
+/// A translated description that names keys, with Cmd and Option on macOS.
+/// The search still finds it by its English source.
+fn keyed(text: Text) -> Text {
+    Text {
+        shown: super::keys::label(&text.shown).into(),
+        source: text.source,
+    }
 }
 
 /// The theme menu and the button that opens the themes folder.
@@ -734,7 +746,7 @@ fn theme_picker(ui: &mut egui::Ui, app: &mut App) {
             .settings
             .custom_theme
             .as_deref()
-            .map(theme::custom::label)
+            .map(fastframe_theme::display_name)
             .unwrap_or_else(|| app.settings.theme.label());
         let response = egui::ComboBox::from_id_salt("appearance_theme")
             .selected_text(" ")
@@ -758,7 +770,7 @@ fn theme_picker(ui: &mut egui::Ui, app: &mut App) {
                     if theme_option(
                         ui,
                         &palette,
-                        theme::custom::label(&custom.filename),
+                        fastframe_theme::display_name(&custom.filename),
                         app.settings.custom_theme.as_deref() == Some(custom.filename.as_str()),
                     ) {
                         app.actions
@@ -830,7 +842,6 @@ fn language_picker(ui: &mut egui::Ui, app: &mut App) {
 
 /// Wallpaper colour picker and live preview.
 pub fn wallpaper_show(app: &mut App, ui: &mut egui::Ui) {
-    super::standalone_header(app, ui);
     if theme::macos_chrome(ui.ctx()) {
         super::banner(app, ui);
     }
@@ -1302,16 +1313,10 @@ fn sound_text(locale: Locale, mention: bool) -> (Text, Text) {
     if mention {
         (
             translated(locale, "Mention sound"),
-            translated(
-                locale,
-                "Played when someone mentions you or replies to you in a group.",
-            ),
+            translated(locale, "When a group mentions you or replies to you."),
         )
     } else {
-        (
-            translated(locale, "Message sound"),
-            translated(locale, "Played for new messages in chats and groups."),
-        )
+        (translated(locale, "Message sound"), Text::default())
     }
 }
 
@@ -1477,7 +1482,7 @@ mod tests {
     }
 
     fn window(locale: Locale) -> Section {
-        let mut window = Section::new(translated(locale, "Window"));
+        let mut window = Section::new(translated(locale, "Notifications"));
         window.toggle("Check for updates", "Ask GitHub once a day.", |settings| {
             &mut settings.check_for_updates
         });
@@ -1521,9 +1526,9 @@ mod tests {
 
     #[test]
     fn a_matching_section_title_keeps_all_its_rows() {
-        let rows = titles(window(Locale::German), &Filter::new("window"));
+        let rows = titles(window(Locale::German), &Filter::new("notifications"));
         assert_eq!(rows.len(), 3);
-        let rows = titles(window(Locale::German), &Filter::new("fenster"));
+        let rows = titles(window(Locale::German), &Filter::new("benachrichtigungen"));
         assert_eq!(rows.len(), 3);
     }
 

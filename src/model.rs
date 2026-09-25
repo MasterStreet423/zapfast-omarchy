@@ -822,6 +822,14 @@ pub enum MediaState {
     Failed(String),
 }
 
+/// Decoded straight-alpha RGBA image bytes ready for the clipboard.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DecodedImage {
+    pub width: usize,
+    pub height: usize,
+    pub bytes: Vec<u8>,
+}
+
 /// Contact names from app-state sync and message push names.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Contact {
@@ -873,8 +881,6 @@ pub enum SidebarDisplayMode {
     Expanded,
     /// Avatars and unread badges only, in a narrow column.
     CollapsedIconsOnly,
-    /// Nothing at all.
-    Hidden,
 }
 
 /// Which list the sticker tab shows.
@@ -1268,6 +1274,7 @@ pub enum Action {
     },
     OpenUrl(String),
     CopyText(String),
+    CopyImage(PathBuf),
     /// Closes the toast at this index. Only errors wait to be dismissed.
     DismissToast(usize),
     /// Starts a reply to a message in the open chat.
@@ -1379,10 +1386,13 @@ pub enum Action {
         last: String,
     },
     /// Checks a number, optionally saves it, and opens its chat.
+    /// `to_phone` is the dialog's "Save to phone" choice; `None` uses the
+    /// last one.
     NewContact {
         phone: String,
         first: String,
         last: String,
+        to_phone: Option<bool>,
     },
     /// Searches GIFs or lists trending results for an empty query.
     SearchGifs(String),
@@ -1443,7 +1453,7 @@ pub enum Action {
     /// Filters the Settings page to the rows matching this text.
     SearchSettings(String),
     FocusComposer,
-    HideShortcutHints,
+    SetShortcutHints(bool),
     DismissChatLockHint,
     OpenLockedFolder,
     UnlockLockedFolder(String),

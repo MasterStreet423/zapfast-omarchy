@@ -4,7 +4,6 @@
 //! work. Commands and events cross channels, and events wake the UI.
 
 use std::path::PathBuf;
-use std::sync::Arc;
 use std::time::Duration;
 
 use tokio::sync::mpsc;
@@ -114,7 +113,7 @@ pub struct CreatedPoll {
     pub recipients: Vec<String>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub enum Command {
     RefreshPoll {
         chat: ChatId,
@@ -162,10 +161,10 @@ pub enum Command {
         button: usize,
         choice: Option<usize>,
     },
-    /// Forwards an archived message to another chat.
+    /// Forwards archived messages to another chat, oldest first.
     Forward {
         from_chat: ChatId,
-        message: String,
+        messages: Vec<String>,
         to_chat: ChatId,
     },
     /// Updates our typing state in a chat.
@@ -397,6 +396,8 @@ pub enum Command {
         source: std::path::PathBuf,
         name: String,
     },
+    /// Reads and decodes an image file off the UI thread for clipboard writing.
+    PrepareClipboardImage(PathBuf),
     /// Deletes an imported pack directory.
     DeleteStickerPack {
         dir: PathBuf,
@@ -656,7 +657,7 @@ pub enum Command {
         source: crate::updates::Source,
     },
     InstallUpdate {
-        prepared: Box<crate::updates::install::Prepared>,
+        prepared: Box<crate::updates::Prepared>,
         arguments: Vec<String>,
     },
 }
@@ -849,17 +850,19 @@ pub enum Event {
     },
     /// Informational toast message.
     Info(String),
+    /// A decoded image ready to be written to the clipboard on the interface thread.
+    ClipboardImage(Result<crate::model::DecodedImage, String>),
     /// A newer release than this build exists.
     UpdateAvailable {
         version: String,
         url: String,
     },
-    UpdateSupport(Result<crate::updates::install::Installation, String>),
+    UpdateSupport(Result<crate::updates::Installation, String>),
     UpdateProgress {
         received: u64,
         total: u64,
     },
-    UpdateDownloaded(Result<Box<crate::updates::install::Prepared>, String>),
+    UpdateDownloaded(Result<Box<crate::updates::Prepared>, String>),
     UpdateInstalling(Result<(), String>),
     /// A send was refused before anything left this computer. It returns
     /// what was being sent so the user loses neither text nor a recording.
@@ -903,32 +906,8 @@ pub enum Unsent {
     Gif,
 }
 
-/// Cross-thread window wake handle.
-#[derive(Clone, Default)]
-pub struct Waker(Arc<std::sync::Mutex<Option<egui::Context>>>);
-
-impl Waker {
-    pub fn attach(&self, ctx: &egui::Context) {
-        *self.0.lock().unwrap_or_else(|p| p.into_inner()) = Some(ctx.clone());
-    }
-
-    pub fn detach(&self) {
-        *self.0.lock().unwrap_or_else(|p| p.into_inner()) = None;
-    }
-
-    pub fn wake(&self) {
-        if let Some(ctx) = self.0.lock().unwrap_or_else(|p| p.into_inner()).as_ref() {
-            ctx.request_repaint();
-        }
-    }
-
-    /// Schedules a delayed repaint.
-    pub fn wake_after(&self, delay: std::time::Duration) {
-        if let Some(ctx) = self.0.lock().unwrap_or_else(|p| p.into_inner()).as_ref() {
-            ctx.request_repaint_after(delay);
-        }
-    }
-}
+/// Cross-thread window wake handle: repaints whichever window exists.
+pub use fastframe_shell::Waker;
 
 /// UI handle to the backend runtime.
 pub struct Backend {
@@ -992,6 +971,15 @@ impl Backend {
             },
             event_tx,
         )
+    }
+
+    /// A detached backend whose startup permit the test can watch.
+    #[cfg(test)]
+    pub(crate) fn detached_with_startup() -> (Self, tokio::sync::oneshot::Receiver<()>) {
+        let (mut backend, _) = Self::detached();
+        let (startup, started) = tokio::sync::oneshot::channel();
+        backend.startup = Some(startup);
+        (backend, started)
     }
 
     /// Records commands without a runtime or network connection.

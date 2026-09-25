@@ -94,20 +94,26 @@ protocol. These notes are for coding agents and new contributors.
 - Chat ids are canonical strings: a chat behind a privacy id (`@lid`) is
   filed under its phone number once the mapping is known. Use
   `Worker::canonical` for anything that arrives as a `Jid`.
-- `src/updates/` downloads verified GitHub releases and hands installation to a
-  helper after an explicit restart action. Keep package-manager detection, asset
-  checksums, startup acknowledgement and rollback intact. Portable releases carry
+- Updates come from fastframe-update: `src/updates.rs` holds ZapFast's
+  `UpdateConfig` (legacy `fastsapp` names, the publisher key) and the
+  proxy-aware client. It downloads verified GitHub releases and hands
+  installation to a helper after an explicit restart action. `main` calls
+  `fastframe_update::intercept` before anything else, so `--apply-update`,
+  `--update-receipt` and `--update-error` keep working with older releases'
+  helpers (`tests/update_flags.rs`). Portable releases carry
   `packaging/zapfast-portable.txt`; the Windows installer has its own marker.
-- `src/theme/custom.rs` scans local JSON palettes off the UI thread, caching the
-  last usable choice in settings, with shared Spotifast palettes embedded as
-  defaults. On Linux filesystem notifications reload the catalog and the active
+- Custom themes come from fastframe-theme (`theme::Catalog`, ZapFast's
+  `fastframe_theme::Palette` impl in `src/theme.rs`): it scans local JSON
+  palettes off the UI thread, and the app caches the last usable choice in
+  settings, with the palettes shared with Spotifast embedded as defaults. On Linux filesystem notifications reload the catalog and the active
   Omarchy palette without a repaint timer; following Omarchy does not require
   packaged assets. Native packages ship optional hooks and templates, preserving
   existing per-user files. `reload-themes` uses the single-instance channel
   without opening a window.
 - `src/theme.rs` owns colours, fonts, and icons; `src/ui/widgets.rs` the
   shared controls. New icons go in `assets/icons/` as 24px Lucide-style SVGs
-  and in the `icons!` table.
+  and in the `fastframe_icons::icons!` table; an icon fastframe-icons already
+  ships is named there as `lucide "name"` instead of copied.
 - `src/markup.rs` turns WhatsApp's text markup, links, and mentions into an
   egui `LayoutJob`; `src/emoji.rs` swaps every emoji for a placeholder
   glyph at layout time and paints the desktop's colour emoji bitmap over
@@ -172,10 +178,17 @@ protocol. These notes are for coding agents and new contributors.
   history request for such a chat is anchored at the present with an
   empty message id (`worker::fetch_older`), and the app asks the phone
   as soon as such a chat loads or opens, instead of never.
-- `eframe`'s `glow_options` turn vsync off: a Wayland compositor stops
-  sending frame callbacks to a window on a hidden workspace, a vsync wait
-  there blocks the event loop and its ping replies, and Hyprland then
-  calls the app unresponsive. Repaints are event-driven, so nothing spins.
+- A Wayland compositor may stop sending frame callbacks to a window it isn't
+  showing without saying so (Hyprland does for a window covered by a
+  fullscreen or maximized one, #190), and a vsync swap there blocks the event
+  loop and its ping replies, so the compositor calls the app unresponsive.
+  The shared egui fork (crmne/egui apps-0.36, emilk/egui#8631) presents
+  without a blocking swap on Wayland, paces frames by frame callbacks, and
+  runs only `App::logic` when a redraw is 250 ms overdue; the winit fork
+  (apps-0.30, rust-windowing/winit#4709) reports `suspended` as `Occluded`.
+  Vsync stays on elsewhere. Spotifast, RekordFlash and TonePush pin the same
+  two revisions; move them together. Repaints are event-driven, so nothing
+  spins.
 - `src/voice.rs` is the codec for voice messages: OGG/Opus in and out
   (the `ogg` crate for the container, `opus` with libopus bundled and
   built by cmake for the codec, so cmake is a build dependency), plus
@@ -211,21 +224,25 @@ protocol. These notes are for coding agents and new contributors.
   (`fastsapp`, then `fastwhatsapp`) over once, so the linked device survives
   the rename. Migration runs after the single-instance guard and outside demos;
   keep the guard's `fastsapp:` wire identity compatible with running old copies.
-- The app outlives the window, as in Spotifast: `main` runs
-  `eframe::run_native` in a loop; closing the window with "keep running"
+- The app outlives the window, as in Spotifast: `main` hands the app to
+  `fastframe_shell::Shell`, which runs `eframe::run_native` in a loop through
+  App's `Resident` impl; closing the window with "keep running"
   on sets `hide_intent`, the window is destroyed, and a headless loop keeps
   calling `App::background_frame` (the link, the archive, the tray) until
   the tray, a clicked notification, or another launch sets `wants_show`,
-  when a new window is made. `src/tray.rs` is the Linux status notifier
-  (ksni), `src/tray_native.rs` the Windows and macOS item (tray-icon; on
-  macOS made with the first window and pumped by `tray::idle` while none
-  exists). `src/single_instance.rs` holds a loopback port so a second
-  launch surfaces the first. `src/notify.rs` sends desktop notifications
+  when a new window is made. The tray item is fastframe-tray (ksni on
+  Linux, tray-icon on Windows and macOS; on macOS made with the first window
+  and pumped by `fastframe_tray::idle` while none exists), and `src/macos.rs`
+  hands its menu events to `fastframe_tray::claim_menu_event` first.
+  `src/single_instance.rs` holds a lock file in the runtime
+  directory, and a second launch asks the first to surface over a private
+  socket (a token-checked loopback port on Windows). `src/notify.rs` sends desktop notifications
   for `Event::Incoming` (live messages from others, not history) when the
   reader is away from that chat; a click carries the chat and the message
   id, so the reader lands on the announced message. macOS has no title bar:
   the content runs to the top. `src/macos.rs` keeps native application menus alive across window
-  recreation and aligns traffic lights with the chat header. Linking retains
+  recreation; `fastframe_macos::align_traffic_lights` centres the traffic
+  lights on the chat header. Linking retains
   `ui::titlebar_strip`; other headers reserve horizontal space for the buttons.
 - Group delivery uses `archive::receipts`: save the recipients when filing an
   outgoing message, record each person's receipt, then take the least advanced
@@ -248,11 +265,18 @@ protocol. These notes are for coding agents and new contributors.
 - Platform-specific code belongs behind `cfg` blocks; a change for one
   platform must keep the other two compiling.
 
-Three egui pitfalls this code has already hit:
+egui pitfalls this code has already hit:
 
 - `consume_key(Modifiers::NONE, key)` also matches the key with Shift held
   (egui only insists on the modifiers you ask for), so the composer
   inspects the events itself to tell Enter from Shift+Enter.
+- `consume_key` matches the logical key, and with Shift held US-style
+  layouts report `[` and `]` as `{` and `}` (and `=` as `+`), so a Shift
+  shortcut binds both spellings: see the bracket and `Plus`/`Equals` rows in
+  `ui/keys.rs`. Layouts that put another character on the shifted key never
+  produce either spelling; `Alt+↑/↓` is the layout-independent way to switch
+  chats. A long label in `SHORTCUTS` widens the dialog's key column and
+  truncates the descriptions at the default window size.
 - `with_layout(..., Align::Center)` directly inside a vertical container
   claims the whole available height; wrap it in `ui.horizontal`.
 - `ui.horizontal` inside a right-aligned bubble lays out right to left;
@@ -370,16 +394,27 @@ A release is not finished when the tag is pushed. Do these in order:
 
 ## Disk use
 
-Build caches save hours of recompiling, so keep them, but keep them small:
+Builds go through [mbx](https://mr-boxington.jdx.dev), enabled for mise users
+by `mise.toml` (run `mise trust` once in each new checkout or worktree, or
+mise refuses to run `cargo` there). It keeps compiled work in one shared
+store, places each checkout's `target/` under a disk budget, and collects old
+outputs on its own. Plain `cargo` still works for contributors who do not use
+mise or mbx.
 
-- Use one build cache per project: `target/` in the main checkout. Git
-  worktrees and parallel agents set `CARGO_TARGET_DIR` to that directory
-  instead of building their own; a fresh target costs 20 GB or more.
+- Give each worktree and each parallel agent its own target directory. A
+  worktree's own `target/` is enough, and mbx manages it; a second build in
+  the same checkout uses `CARGO_TARGET_DIR=target/<name>`, which stays inside
+  the managed target. Never point builds at a shared target directory: Cargo's
+  lock serializes them, one worktree's test run can execute another's binary,
+  and the store already shares compiled outputs.
+- Never vary `codegen-units` or other compiler flags per agent. Each variant
+  is a separate cache entry and fills the disk.
+- Do not `cargo clean` to save space. `mbx gc --dry-run` previews collection
+  and `mbx gc` runs it now; `mbx cache stats` shows what is held.
+- When a build is colder than expected, `mbx explain --last` says what missed
+  the cache and why.
 - Never put build output or large scratch files in `/tmp`. It is a small
   in-memory filesystem with a per-user quota, and filling it breaks every
   shell on the machine.
-- Rotate the cache: `cargo sweep --time 14` (from `cargo install cargo-sweep`)
-  removes artifacts unused for two weeks. If `target/` still exceeds about
-  60 GB, run `cargo clean`.
 - Delete one-off QA, packaging, and release-validation directories (under
   `.cache/` or `~/.cache/`) once their result is recorded.

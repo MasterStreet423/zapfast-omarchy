@@ -20,7 +20,6 @@ use crate::paths::AppDirs;
 use crate::settings::{NotificationSound, Settings, ThemeChoice};
 use crate::single_instance::{ControlCommand, Guard};
 use crate::theme::{self, Palette};
-use crate::tray::{TrayCommand, TrayService};
 
 /// Initial and incremental message-page size.
 pub const PAGE: usize = 60;
@@ -166,9 +165,10 @@ pub struct App {
     last_settings_save: Instant,
     pub backend: Backend,
     pub palette: Palette,
-    pub custom_themes: theme::custom::Catalog,
+    pub custom_themes: theme::Catalog,
+    desktop_background: crate::desktop_background::DesktopBackground,
     applied_dark: Option<bool>,
-    /// Texture of the catalog's wallpaper, tagged with its generation.
+    /// Texture of the desktop background, tagged with its generation.
     wallpaper: (u64, Option<egui::TextureHandle>),
     zoom_applied: bool,
 
@@ -381,6 +381,8 @@ pub struct App {
     pub new_contact_name: String,
     pub new_contact_last: String,
     pub new_contact_pending: bool,
+    /// The new-contact dialog's "Save to phone" box.
+    pub new_contact_to_phone: bool,
     /// Phone number entered for pairing.
     pub pair_phone: String,
     pub sidebar_visible: bool,
@@ -406,7 +408,7 @@ pub struct App {
     last_update_check: Option<Instant>,
     pub show_update: bool,
     pub update_download: crate::updates::DownloadState,
-    pub update_support: Option<Result<crate::updates::install::Installation, String>>,
+    pub update_support: Option<Result<crate::updates::Installation, String>>,
     update_inspecting: bool,
     pub update_arguments: Vec<String>,
     /// Whether to scroll the conversation to its newest message.
@@ -431,7 +433,7 @@ pub struct App {
     pub start_with_system: Option<bool>,
     /// Cross-thread window repaint handle.
     waker: Waker,
-    tray: Option<TrayService>,
+    tray: Option<fastframe_tray::Tray>,
     /// Whether the app is running without a window.
     pub window_hidden: bool,
     /// Whether window close should keep the process running.
@@ -515,6 +517,80 @@ impl Pending {
     }
 }
 
+/// The app outlives its window: closing it with "keep running" on hides
+/// ZapFast, and the tray, a notification or another launch brings it back.
+impl fastframe_shell::Resident for App {
+    fn closed(&self) -> fastframe_shell::Closed {
+        if !self.quit_requested && self.hide_intent {
+            fastframe_shell::Closed::Hide
+        } else {
+            fastframe_shell::Closed::Quit
+        }
+    }
+
+    fn window_gone(&mut self) {
+        App::window_gone(self);
+    }
+
+    fn headless_frame(&mut self, ctx: &egui::Context) -> fastframe_shell::Headless {
+        self.background_frame(ctx);
+        if self.quit_requested {
+            fastframe_shell::Headless::Quit
+        } else if self.wants_show {
+            fastframe_shell::Headless::Show
+        } else {
+            fastframe_shell::Headless::Wait
+        }
+    }
+
+    /// Without a tray there is no way back to a hidden window, so show it.
+    fn start_hidden(&mut self) -> bool {
+        if !self.hides_to_tray() {
+            return false;
+        }
+        App::start_hidden(self);
+        true
+    }
+
+    fn shutdown(&mut self) {
+        App::shutdown(self);
+    }
+}
+
+const TRAY_SHOW: &str = "show";
+const TRAY_QUIT: &str = "quit";
+
+/// What a tray click asks for: a left click on Linux and macOS, or the menu's
+/// first entry, toggles the window; a left click on Windows and a Dock click
+/// on macOS show it.
+fn tray_action(event: fastframe_tray::Event, window_hidden: bool) -> Option<Action> {
+    use fastframe_tray::Event;
+    Some(match event {
+        Event::Show => Action::ShowWindow,
+        Event::Toggle | Event::Menu(TRAY_SHOW) if window_hidden => Action::ShowWindow,
+        Event::Toggle | Event::Menu(TRAY_SHOW) => Action::HideWindow,
+        Event::Menu(TRAY_QUIT) => Action::Quit,
+        Event::Menu(_) => return None,
+    })
+}
+
+/// The tray item: ZapFast's icon, and a menu to show or hide the window and
+/// to quit.
+fn tray_config() -> fastframe_tray::Config {
+    use fastframe_tray::MenuItem;
+    fastframe_tray::Config {
+        id: "zapfast",
+        title: "ZapFast".into(),
+        icon: crate::util::app_icon_rgba,
+        template_icon: Some(crate::util::tray_template_rgba),
+        menu: vec![
+            MenuItem::action(TRAY_SHOW, "Show or hide ZapFast"),
+            MenuItem::Separator,
+            MenuItem::action(TRAY_QUIT, "Quit"),
+        ],
+    }
+}
+
 /// Process-level app services.
 #[derive(Clone, Copy, Debug)]
 pub struct AppOptions {
@@ -535,11 +611,19 @@ impl App {
         let mut app = Self::with_backend(dirs, settings, backend, waker.clone());
         app.pauses_media = true;
         app.badge = Some(Default::default());
-        app.custom_themes.enable_desktop_themes();
+        app.custom_themes
+            .enable_desktop_themes(crate::theme::DESKTOP_THEMES);
         app.load_custom_themes();
+        // Reading the desktop's font settings may wait on D-Bus; keep it off
+        // the first frame.
+        let text_waker = waker.clone();
+        std::thread::Builder::new()
+            .name("text-rendering".into())
+            .spawn(move || crate::theme::follow_text_rendering(move || text_waker.wake()))
+            .ok();
         if options.tray {
             let waker = waker.clone();
-            app.tray = TrayService::spawn(move || waker.wake());
+            app.tray = fastframe_tray::Tray::spawn(tray_config(), move || waker.wake());
         }
         // The clock preference may run a helper on Linux; keep it off the
         // first frame.
@@ -572,6 +656,16 @@ impl App {
         )
     }
 
+    /// Starts without a window (`--start-hidden`). The link and the archive
+    /// start now: they otherwise wait for a first frame, which a hidden start
+    /// only draws once the tray or another launch shows the window.
+    pub fn start_hidden(&mut self) {
+        self.hide_intent = true;
+        if let Some(startup) = self.backend.take_startup() {
+            let _ = startup.send(());
+        }
+    }
+
     fn with_backend(dirs: AppDirs, settings: Settings, backend: Backend, waker: Waker) -> Self {
         let palette = settings
             .cached_palette()
@@ -590,7 +684,8 @@ impl App {
             last_settings_save: Instant::now(),
             backend,
             palette,
-            custom_themes: theme::custom::Catalog::default(),
+            custom_themes: theme::Catalog::default(),
+            desktop_background: Default::default(),
             applied_dark: None,
             wallpaper: (0, None),
             zoom_applied: false,
@@ -717,6 +812,7 @@ impl App {
             new_contact_name: String::new(),
             new_contact_last: String::new(),
             new_contact_pending: false,
+            new_contact_to_phone: true,
             pair_phone: String::new(),
             sidebar_visible: true,
             show_archived: false,
@@ -780,9 +876,6 @@ impl App {
         self.window_focused = false;
         self.hide_intent = false;
         self.wants_show = false;
-        if let Some(tray) = &mut self.tray {
-            tray.hidden();
-        }
     }
 
     /// Whether window close keeps the app in the tray.
@@ -791,20 +884,15 @@ impl App {
     }
 
     fn handle_tray(&mut self) {
-        let Some(commands) = self.tray.as_ref().map(TrayService::drain_commands) else {
+        let Some(events) = self.tray.as_ref().map(fastframe_tray::Tray::events) else {
             return;
         };
-        for command in commands {
-            match command {
-                TrayCommand::Show => self.actions.push(Action::ShowWindow),
-                TrayCommand::ShowHide => self.actions.push(if self.window_hidden {
-                    Action::ShowWindow
-                } else {
-                    Action::HideWindow
-                }),
-                TrayCommand::Quit => self.actions.push(Action::Quit),
-            }
-        }
+        let hidden = self.window_hidden;
+        self.actions.extend(
+            events
+                .into_iter()
+                .filter_map(|event| tray_action(event, hidden)),
+        );
     }
 
     fn handle_control_commands(&mut self) {
@@ -971,16 +1059,13 @@ impl App {
         self.link.is_connected()
     }
 
-    /// How the chat list is drawn right now. Hidden chats either leave the
-    /// window entirely or collapse to an icon column, depending on settings.
+    /// How the chat list is drawn right now. Hiding it leaves a column of
+    /// avatars with unread badges.
     pub fn sidebar_mode(&self) -> SidebarDisplayMode {
         if self.sidebar_visible {
-            return SidebarDisplayMode::Expanded;
-        }
-        if self.settings.collapse_chat_list {
-            SidebarDisplayMode::CollapsedIconsOnly
+            SidebarDisplayMode::Expanded
         } else {
-            SidebarDisplayMode::Hidden
+            SidebarDisplayMode::CollapsedIconsOnly
         }
     }
 
@@ -1229,12 +1314,8 @@ impl App {
         let saved = present(contact.and_then(|contact| contact.full_name.as_deref()));
         let called = present(contact.and_then(|contact| contact.push_name.as_deref()))
             .or_else(|| present(hint));
-        let (first, second) = if self.settings.names_from_contacts {
-            (saved, called.map(|name| format!("~{name}")))
-        } else {
-            (called, saved)
-        };
-        if let Some(name) = first.or(second) {
+        // Saved names first, as WhatsApp does; a profile name wears a tilde.
+        if let Some(name) = saved.or_else(|| called.map(|name| format!("~{name}"))) {
             return name;
         }
         if let Some(chat) = self.chat(id)
@@ -2053,6 +2134,9 @@ impl App {
                     self.actions.push(Action::StartChat { id, name });
                 }
                 Event::Info(message) => self.toast(message),
+                Event::ClipboardImage(result) => {
+                    self.handle_clipboard_image(result, write_clipboard_image);
+                }
                 Event::StickerPicture {
                     path,
                     width,
@@ -3016,7 +3100,7 @@ impl App {
             };
             self.backend.send(Command::DownloadUpdate {
                 release,
-                source: crate::updates::Source::GitHub,
+                source: crate::updates::Source::github(),
             });
         }
     }
@@ -3034,10 +3118,11 @@ impl App {
     }
 
     pub fn load_custom_themes(&mut self) {
+        let waker = self.waker.clone();
         self.custom_themes.start(
             self.dirs.config.join("themes"),
             self.settings.custom_theme.clone(),
-            &self.waker,
+            &fastframe_theme::Waker::new(move || waker.wake()),
         );
     }
 
@@ -3045,9 +3130,18 @@ impl App {
         if self.custom_themes.needs_reload() {
             self.load_custom_themes();
         }
-        if !self.custom_themes.poll() {
-            return;
+        if self.custom_themes.poll() {
+            self.cache_custom_themes();
+            let waker = self.waker.clone();
+            self.desktop_background
+                .refresh(self.custom_themes.follows_omarchy(), move || waker.wake());
         }
+        self.desktop_background.poll();
+    }
+
+    /// Keeps the selected and the desktop's palettes in settings, so the
+    /// last usable appearance survives a missing file or a slow scan.
+    fn cache_custom_themes(&mut self) {
         let mut changed = false;
         if let Some(filename) = &self.settings.custom_theme
             && let Some(theme) = self.custom_themes.find(filename)
@@ -3108,12 +3202,15 @@ impl App {
                 Palette::light()
             }
         });
+        if crate::theme::apply_text_rendering_change(ctx) {
+            self.applied_dark = None;
+        }
         if self.applied_dark.is_none() || self.palette != palette {
             self.palette = palette;
             crate::theme::apply(ctx, &self.palette);
             self.applied_dark = Some(dark);
         }
-        let (generation, image) = self.custom_themes.wallpaper();
+        let (generation, image) = self.desktop_background.image();
         if self.wallpaper.0 != generation {
             let texture = image.map(|image| {
                 ctx.load_texture(
@@ -3442,6 +3539,9 @@ impl App {
                 ctx.copy_text(text);
                 self.toast(crate::i18n::gettext(self.locale, "Copied"));
             }
+            Action::CopyImage(path) => {
+                self.backend.send(Command::PrepareClipboardImage(path));
+            }
             Action::DismissToast(index) => {
                 if index < self.toasts.len() {
                     self.toasts.remove(index);
@@ -3465,13 +3565,11 @@ impl App {
                 messages,
                 to_chat,
             } => {
-                for message in messages {
-                    self.backend.send(Command::Forward {
-                        from_chat: from_chat.clone(),
-                        message,
-                        to_chat: to_chat.clone(),
-                    });
-                }
+                self.backend.send(Command::Forward {
+                    from_chat,
+                    messages,
+                    to_chat,
+                });
                 self.dialog = None;
                 self.forward_search.clear();
                 self.selection = None;
@@ -4054,6 +4152,7 @@ impl App {
                     self.pair_phone.clear();
                 }
                 if dialog == Dialog::NewContact {
+                    self.new_contact_to_phone = self.settings.save_contacts_to_phone;
                     self.new_contact_phone.clear();
                     self.new_contact_name.clear();
                     self.new_contact_last.clear();
@@ -4086,24 +4185,30 @@ impl App {
                     to_phone: self.settings.save_contacts_to_phone,
                 });
             }
-            Action::NewContact { phone, first, last } => {
+            Action::NewContact {
+                phone,
+                first,
+                last,
+                to_phone,
+            } => {
                 self.new_contact_pending = true;
                 let (full_name, first_name) = compose_name(&first, &last);
+                // The dialog's choice starts the next one.
+                if let Some(to_phone) = to_phone
+                    && full_name.is_some()
+                    && to_phone != self.settings.save_contacts_to_phone
+                {
+                    self.settings.save_contacts_to_phone = to_phone;
+                    self.mark_settings_dirty();
+                }
                 self.backend.send(Command::NewContact {
                     phone,
                     full_name,
                     first_name,
-                    to_phone: self.settings.save_contacts_to_phone,
+                    to_phone: to_phone.unwrap_or(self.settings.save_contacts_to_phone),
                 });
             }
-            Action::ToggleSidebar => match self.sidebar_mode() {
-                // Hiding is the only step out of the full list. With the
-                // preference on, it collapses to avatars instead of leaving.
-                SidebarDisplayMode::Expanded => self.sidebar_visible = false,
-                SidebarDisplayMode::CollapsedIconsOnly | SidebarDisplayMode::Hidden => {
-                    self.sidebar_visible = true;
-                }
-            },
+            Action::ToggleSidebar => self.sidebar_visible = !self.sidebar_visible,
             Action::SetChatFilter(filter) => {
                 if self.locked_folder {
                     self.close_locked_folder();
@@ -4349,8 +4454,8 @@ impl App {
                     }
                 });
             }
-            Action::HideShortcutHints => {
-                self.settings.show_shortcut_hints = false;
+            Action::SetShortcutHints(show) => {
+                self.settings.show_shortcut_hints = show;
                 self.mark_settings_dirty();
             }
             Action::DismissChatLockHint => {
@@ -4634,11 +4739,11 @@ impl App {
             .voice_wanted
             .as_ref()
             .is_some_and(|(_, _, since)| since.elapsed() < VOICE_FETCH_HOLD);
-        self.recording.is_some() && self.settings.pause_media_while_recording
-            || self.settings.pause_media_while_playing
-                && (self.player.is_playing()
-                    || fetching_next
-                    || self.video.is_active() && !self.video.muted())
+        self.settings.pause_other_media
+            && (self.recording.is_some()
+                || self.player.is_playing()
+                || fetching_next
+                || self.video.is_active() && !self.video.muted())
     }
 
     /// Keeps the backend following receipts for exactly the group message
@@ -5174,6 +5279,26 @@ impl App {
     pub fn media_of(&self, chat: &str, id: &str) -> Option<&Media> {
         self.conversations.get(chat)?.message(id)?.content.media()
     }
+
+    fn handle_clipboard_image(
+        &mut self,
+        result: Result<crate::model::DecodedImage, String>,
+        writer: impl FnOnce(&crate::model::DecodedImage) -> Result<(), String>,
+    ) {
+        match result {
+            Ok(image) => match writer(&image) {
+                Ok(()) => self.toast(crate::i18n::gettext(self.locale, "Copied image")),
+                Err(error) => {
+                    log::warn!("failed to write image to clipboard: {error}");
+                    self.toast_error(crate::i18n::gettext(self.locale, "Failed to copy image"));
+                }
+            },
+            Err(error) => {
+                log::warn!("failed to decode image for clipboard: {error}");
+                self.toast_error(crate::i18n::gettext(self.locale, "Failed to copy image"));
+            }
+        }
+    }
 }
 
 /// Detects paste from the key release. egui consumes the press and emits a
@@ -5261,6 +5386,31 @@ fn clipboard_image() -> Option<(usize, usize, Vec<u8>)> {
     Some((image.width, image.height, image.bytes.into_owned()))
 }
 
+/// Writes decoded straight-alpha RGBA image bytes to the system clipboard.
+///
+/// The handle stays open: on X11 the copying process serves the data, and
+/// dropping arboard's last handle leaves the image only to a clipboard
+/// manager, if there is one.
+fn write_clipboard_image(image: &crate::model::DecodedImage) -> Result<(), String> {
+    thread_local! {
+        static CLIPBOARD: std::cell::RefCell<Option<arboard::Clipboard>> =
+            const { std::cell::RefCell::new(None) };
+    }
+    CLIPBOARD.with_borrow_mut(|slot| {
+        let clipboard = match slot {
+            Some(clipboard) => clipboard,
+            None => slot.insert(arboard::Clipboard::new().map_err(|error| error.to_string())?),
+        };
+        clipboard
+            .set_image(arboard::ImageData {
+                width: image.width,
+                height: image.height,
+                bytes: std::borrow::Cow::Borrowed(&image.bytes),
+            })
+            .map_err(|error| error.to_string())
+    })
+}
+
 impl Delivery {
     /// Whether an outgoing message is still pending.
     pub fn in_flight(self) -> bool {
@@ -5301,7 +5451,7 @@ fn notification_eligible(chat: &Chat, now: i64, message_at: i64) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::{ChatKind, Content, Media, MediaState};
+    use crate::model::{ChatKind, Content, Media, MediaState, ToastKind};
 
     fn app() -> App {
         let root = std::env::temp_dir().join(format!("zapfast-app-{}", std::process::id()));
@@ -5316,24 +5466,52 @@ mod tests {
     }
 
     #[test]
-    fn hiding_the_chat_list_collapses_it_only_when_asked() {
+    fn the_new_contact_box_remembers_whether_to_save_to_the_phone() {
+        let mut app = app();
+        let (backend, mut commands) = Backend::recording();
+        app.backend = backend;
+        let ctx = egui::Context::default();
+        let to_phone = |commands: &mut tokio::sync::mpsc::UnboundedReceiver<Command>| {
+            std::iter::from_fn(|| commands.try_recv().ok())
+                .find_map(|command| match command {
+                    Command::NewContact { to_phone, .. } => Some(to_phone),
+                    _ => None,
+                })
+                .expect("the number is checked")
+        };
+        app.apply(Action::ShowDialog(Dialog::NewContact), &ctx);
+        assert!(app.new_contact_to_phone, "on until turned off");
+        let add = |to_phone, first: &str| Action::NewContact {
+            phone: "15550002222".into(),
+            first: first.into(),
+            last: String::new(),
+            to_phone,
+        };
+        app.apply(add(Some(false), "Ada"), &ctx);
+        assert!(!to_phone(&mut commands));
+        assert!(!app.settings.save_contacts_to_phone);
+        assert!(app.settings_dirty);
+        app.apply(Action::ShowDialog(Dialog::NewContact), &ctx);
+        assert!(!app.new_contact_to_phone, "the next dialog starts from it");
+        // Opening a chat without a name saves nothing, so it keeps the choice.
+        app.apply(add(Some(true), ""), &ctx);
+        assert!(to_phone(&mut commands));
+        assert!(!app.settings.save_contacts_to_phone);
+        // A shared contact's Add follows the last choice.
+        app.apply(add(None, "Bob"), &ctx);
+        assert!(!to_phone(&mut commands));
+    }
+
+    #[test]
+    fn hiding_the_chat_list_always_collapses_it_to_avatars() {
         let mut app = app();
         let ctx = egui::Context::default();
         assert_eq!(app.sidebar_mode(), SidebarDisplayMode::Expanded);
         app.apply(Action::ToggleSidebar, &ctx);
         assert_eq!(
             app.sidebar_mode(),
-            SidebarDisplayMode::Hidden,
-            "without the preference, hiding removes the list"
-        );
-        app.apply(Action::ToggleSidebar, &ctx);
-        assert_eq!(app.sidebar_mode(), SidebarDisplayMode::Expanded);
-        app.settings.collapse_chat_list = true;
-        app.apply(Action::ToggleSidebar, &ctx);
-        assert_eq!(
-            app.sidebar_mode(),
             SidebarDisplayMode::CollapsedIconsOnly,
-            "the same button collapses the list instead"
+            "hiding the list leaves the avatar column"
         );
         app.apply(Action::ToggleSidebar, &ctx);
         assert_eq!(
@@ -5682,6 +5860,110 @@ mod tests {
         app.apply(Action::CloseImagePreview, &ctx);
         assert!(app.image_preview.is_none());
         assert!(app.dialog.is_none());
+    }
+
+    #[test]
+    fn copying_an_image_dispatches_background_decode() {
+        let mut app = app();
+        let (backend, mut commands) = Backend::recording();
+        app.backend = backend;
+        let ctx = egui::Context::default();
+        let path = std::path::PathBuf::from("sample-photo.png");
+
+        app.apply(Action::CopyImage(path.clone()), &ctx);
+        assert!(matches!(
+            commands.try_recv(),
+            Ok(Command::PrepareClipboardImage(p)) if p == path
+        ));
+    }
+
+    #[test]
+    fn clipboard_image_event_preserves_pixels_and_toasts() {
+        let mut app = app();
+        let pixels = vec![
+            255, 0, 0, 255, // red
+            0, 255, 0, 255, // green
+            0, 0, 255, 255, // blue
+            255, 255, 0, 255, // yellow
+        ];
+        let decoded = crate::model::DecodedImage {
+            width: 2,
+            height: 2,
+            bytes: pixels.clone(),
+        };
+
+        let mut written = None;
+        app.handle_clipboard_image(Ok(decoded), |image| {
+            written = Some((image.width, image.height, image.bytes.clone()));
+            Ok(())
+        });
+
+        assert_eq!(written, Some((2, 2, pixels)));
+        assert_eq!(app.toasts.len(), 1);
+        assert_eq!(app.toasts[0].message, "Copied image");
+        assert_eq!(app.toasts[0].kind, ToastKind::Info);
+
+        // Failure during clipboard write surfaces an error toast.
+        app.toasts.clear();
+        let decoded_err = crate::model::DecodedImage {
+            width: 1,
+            height: 1,
+            bytes: vec![0; 4],
+        };
+        app.handle_clipboard_image(Ok(decoded_err), |_| Err("OS clipboard locked".into()));
+        assert_eq!(app.toasts.len(), 1);
+        assert_eq!(app.toasts[0].message, "Failed to copy image");
+        assert_eq!(app.toasts[0].kind, ToastKind::Error);
+
+        // Failure during background decoding also surfaces an error toast.
+        app.toasts.clear();
+        app.handle_clipboard_image(Err("Corrupt image data".into()), |_| unreachable!());
+        assert_eq!(app.toasts.len(), 1);
+        assert_eq!(app.toasts[0].message, "Failed to copy image");
+        assert_eq!(app.toasts[0].kind, ToastKind::Error);
+    }
+
+    #[test]
+    fn a_hidden_start_starts_the_backend_without_a_frame() {
+        let root = tempfile::tempdir().unwrap();
+        let (backend, mut started) = Backend::detached_with_startup();
+        let mut app = App::with_backend(
+            AppDirs::under(root.path()),
+            Settings::default(),
+            backend,
+            Waker::default(),
+        );
+        assert!(started.try_recv().is_err(), "nothing starts before asked");
+        app.start_hidden();
+        assert!(app.hide_intent);
+        assert_eq!(started.try_recv(), Ok(()));
+    }
+
+    /// The shell asks the app what a closed window means and what each
+    /// headless tick wants; without a tray a hidden start opens the window.
+    #[test]
+    fn the_shell_hides_shows_and_quits_as_the_app_asks() {
+        use fastframe_shell::{Closed, Headless, Resident};
+        let mut app = app();
+        assert_eq!(app.closed(), Closed::Quit);
+        app.hide_intent = true;
+        assert_eq!(app.closed(), Closed::Hide);
+        app.quit_requested = true;
+        assert_eq!(app.closed(), Closed::Quit);
+        app.quit_requested = false;
+        Resident::window_gone(&mut app);
+        assert!(!app.hide_intent && !app.wants_show);
+        let ctx = egui::Context::default();
+        assert_eq!(app.headless_frame(&ctx), Headless::Wait);
+        app.wants_show = true;
+        assert_eq!(app.headless_frame(&ctx), Headless::Show);
+        app.quit_requested = true;
+        assert_eq!(app.headless_frame(&ctx), Headless::Quit);
+
+        let mut app = self::app();
+        assert!(app.tray.is_none());
+        assert!(!Resident::start_hidden(&mut app), "no tray, no way back");
+        assert!(!app.hide_intent);
     }
 
     #[test]
@@ -6090,8 +6372,41 @@ mod tests {
     }
 
     #[test]
+    fn tray_clicks_show_hide_and_quit() {
+        use fastframe_tray::Event;
+        assert!(matches!(
+            super::tray_action(Event::Show, false),
+            Some(Action::ShowWindow)
+        ));
+        for event in [Event::Toggle, Event::Menu(super::TRAY_SHOW)] {
+            assert!(matches!(
+                super::tray_action(event, true),
+                Some(Action::ShowWindow)
+            ));
+            assert!(matches!(
+                super::tray_action(event, false),
+                Some(Action::HideWindow)
+            ));
+        }
+        assert!(matches!(
+            super::tray_action(Event::Menu(super::TRAY_QUIT), false),
+            Some(Action::Quit)
+        ));
+        assert!(super::tray_action(Event::Menu("other"), false).is_none());
+        let menu = super::tray_config().menu;
+        assert_eq!(
+            menu,
+            [
+                fastframe_tray::MenuItem::action(super::TRAY_SHOW, "Show or hide ZapFast"),
+                fastframe_tray::MenuItem::Separator,
+                fastframe_tray::MenuItem::action(super::TRAY_QUIT, "Quit"),
+            ]
+        );
+    }
+
+    #[test]
     fn custom_theme_cache_survives_a_missing_file_and_follows_system_updates() {
-        use crate::theme::custom::{Catalog, CustomTheme};
+        use crate::theme::{Catalog, CustomTheme};
         let mut app = app();
         let ctx = egui::Context::default();
         let mut first = CustomTheme {
@@ -6099,7 +6414,7 @@ mod tests {
             palette: Palette::dark(),
         };
         first.palette.accent = egui::Color32::RED;
-        app.custom_themes = Catalog::from_themes(vec![first.clone()]);
+        app.custom_themes = Catalog::preview(vec![first.clone()], false);
         app.apply(Action::SetCustomTheme(first.filename.clone()), &ctx);
         assert_eq!(app.palette.accent, egui::Color32::RED);
         // Cached selection remains usable while the file is temporarily missing.
@@ -6113,14 +6428,9 @@ mod tests {
         let mut system = first;
         system.filename = "omarchy.json".into();
         system.palette.accent = egui::Color32::GREEN;
-        app.custom_themes
-            .load_system_test(Some(system.clone()), true);
-        let deadline = Instant::now() + Duration::from_secs(5);
-        while app.settings.system_theme_cache.as_ref() != Some(&system) {
-            app.poll_custom_themes();
-            assert!(Instant::now() < deadline);
-            std::thread::sleep(Duration::from_millis(1));
-        }
+        app.custom_themes = Catalog::preview(vec![system.clone()], true);
+        app.cache_custom_themes();
+        assert_eq!(app.settings.system_theme_cache.as_ref(), Some(&system));
         app.apply_theme(&ctx);
         assert_eq!(app.palette.accent, egui::Color32::GREEN);
         app.apply(Action::SetTheme(ThemeChoice::Light), &ctx);
@@ -6129,10 +6439,7 @@ mod tests {
 
     #[test]
     fn automatic_updates_require_opt_in_and_explicit_restart() {
-        use crate::updates::{
-            DownloadState,
-            install::{Installation, Kind, Prepared},
-        };
+        use crate::updates::{DownloadState, Installation, Kind, Prepared};
         let mut app = app();
         let ctx = egui::Context::default();
         app.update = Some(crate::updates::Release {
@@ -6157,13 +6464,8 @@ mod tests {
             app.update_download,
             DownloadState::Downloading { .. }
         ));
-        app.update_download = DownloadState::Ready(Box::new(Prepared {
-            installation,
-            directory: "/fixture/staging".into(),
-            payload: "/fixture/staging/next".into(),
-            sha256: String::new(),
-            version: "99.0.0".into(),
-        }));
+        app.update_download =
+            DownloadState::Ready(Box::new(Prepared::sample(installation, "99.0.0")));
         app.maybe_download_update();
         assert!(matches!(app.update_download, DownloadState::Ready(_)));
         assert!(!app.quit_requested);
@@ -6339,9 +6641,9 @@ mod tests {
             &ctx,
         );
         let forwarded: Vec<String> = std::iter::from_fn(|| commands.try_recv().ok())
-            .filter_map(|command| match command {
-                Command::Forward { message, .. } => Some(message),
-                _ => None,
+            .flat_map(|command| match command {
+                Command::Forward { messages, .. } => messages,
+                _ => Vec::new(),
             })
             .collect();
         assert_eq!(forwarded, ["first", "third"]);
@@ -6845,7 +7147,7 @@ mod tests {
         let chat = "1@s.whatsapp.net";
         app.chats = vec![Chat::new(chat.into(), "Ada".into())];
         app.open_chat = Some(chat.into());
-        app.settings.pause_media_while_playing = true;
+        app.settings.pause_other_media = true;
         app.conversations.entry(chat.into()).or_default().merge(
             vec![
                 voice(chat, "first", 1, Some("first.ogg")),
@@ -6980,7 +7282,7 @@ mod tests {
         let mut app = app();
         let chat = "1@s.whatsapp.net";
         app.open_chat = Some(chat.into());
-        app.settings.pause_media_while_playing = true;
+        app.settings.pause_other_media = true;
         app.conversations
             .entry(chat.into())
             .or_default()
@@ -8671,9 +8973,14 @@ mod tests {
         let ctx = egui::Context::default();
         app.composer = "Unsent draft".into();
         app.focus_search = true;
-        app.apply(Action::HideShortcutHints, &ctx);
+        app.apply(Action::SetShortcutHints(false), &ctx);
         assert!(!app.settings.show_shortcut_hints);
         assert!(app.settings_dirty);
+        app.apply(Action::SetShortcutHints(true), &ctx);
+        assert!(
+            app.settings.show_shortcut_hints,
+            "the shortcuts dialog brings them back"
+        );
         app.apply(Action::FocusComposer, &ctx);
         assert!(app.focus_composer);
         assert!(!app.focus_search);
@@ -8809,13 +9116,10 @@ mod name_tests {
         // Duplicate entries for the same identity must not inflate the count.
         chat.participants.push(chat.participants[0].clone());
         chat.participants.push(app.me.clone().unwrap());
-        for saved_names in [false, true] {
-            app.settings.names_from_contacts = saved_names;
-            assert_eq!(app.participant_names(&chat), "Andrea x3, Giacomo, You");
-            assert_eq!(app.chat_title(&chat), app.participant_names(&chat));
-            chat.name.clear();
-            assert_eq!(app.chat_title(&chat), app.participant_names(&chat));
-        }
+        assert_eq!(app.participant_names(&chat), "Andrea x3, Giacomo, You");
+        assert_eq!(app.chat_title(&chat), app.participant_names(&chat));
+        chat.name.clear();
+        assert_eq!(app.chat_title(&chat), app.participant_names(&chat));
         chat.name = "Group".into();
         chat.group_subject_known = true;
         assert_eq!(
@@ -8835,16 +9139,13 @@ mod name_tests {
     }
 
     #[test]
-    fn the_setting_picks_the_source_and_the_other_fills_in() {
-        let mut app = app();
+    fn saved_names_come_first_and_profile_names_fill_in() {
+        let app = app();
         assert_eq!(app.display_name("1@s.whatsapp.net"), "Ada Lovelace");
         assert_eq!(app.display_name("2@s.whatsapp.net"), "~Bob");
-        app.settings.names_from_contacts = false;
-        assert_eq!(app.display_name("1@s.whatsapp.net"), "Ada");
-        assert_eq!(app.display_name("2@s.whatsapp.net"), "Bob");
         assert_eq!(
             app.display_name_or("3@s.whatsapp.net", Some("Cy")),
-            "Cy",
+            "~Cy",
             "a name the message carried, for someone unknown"
         );
     }

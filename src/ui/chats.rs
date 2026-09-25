@@ -308,8 +308,6 @@ fn filter_chips(app: &mut App, ui: &mut egui::Ui) {
         .show(ui, |ui| {
             ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing = vec2(4.0, 6.0);
-                // First, so a chosen label is never scrolled out of sight.
-                labels::menu_chip(app, ui, &palette);
                 for filter in ChatFilter::EVERY {
                     let count = match filter {
                         ChatFilter::All => 0,

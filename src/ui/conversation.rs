@@ -32,7 +32,6 @@ const NOT_SENT_HINT: &str =
 
 pub fn show(app: &mut App, ui: &mut egui::Ui) {
     let Some(chat) = app.current_chat().cloned() else {
-        super::standalone_header(app, ui);
         if theme::macos_chrome(ui.ctx()) {
             super::banner(app, ui);
         }
@@ -98,9 +97,6 @@ fn empty(app: &mut App, ui: &mut egui::Ui) {
 fn header(app: &mut App, ui: &mut egui::Ui, chat: &Chat) {
     let palette = app.palette;
     let title = app.chat_title(chat);
-    // The collapsed list has its own show button and clears the traffic
-    // lights itself; only a fully hidden list leaves both to the header.
-    let sidebar_hidden = app.sidebar_mode() == crate::model::SidebarDisplayMode::Hidden;
     egui::Panel::top("chat-header")
         .show_separator_line(false)
         .frame(
@@ -109,33 +105,13 @@ fn header(app: &mut App, ui: &mut egui::Ui, chat: &Chat) {
                 .inner_margin(Margin::symmetric(14, 8)),
         )
         .show(ui, |ui| {
+            // The chat list, expanded or collapsed, clears the traffic lights.
             if theme::macos_chrome(ui.ctx()) {
-                let mut drag = ui.max_rect();
-                if sidebar_hidden {
-                    drag.min.x += theme::traffic_light_inset(ui.ctx());
-                }
-                super::titlebar_drag(ui, drag);
+                super::titlebar_drag(ui, ui.max_rect());
             }
             ui.horizontal(|ui| {
                 // Give both rows a fixed height so their contents align.
                 ui.set_min_height(HEADER_ROW);
-                if sidebar_hidden && theme::macos_chrome(ui.ctx()) {
-                    ui.add_space((theme::traffic_light_inset(ui.ctx()) - 14.0).max(0.0));
-                }
-                if sidebar_hidden
-                    && theme::icon_button(
-                        ui,
-                        Icon::PanelLeft,
-                        18.0,
-                        palette.secondary,
-                        palette.text,
-                        &crate::i18n::gettext(app.locale, "Show the chat list (Ctrl+B)"),
-                    )
-                    .tab_stop(Stop::Sidebar)
-                    .clicked()
-                {
-                    app.actions.push(Action::ToggleSidebar);
-                }
                 let picture = app.avatar(&chat.id);
                 let (subtitle, color) = subtitle(app, chat);
                 let right_controls = 72.0;
@@ -1321,11 +1297,11 @@ fn composer(app: &mut App, ui: &mut egui::Ui, chat: &Chat) {
                         13.0,
                         palette.dim,
                         palette.secondary,
-                        crate::i18n::gettext(app.locale, "Hide shortcut hints (restore in Settings)").as_ref(),
+                        crate::i18n::gettext(app.locale, "Hide shortcut hints (bring them back from Keyboard shortcuts)").as_ref(),
                     )
                     .clicked()
                     {
-                        app.actions.push(Action::HideShortcutHints);
+                        app.actions.push(Action::SetShortcutHints(false));
                     }
                     theme::text(ui, &hint, theme::regular(11.0), palette.dim);
                     // Open the shortcut list without consuming typed `?`.
@@ -1594,8 +1570,6 @@ struct View<'a> {
     connected: bool,
     poll_voting: &'a HashSet<(ChatId, String)>,
     interactive_pending: &'a HashSet<(ChatId, String)>,
-    /// Show avatars for all incoming messages, not only groups.
-    pictures: bool,
     anchor: Option<&'a str>,
     /// Demo/test: keep this message's context menu open.
     open_menu: Option<&'a str>,
@@ -1609,6 +1583,7 @@ struct View<'a> {
     /// Resolves mention names without replacing our name with "You".
     mention_names: &'a dyn Fn(&str) -> String,
     avatars: &'a HashMap<String, Option<PathBuf>>,
+    contacts: &'a HashMap<String, crate::model::Contact>,
     now: i64,
     /// Animate media only while this window is active.
     animate: bool,
@@ -1651,13 +1626,19 @@ fn estimated_height(message: &Message, width: f32, new_day: bool) -> f32 {
     40.0 + body + if new_day { 36.0 } else { 0.0 }
 }
 
+/// Incoming messages carry their sender's picture and name in groups only,
+/// as on WhatsApp.
+fn shows_sender_pictures(chat: &Chat) -> bool {
+    chat.is_group()
+}
+
 fn messages(app: &mut App, ui: &mut egui::Ui, chat: &Chat) {
     let palette = app.palette;
     // Check out the conversation while drawing rows and collecting actions.
     let mut conversation = app.conversations.remove(&chat.id).unwrap_or_default();
     let typing = app.typing_in(&chat.id);
     let mut avatars = HashMap::new();
-    if chat.is_group() || app.settings.show_sender_pictures {
+    if shows_sender_pictures(chat) {
         let mut senders: HashSet<String> = conversation
             .messages
             .iter()
@@ -1683,7 +1664,6 @@ fn messages(app: &mut App, ui: &mut egui::Ui, chat: &Chat) {
         connected: app.link.is_connected(),
         poll_voting: &app.poll_voting,
         interactive_pending: &app.interactive_sending,
-        pictures: app.settings.show_sender_pictures,
         anchor: if conversation.loading_older || conversation.fetching_phone {
             None
         } else {
@@ -1701,6 +1681,7 @@ fn messages(app: &mut App, ui: &mut egui::Ui, chat: &Chat) {
         names_or: &names_or,
         mention_names: &mention_names,
         avatars: &avatars,
+        contacts: &app.contacts,
         now: crate::util::now(),
         animate: app.window_focused,
         player: &app.player,
@@ -1731,7 +1712,6 @@ fn messages(app: &mut App, ui: &mut egui::Ui, chat: &Chat) {
         .map(|(_, ids)| ids.clone());
     let scroll_to_bottom =
         app.scroll_to_bottom && divider.as_ref().is_none_or(|(.., placed)| *placed);
-    let app_pictures = app.settings.show_sender_pictures;
     // The message a quote or search result jumped to flashes once in view.
     let jump = app
         .jump_highlight
@@ -1897,7 +1877,7 @@ fn messages(app: &mut App, ui: &mut egui::Ui, chat: &Chat) {
                             }
                             ui.add_space(4.0);
                         }
-                        let show_sender = (chat.is_group() || app_pictures)
+                        let show_sender = shows_sender_pictures(chat)
                             && !message.from_me
                             && (new_day
                                 || previous.is_none_or(|previous| {
@@ -2189,7 +2169,7 @@ fn top_of_history(
 fn typing_bubble(ui: &mut egui::Ui, view: &View<'_>, typers: &[(String, String)]) {
     let palette = view.palette;
     ui.horizontal(|ui| {
-        if view.chat.is_group() || view.pictures {
+        if shows_sender_pictures(view.chat) {
             let count = typers.len().min(3);
             let step = SENDER_AVATAR * 0.6;
             let width = SENDER_AVATAR + step * (count.saturating_sub(1)) as f32;
@@ -2457,7 +2437,7 @@ fn bubble(
         palette: view.palette.on_bubble(own),
         ..*view
     };
-    let with_avatar = !own && (view.chat.is_group() || view.pictures);
+    let with_avatar = !own && shows_sender_pictures(view.chat);
     let carousel = matches!(&message.content, Content::Interactive { card: Some(card), .. } if !card.carousel.is_empty());
     let max_width = ((ui.available_width() * if carousel { 0.95 } else { 0.72 })
         .min(if carousel { 920.0 } else { 560.0 })
@@ -3805,6 +3785,125 @@ fn quote_mentions(view: &View<'_>, quoted: &crate::model::Quoted) -> Vec<markup:
         .collect()
 }
 
+fn vcard_tel_preference(property: &str) -> Option<u8> {
+    let mut best = None;
+    for parameter in property.split(';').skip(1) {
+        let (name, value) = parameter.split_once('=').unwrap_or(("TYPE", parameter));
+        let value = value.trim_matches('"');
+        let rank = if name.eq_ignore_ascii_case("PREF") {
+            value
+                .parse::<u8>()
+                .ok()
+                .filter(|rank| (1..=100).contains(rank))
+        } else if name.eq_ignore_ascii_case("TYPE")
+            && value
+                .split(',')
+                .any(|value| value.eq_ignore_ascii_case("PREF"))
+        {
+            Some(1)
+        } else {
+            None
+        };
+        if let Some(rank) = rank {
+            best = Some(best.map_or(rank, |current: u8| current.min(rank)));
+        }
+    }
+    best
+}
+
+/// The first card of a shared contact, as the bubble uses it.
+#[derive(Debug, PartialEq)]
+struct SharedContact {
+    name: String,
+    /// The telephone number as the card writes it.
+    number: String,
+    /// The WhatsApp account behind the number, in digits: the `waid`
+    /// parameter WhatsApp adds, or a number written in international form.
+    /// A local number without a country code cannot name one.
+    account: Option<String>,
+}
+
+fn vcard_tel_account(property: &str, value: &str) -> Option<String> {
+    let digits = |text: &str| {
+        text.chars()
+            .filter(char::is_ascii_digit)
+            .collect::<String>()
+    };
+    let waid = property.split(';').skip(1).find_map(|parameter| {
+        let (name, value) = parameter.split_once('=')?;
+        name.eq_ignore_ascii_case("WAID")
+            .then(|| digits(value.trim_matches('"')))
+    });
+    waid.or_else(|| value.trim().starts_with('+').then(|| digits(value)))
+        .filter(|account| account.len() >= 7)
+}
+
+fn shared_contact_details(vcard: &str, fallback_name: &str) -> Option<SharedContact> {
+    let mut name = None;
+    let mut first_phone = None;
+    let mut preferred_phone: Option<(u8, (String, Option<String>))> = None;
+    let mut first_card: Vec<String> = Vec::new();
+    for line in vcard.lines() {
+        let line = line.trim_end_matches('\r');
+        if line.starts_with([' ', '\t']) {
+            if let Some(previous) = first_card.last_mut() {
+                previous.push_str(line.trim_start());
+            }
+            continue;
+        }
+        if line.eq_ignore_ascii_case("END:VCARD") && !first_card.is_empty() {
+            break;
+        }
+        if line.eq_ignore_ascii_case("BEGIN:VCARD") {
+            if first_card.is_empty() {
+                first_card.push(line.to_owned());
+            }
+            continue;
+        }
+        if !first_card.is_empty() {
+            first_card.push(line.to_owned());
+        }
+    }
+    if first_card.is_empty() {
+        first_card.extend(vcard.lines().map(str::to_owned));
+    }
+    for line in first_card {
+        let Some((property, value)) = line.split_once(':') else {
+            continue;
+        };
+        let raw_name = property.split(';').next().unwrap_or(property);
+        let property_name = raw_name.rsplit('.').next().unwrap_or(raw_name);
+        if property_name.eq_ignore_ascii_case("FN") {
+            name = Some(value.trim().to_owned());
+        } else if property_name.eq_ignore_ascii_case("TEL") {
+            let number = value.trim().to_owned();
+            if number.chars().filter(char::is_ascii_digit).count() < 7 {
+                continue;
+            }
+            let phone = (number, vcard_tel_account(property, value));
+            if let Some(rank) = vcard_tel_preference(property) {
+                let replace = preferred_phone
+                    .as_ref()
+                    .is_none_or(|(best_rank, _)| rank < *best_rank);
+                if replace {
+                    preferred_phone = Some((rank, phone));
+                }
+            } else if first_phone.is_none() {
+                first_phone = Some(phone);
+            }
+        }
+    }
+    let (number, account) = preferred_phone.map(|(_, phone)| phone).or(first_phone)?;
+    let name = name
+        .filter(|name| !name.is_empty())
+        .unwrap_or_else(|| fallback_name.to_owned());
+    Some(SharedContact {
+        name,
+        number,
+        account,
+    })
+}
+
 /// Draws a message body and returns optional footer space on its last line.
 fn content(
     ui: &mut egui::Ui,
@@ -4055,18 +4154,64 @@ fn content(
             let icon = |ui: &mut egui::Ui| {
                 theme::icon(ui, Icon::Contact, 18.0, palette.accent);
             };
+            let details = shared_contact_details(vcard, display_name);
             mirrored_row(ui, own, icon, |ui| {
                 ui.vertical(|ui| {
-                    ui.spacing_mut().item_spacing.y = 1.0;
-                    widgets::rich_text(ui, display_name, theme::medium(14.0), palette.text);
-                    let phone = vcard
-                        .lines()
-                        .find(|line| line.starts_with("TEL"))
-                        .and_then(|line| line.rsplit(':').next())
-                        .map(str::trim)
-                        .unwrap_or("");
-                    if !phone.is_empty() {
-                        theme::text(ui, phone, theme::regular(12.5), palette.secondary);
+                    ui.spacing_mut().item_spacing.y = 5.0;
+                    let name = details
+                        .as_ref()
+                        .map_or(display_name.as_str(), |contact| contact.name.as_str());
+                    widgets::rich_text(ui, name, theme::medium(14.0), palette.text);
+                    match details.as_ref() {
+                        Some(SharedContact {
+                            account: Some(account),
+                            ..
+                        }) => {
+                            let id = format!("{account}@s.whatsapp.net");
+                            ui.horizontal(|ui| {
+                                if theme::pill_button(
+                                    ui,
+                                    &palette,
+                                    crate::i18n::gettext(view.locale, "Chat").as_ref(),
+                                    true,
+                                )
+                                .clicked()
+                                {
+                                    actions.push(Action::StartChat {
+                                        id: id.clone(),
+                                        name: name.to_owned(),
+                                    });
+                                }
+                                if !view.contacts.contains_key(&id)
+                                    && theme::pill_button(
+                                        ui,
+                                        &palette,
+                                        crate::i18n::gettext(view.locale, "Add").as_ref(),
+                                        false,
+                                    )
+                                    .clicked()
+                                {
+                                    let (first, last) = crate::util::split_name(name);
+                                    actions.push(Action::NewContact {
+                                        phone: account.clone(),
+                                        first,
+                                        last,
+                                        to_phone: None,
+                                    });
+                                }
+                            });
+                        }
+                        // Without an account there is nothing to open, so
+                        // the number stays readable, as it was.
+                        Some(contact) => {
+                            theme::text(
+                                ui,
+                                &contact.number,
+                                theme::regular(12.5),
+                                palette.secondary,
+                            );
+                        }
+                        None => {}
                     }
                 });
             });
@@ -6358,6 +6503,103 @@ fn chat_of(chat: &ChatId) -> &str {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn sender_pictures_show_in_groups_only() {
+        let chat = |id: &str| Chat::new(id.into(), "Chat".into());
+        assert!(shows_sender_pictures(&chat("120363012345678901@g.us")));
+        assert!(!shows_sender_pictures(&chat("393331234567@s.whatsapp.net")));
+        assert!(!shows_sender_pictures(&chat(
+            "120363055566677788@newsletter"
+        )));
+    }
+
+    fn contact(name: &str, number: &str, account: Option<&str>) -> Option<SharedContact> {
+        Some(SharedContact {
+            name: name.to_owned(),
+            number: number.to_owned(),
+            account: account.map(str::to_owned),
+        })
+    }
+
+    #[test]
+    fn shared_contact_accepts_case_insensitive_vcard_property_names() {
+        assert_eq!(
+            shared_contact_details(
+                "BEGIN:VCARD\nversion:3.0\nitem1.fn:Case-insensitive name\nitem1.tel;type=cell;waid=1234567:+1 234567\nEND:VCARD",
+                "Fallback",
+            ),
+            contact("Case-insensitive name", "+1 234567", Some("1234567"))
+        );
+    }
+
+    #[test]
+    fn shared_contact_uses_first_valid_telephone_when_multiple_are_present() {
+        assert_eq!(
+            shared_contact_details(
+                "BEGIN:VCARD\nFN:Two numbers\nTEL;TYPE=HOME:+1111111\nTEL;TYPE=CELL:+2222222\nEND:VCARD",
+                "Fallback",
+            ),
+            contact("Two numbers", "+1111111", Some("1111111"))
+        );
+    }
+
+    #[test]
+    fn shared_contact_prefers_lowest_vcard_tel_preference() {
+        assert_eq!(
+            shared_contact_details(
+                "BEGIN:VCARD\nFN:Preferred number\nTEL;TYPE=HOME:+1111111\nitem1.TEL;TYPE=CELL;PREF=2:+2222222\nTEL;TYPE=WORK;PREF=1:+3333333\nEND:VCARD",
+                "Fallback",
+            ),
+            contact("Preferred number", "+3333333", Some("3333333"))
+        );
+    }
+
+    #[test]
+    fn shared_contact_prefers_vcard_name_and_reads_the_account_from_waid() {
+        assert_eq!(
+            shared_contact_details(
+                "BEGIN:VCARD\nVERSION:3.0\nFN:Alice Example\nitem1.TEL;waid=15550101234:+1 (555) 010-1234\nEND:VCARD",
+                "Contact from sender",
+            ),
+            contact("Alice Example", "+1 (555) 010-1234", Some("15550101234"))
+        );
+    }
+
+    #[test]
+    fn a_local_number_names_no_account_and_stays_readable() {
+        // Without a country code the digits are not a WhatsApp account.
+        assert_eq!(
+            shared_contact_details(
+                "BEGIN:VCARD\nFN:Local\nTEL;TYPE=CELL:0171 1234567\nEND:VCARD",
+                "Fallback",
+            ),
+            contact("Local", "0171 1234567", None)
+        );
+    }
+
+    #[test]
+    fn shared_contact_without_vcard_name_uses_message_name_and_rejects_missing_phone() {
+        assert_eq!(
+            shared_contact_details("BEGIN:VCARD\nTEL:+1234567\nEND:VCARD", "Shared person"),
+            contact("Shared person", "+1234567", Some("1234567"))
+        );
+        assert_eq!(
+            shared_contact_details("BEGIN:VCARD\nFN:No phone\nEND:VCARD", "Fallback"),
+            None
+        );
+    }
+
+    #[test]
+    fn shared_contact_details_use_the_first_vcard_when_multiple_contacts_are_shared() {
+        assert_eq!(
+            shared_contact_details(
+                "BEGIN:VCARD\nFN:Alice\nTEL:+15550101234\nEND:VCARD\nBEGIN:VCARD\nFN:Bob\nTEL:+15550105678\nEND:VCARD",
+                "Several contacts",
+            ),
+            contact("Alice", "+15550101234", Some("15550101234"))
+        );
+    }
 
     #[test]
     fn saved_attachments_suggest_a_plain_file_name() {

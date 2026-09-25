@@ -41,17 +41,10 @@ fn fetchable(action: &wa::sync_action_value::StickerAction) -> bool {
 
 /// A download error without the CDN paths and tokens it may quote.
 fn redacted(error: &str) -> String {
-    error
-        .split_whitespace()
-        .map(|word| {
-            if word.contains("://") || word.contains("/v/") || word.contains("oh=") {
-                "<link>"
-            } else {
-                word
-            }
-        })
-        .collect::<Vec<_>>()
-        .join(" ")
+    use fastframe_log::redact;
+    redact::words(error, |word| {
+        redact::is_link(word) || word.contains("/v/") || word.contains("oh=")
+    })
 }
 
 /// The WhatsApp `filehash` for a hex content hash.

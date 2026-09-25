@@ -51,22 +51,14 @@ impl PrivacyKind {
 
     pub fn hint(self, locale: Locale) -> Cow<'static, str> {
         match self {
-            Self::LastSeen => gettext(locale, "Who can see when you were last on WhatsApp."),
-            Self::Online => gettext(locale, "Who can see when you are online."),
-            Self::Profile => gettext(locale, "Who can see your profile photo."),
-            Self::About => gettext(locale, "Who can see your About text."),
-            Self::GroupAdd => gettext(
-                locale,
-                "Who can add you to groups. Anyone else has to send you an invite.",
-            ),
-            Self::ReadReceipts => gettext(
-                locale,
-                "For your whole WhatsApp account. When off, you neither send nor see read receipts in one-to-one chats. Groups always send them.",
-            ),
-            Self::CallAdd => gettext(
-                locale,
-                "Silencing unknown callers keeps calls from people not in your contacts from ringing.",
-            ),
+            // The label and the choices say the rest.
+            Self::LastSeen | Self::Online | Self::Profile | Self::About | Self::CallAdd => {
+                Cow::Borrowed("")
+            }
+            Self::GroupAdd => gettext(locale, "Who can add you to groups."),
+            Self::ReadReceipts => {
+                gettext(locale, "For your whole account. Groups always send them.")
+            }
         }
     }
 

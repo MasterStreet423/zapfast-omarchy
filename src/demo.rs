@@ -1579,6 +1579,25 @@ pub fn apply_flags(app: &mut App, page: Option<&str>) {
             "poll-results" => poll_sample(app, true, true),
             "video" => video_sample(app, None),
             "video-playing" => video_sample(app, Some("demo-video")),
+            "shared-contact" => {
+                let chat = SAMPLES[0].id;
+                let now = crate::util::now();
+                app.conversations
+                    .entry(chat.into())
+                    .or_default()
+                    .messages
+                    .push(message(
+                        chat,
+                        "shared-contact",
+                        false,
+                        now,
+                        Content::Contact {
+                            display_name: "Contact from sender".into(),
+                            vcard: "BEGIN:VCARD\nVERSION:3.0\nFN:Jordan Rivera\nTEL;TYPE=CELL;waid=15550002222:+1 555-000-2222\nEND:VCARD".into(),
+                        },
+                    ));
+                app.open_chat = Some(chat.into());
+            }
             "note-playing" => video_sample(app, Some("demo-note")),
             "interactive" | "interactive-media" => {
                 interactive_sample(app, part == "interactive-media")
@@ -1824,7 +1843,7 @@ pub fn apply_flags(app: &mut App, page: Option<&str>) {
             }
             "wallpaper" => app.page = Page::Wallpaper,
             "omarchy" | "omarchy-light" => {
-                let mut themes: Vec<_> = crate::theme::presets::themes().collect();
+                let mut themes: Vec<_> = crate::theme::presets().collect();
                 let filename = if part == "omarchy-light" {
                     "Catppuccin Latte.json"
                 } else {
@@ -1840,10 +1859,10 @@ pub fn apply_flags(app: &mut App, page: Option<&str>) {
                 app.settings.custom_theme = None;
                 app.settings.system_theme_cache = Some(system.clone());
                 themes.push(system);
-                app.custom_themes = crate::theme::custom::Catalog::preview(themes, true);
+                app.custom_themes = crate::theme::Catalog::preview(themes, true);
             }
             choice if choice.starts_with("theme=") => {
-                let themes: Vec<_> = crate::theme::presets::themes().collect();
+                let themes: Vec<_> = crate::theme::presets().collect();
                 if let Some(theme) = themes
                     .iter()
                     .find(|theme| Some(theme.filename.as_str()) == choice.strip_prefix("theme="))
@@ -1851,10 +1870,10 @@ pub fn apply_flags(app: &mut App, page: Option<&str>) {
                     app.settings.custom_theme = Some(theme.filename.clone());
                     app.settings.custom_theme_cache = Some(theme.clone());
                 }
-                app.custom_themes = crate::theme::custom::Catalog::preview(themes, false);
+                app.custom_themes = crate::theme::Catalog::preview(themes, false);
             }
             "themes" => {
-                use crate::theme::custom::{Catalog, CustomTheme};
+                use crate::theme::{Catalog, CustomTheme};
                 let mut palette = crate::theme::Palette::dark();
                 palette.accent = egui::Color32::from_rgb(137, 180, 250);
                 palette.bubble_out = egui::Color32::from_rgb(41, 57, 84);
@@ -1862,7 +1881,7 @@ pub fn apply_flags(app: &mut App, page: Option<&str>) {
                     filename: "Moonlight 🌙.json".into(),
                     palette,
                 };
-                let mut themes: Vec<_> = crate::theme::presets::themes().collect();
+                let mut themes: Vec<_> = crate::theme::presets().collect();
                 themes.push(theme.clone());
                 app.custom_themes = Catalog::preview(themes, false);
                 app.settings.custom_theme = Some(theme.filename.clone());
@@ -1871,10 +1890,7 @@ pub fn apply_flags(app: &mut App, page: Option<&str>) {
             }
             "update" | "update-downloading" | "update-ready" | "update-failed"
             | "update-managed" => {
-                use crate::updates::{
-                    DownloadState,
-                    install::{Installation, Kind, Prepared},
-                };
+                use crate::updates::{DownloadState, Installation, Kind, Prepared};
                 app.update = Some(crate::updates::Release {
                     version: "99.0.0".to_owned(),
                     url: "https://github.com/crmne/zapfast/releases/latest".to_owned(),
@@ -1890,13 +1906,9 @@ pub fn apply_flags(app: &mut App, page: Option<&str>) {
                         received: 8_000_000,
                         total: 20_000_000,
                     },
-                    "update-ready" => DownloadState::Ready(Box::new(Prepared {
-                        installation,
-                        directory: "/demo/staging".into(),
-                        payload: "/demo/staging/next".into(),
-                        sha256: String::new(),
-                        version: "99.0.0".into(),
-                    })),
+                    "update-ready" => {
+                        DownloadState::Ready(Box::new(Prepared::sample(installation, "99.0.0")))
+                    }
                     "update-failed" => DownloadState::Failed(
                         "The download could not be verified. Try downloading it again.".into(),
                     ),
@@ -2219,15 +2231,11 @@ pub fn apply_flags(app: &mut App, page: Option<&str>) {
                     ],
                 );
             }
-            "nosidebar" => app.sidebar_visible = false,
+            // The chat list collapsed to avatars with unread badges.
+            "nosidebar" | "rail" => app.sidebar_visible = false,
             // A list wide enough for the whole chip row, which scrolls out of
             // sight at the default width.
             "wide" => app.settings.sidebar_width = 560.0,
-            // The chat list collapsed to avatars with unread badges.
-            "rail" => {
-                app.settings.collapse_chat_list = true;
-                app.sidebar_visible = false;
-            }
             "search" => {
                 app.search = "do".into();
                 let mut hits = Vec::new();
@@ -2310,11 +2318,7 @@ pub fn apply_flags(app: &mut App, page: Option<&str>) {
                 app.composer = "Look at these".into();
             }
             "archived" => app.show_archived = true,
-            "labels" => labels_sample(app),
-            "label-chips" => {
-                labels_sample(app);
-                app.settings.label_chips = true;
-            }
+            "labels" | "label-chips" => labels_sample(app),
             "label-filter" => {
                 labels_sample(app);
                 app.label_filter = Some("label-work".into());
@@ -3657,11 +3661,14 @@ mod tests {
             "message-info-direct",
             "video",
             "video-playing",
+            "shared-contact",
             "note-playing",
             "empty",
             "rtl",
             "disappearing",
             "settings",
+            "settings-search=Notifications",
+            "settings-search=System",
             "wallpaper",
             "wallpaper,light",
             "update",
@@ -6326,6 +6333,49 @@ mod tests {
         );
         assert!(app.editing.is_none());
         assert_eq!(app.composer, "draft");
+    }
+
+    #[test]
+    fn brackets_are_text_in_the_composer_and_switch_chats_with_ctrl_shift() {
+        let mut app = app();
+        let ctx = egui::Context::default();
+        app.attach(&ctx);
+        render(&mut app, &ctx);
+        let open = app.open_chat.clone().expect("the demo opens a chat");
+        // Plain and shifted brackets are text for the focused composer.
+        frame_with(
+            &mut app,
+            &ctx,
+            vec![
+                key(egui::Key::CloseBracket, egui::Modifiers::NONE),
+                egui::Event::Text("]".into()),
+                key(egui::Key::CloseCurlyBracket, egui::Modifiers::SHIFT),
+                egui::Event::Text("}".into()),
+            ],
+        );
+        assert_eq!(app.composer, "]}");
+        assert_eq!(app.open_chat.as_deref(), Some(open.as_str()));
+        // With Ctrl+Shift the same key steps to the next chat and the input
+        // keeps the focus, as Alt+Down does.
+        let next = {
+            let visible = app.visible_chats();
+            let at = visible
+                .iter()
+                .position(|chat| chat.id == open)
+                .expect("the open chat is listed");
+            visible[(at + 1) % visible.len()].id.clone()
+        };
+        frame_with(
+            &mut app,
+            &ctx,
+            vec![key(
+                egui::Key::CloseCurlyBracket,
+                egui::Modifiers::COMMAND | egui::Modifiers::SHIFT,
+            )],
+        );
+        assert_eq!(app.open_chat.as_deref(), Some(next.as_str()));
+        render(&mut app, &ctx);
+        assert!(ctx.memory(|memory| memory.has_focus(egui::Id::new("composer-text"))));
     }
 
     #[test]

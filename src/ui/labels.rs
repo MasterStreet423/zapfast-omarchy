@@ -29,9 +29,9 @@ pub fn chip_id(label: &str) -> egui::Id {
     egui::Id::new(("label-chip", label))
 }
 
-/// Stable id for the Labels menu chip, used by interaction tests.
-pub fn menu_chip_id() -> egui::Id {
-    egui::Id::new("label-menu-chip")
+/// Stable id for the label chip row, used by interaction tests.
+pub fn chip_row_id() -> egui::Id {
+    egui::Id::new("label-chip-row")
 }
 
 /// Stable id for the manager's name field.
@@ -88,18 +88,18 @@ fn active_label(app: &App) -> Option<String> {
     app.label_filter.clone()
 }
 
-/// A row of label chips under the built-in ones, with
-/// [`Settings::label_chips`](crate::settings::Settings::label_chips) on.
+/// A row of label chips under the built-in ones, once there is a label.
 ///
 /// The row has no All chip of its own: a label is one more choice beside the
 /// built-in chips, so picking it lets go of them, picking one of them lets go
 /// of it, and All above shows every chat again.
 pub fn chip_row(app: &mut App, ui: &mut egui::Ui, palette: &Palette) {
-    if !app.settings.label_chips {
+    // The row appears with the labels, not before them.
+    if app.labels.is_empty() {
         return;
     }
     ui.add_space(2.0);
-    egui::ScrollArea::horizontal()
+    let row = egui::ScrollArea::horizontal()
         .id_salt("label-chips")
         .animated(false)
         .auto_shrink([false, true])
@@ -110,6 +110,8 @@ pub fn chip_row(app: &mut App, ui: &mut egui::Ui, palette: &Palette) {
                 ui.add_space(4.0);
             });
         });
+    ui.ctx()
+        .data_mut(|data| data.insert_temp(chip_row_id(), row.inner_rect));
 }
 
 fn label_chips(app: &mut App, ui: &mut egui::Ui, palette: &Palette) {
@@ -151,65 +153,6 @@ fn label_chips(app: &mut App, ui: &mut egui::Ui, palette: &Palette) {
     .tab_stop(Stop::ManageLabels)
     .clicked()
     {
-        app.actions.push(Action::ShowDialog(Dialog::Labels));
-    }
-    if let Some(label) = pick {
-        app.actions.push(Action::SelectLabel(label));
-    }
-}
-
-/// One chip before the built-in chips that opens every label in a menu,
-/// when labels do not have a row of their own. It shows the chosen label's
-/// name and colour, so a narrowed list always says why.
-pub fn menu_chip(app: &mut App, ui: &mut egui::Ui, palette: &Palette) {
-    // The chip appears with the labels, not before them.
-    if app.settings.label_chips || app.labels.is_empty() {
-        return;
-    }
-    let locale = app.locale;
-    let active = active_label(app).and_then(|id| app.label(&id).cloned());
-    let name = active.as_ref().map_or_else(
-        || gettext(locale, "Labels").into_owned(),
-        |label| label.name.clone(),
-    );
-    let dot = active
-        .as_ref()
-        .map(|label| color_of(palette, &label.color_hex));
-    let chip =
-        widgets::dotted_chip(ui, palette, dot, &name, 0, active.is_some()).tab_stop(Stop::Labels);
-    ui.ctx()
-        .data_mut(|data| data.insert_temp(menu_chip_id(), chip.rect));
-    let mut pick: Option<Option<String>> = None;
-    let mut manage = false;
-    egui::Popup::menu(&chip)
-        .frame(widgets::menu_frame(palette))
-        .show(|ui| {
-            let icon = |on: bool| on.then_some(Icon::Check);
-            if widgets::menu_item(
-                ui,
-                palette,
-                icon(active.is_none()),
-                &gettext(locale, "All chats"),
-            ) {
-                pick = Some(None);
-            }
-            for label in &app.labels {
-                let worn = active.as_ref().is_some_and(|active| active.id == label.id);
-                if widgets::menu_item(ui, palette, icon(worn), &label.name) {
-                    pick = Some(Some(label.id.clone()));
-                }
-            }
-            widgets::menu_separator(ui, palette);
-            if widgets::menu_item(
-                ui,
-                palette,
-                Some(Icon::Pencil),
-                &gettext(locale, "Manage labels…"),
-            ) {
-                manage = true;
-            }
-        });
-    if manage {
         app.actions.push(Action::ShowDialog(Dialog::Labels));
     }
     if let Some(label) = pick {
@@ -594,7 +537,6 @@ mod tests {
         };
         let palette = app.palette;
         let mut output = ctx.run_ui(input, |ui| {
-            ui.horizontal(|ui| menu_chip(app, ui, &palette));
             chip_row(app, ui, &palette);
         });
         output.textures_delta.clear();
@@ -623,7 +565,6 @@ mod tests {
         let directory = tempfile::tempdir().unwrap();
         let (mut app, _events) =
             App::headless(AppDirs::under(directory.path()), Settings::default());
-        app.settings.label_chips = true;
         app.labels = vec![label("label-1", "Work")];
         let ctx = egui::Context::default();
         app.attach(&ctx);
@@ -649,29 +590,24 @@ mod tests {
     }
 
     #[test]
-    fn labels_share_one_menu_chip_unless_they_are_chips() {
+    fn the_label_row_appears_with_the_first_label() {
         let directory = tempfile::tempdir().unwrap();
         let (mut app, _events) =
             App::headless(AppDirs::under(directory.path()), Settings::default());
         let ctx = egui::Context::default();
         app.attach(&ctx);
         draw(&mut app, &ctx, Vec::new());
+        let drawn = |ctx: &egui::Context, id| ctx.data(|data| data.get_temp::<Rect>(id)).is_some();
         assert!(
-            ctx.data(|data| data.get_temp::<Rect>(menu_chip_id()))
-                .is_none(),
-            "no Labels chip before there is a label"
+            !drawn(&ctx, chip_row_id()),
+            "no label row before there is a label"
         );
         app.labels = vec![label("label-1", "Work")];
         draw(&mut app, &ctx, Vec::new());
+        assert!(drawn(&ctx, chip_row_id()), "the row appears with a label");
         assert!(
-            ctx.data(|data| data.get_temp::<Rect>(chip_id("label-1")))
-                .is_none(),
-            "no chip per label without the setting"
-        );
-        assert!(
-            ctx.data(|data| data.get_temp::<Rect>(menu_chip_id()))
-                .is_some(),
-            "one Labels chip holds them"
+            drawn(&ctx, chip_id("label-1")),
+            "each label gets its own chip"
         );
     }
 

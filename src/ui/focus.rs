@@ -22,8 +22,6 @@ pub enum Stop {
     NewChat,
     Settings,
     Search,
-    /// The Labels menu chip, when labels are not shown one chip each.
-    Labels,
     All,
     Unread,
     Private,

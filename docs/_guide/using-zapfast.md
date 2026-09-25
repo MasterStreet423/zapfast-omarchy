@@ -8,7 +8,8 @@ nav_order: 3
 
 ## Writing
 
-Enter sends and Shift+Enter adds a line. You can swap them in Settings.
+Enter sends and Shift+Enter adds a line. Turn off **Enter sends** in Settings
+to make Enter add a line and send with Ctrl+Enter (Command+Enter on macOS).
 `*bold*`, `_italic_`, `~strike~`, and ```` ```monospace ```` ```` format
 like WhatsApp, and a message of nothing but emoji shows large.
 Mentions in a group are written with `@`; the smiley opens emoji
@@ -193,7 +194,13 @@ sharing format:
 The search bar finds chats by name, number, or latest message; searches all
 messages stored on this computer; and finds contacts without an existing chat.
 Click a message result to jump to it, or a contact to start a chat. Use
-`Alt+↑/↓` to switch chats without leaving the composer.
+`Alt+↑/↓`, or `Ctrl+Shift+[` and `Ctrl+Shift+]` as in WhatsApp, to switch chats
+without leaving the composer (Command instead of Ctrl on macOS).
+
+A shared contact message shows the name from its vCard. When the card names a
+WhatsApp account, **Chat** opens a private conversation with it and, if the
+person is not already in ZapFast's contacts, **Add** saves them, adding them to
+your phone's contacts if you chose that for the last contact you added. A card with only a local number shows the number.
 
 The chips under the search bar narrow the list to **Unread**, **Private**
 (one-to-one chats), or **Groups**. A chip with unread chats shows how many it
@@ -218,21 +225,17 @@ right-click menu lists them, with a checkmark beside the ones the chat wears;
 click one to add or remove it. Deleting a label takes it off every chat and
 nothing else; the chats keep their messages.
 
-Once a label exists, a **Labels** chip leads the chips under the search bar.
-Pick a label from it to list only the chats wearing that label, channels
-included. A label is one more chip: picking it lets go of **Unread** or
-**Groups**, and picking one of those lets go of the label. Like the other
-chips, it does not narrow search or the archive.
+Once a label exists, a row of label chips appears under the other chips, one
+per label, with its colour and the number of unread chats wearing it, followed
+by a **+** that opens the label manager. Pick a label to list only the chats
+wearing it, channels included. A label is one more chip: picking it lets go of
+**Unread** or **Groups**, and picking one of those lets go of the label. Like
+the other chips, it does not narrow search or the archive. Click the active
+label chip again, or **All**, to see every chat.
 
-Turn on **Show labels as chips** in the settings to give each label its own
-chip instead, in a row under the others, with its colour and the number of
-unread chats wearing it, followed by a **+** that opens the label manager.
-Click the active label chip again, or **All**, to see every chat.
-
-The button beside **New chat** hides the list (`Ctrl+B`). Turn on **Collapse the
-chat list to icons** in Settings to keep a narrow column of avatars instead:
-unread chats show their badge, hovering names a chat, clicking opens it, and
-`Ctrl+B` brings the full list back.
+The button beside **New chat** (`Ctrl+B`) collapses the list to a narrow column
+of avatars: unread chats show their badge, hovering names a chat, clicking opens
+it, and `Ctrl+B` brings the full list back.
 
 ## Notifications and the tray
 

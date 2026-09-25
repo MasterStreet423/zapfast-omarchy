@@ -686,6 +686,18 @@ fn shortcuts(app: &mut App, ui: &mut egui::Ui) {
                 ui.end_row();
             }
         });
+    ui.add_space(12.0);
+    // The hint bar's × hides it; this brings it back.
+    let mut hints = app.settings.show_shortcut_hints;
+    if ui
+        .checkbox(
+            &mut hints,
+            crate::i18n::gettext(app.locale, "Show shortcut hints under the message box"),
+        )
+        .changed()
+    {
+        app.actions.push(Action::SetShortcutHints(hints));
+    }
 }
 
 fn about(app: &mut App, ui: &mut egui::Ui) {
@@ -1459,6 +1471,16 @@ fn new_contact(app: &mut App, ui: &mut egui::Ui) {
     let submitted =
         (phone_field.lost_focus() || first_field.lost_focus() || last_field.lost_focus())
             && ui.input(|input| input.key_pressed(egui::Key::Enter));
+    ui.add_space(4.0);
+    // As on the phone, each contact chooses; the choice starts the next one.
+    ui.add_enabled(
+        named,
+        egui::Checkbox::new(
+            &mut app.new_contact_to_phone,
+            crate::i18n::gettext(app.locale, "Also save to your phone's contacts"),
+        ),
+    );
+    let to_phone = Some(app.new_contact_to_phone);
     ui.add_space(8.0);
     ui.horizontal(|ui| {
         if app.new_contact_pending {
@@ -1513,12 +1535,14 @@ fn new_contact(app: &mut App, ui: &mut egui::Ui) {
                     phone: digits.clone(),
                     first: app.new_contact_name.trim().to_owned(),
                     last: app.new_contact_last.trim().to_owned(),
+                    to_phone,
                 });
             } else if ready && (message || submitted) {
                 app.actions.push(Action::NewContact {
                     phone: digits.clone(),
                     first: String::new(),
                     last: String::new(),
+                    to_phone: None,
                 });
             }
         });

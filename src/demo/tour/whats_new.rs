@@ -26,12 +26,10 @@ pub fn prepare(app: &mut App) {
     app.locale = crate::i18n::Locale::English;
     super::show_photos(app, "The difference engine, finally assembled");
     super::super::labels_sample(app);
-    app.settings.label_chips = true;
     app.label_filter = None;
     app.chat_filter = crate::model::ChatFilter::All;
-    // Ctrl+B folds the list to avatars rather than hiding it, with badges on
-    // chats the tour never opens.
-    app.settings.collapse_chat_list = true;
+    // Ctrl+B folds the list to avatars, with badges on chats the tour never
+    // opens.
     for (name, unread) in [("Section 8 Berlin", 3), ("Family", 5)] {
         if let Some(chat) = app.chats.iter_mut().find(|chat| chat.name == name) {
             chat.unread = unread;

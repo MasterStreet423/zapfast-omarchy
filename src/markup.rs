@@ -9,6 +9,7 @@ use std::sync::Arc;
 
 use egui::text::LayoutJob;
 use egui::{Color32, FontId, Galley, Pos2, Stroke, TextFormat};
+use fastframe_text::snap_to_pixels;
 
 use crate::bidi;
 use crate::emoji;
@@ -170,14 +171,19 @@ pub fn paint_selectable(
     // original screen position; layout, hit targets, and link offsets stay put.
     let mut galley = (*text.galley).clone();
     let column = ui.clip_rect().x_range();
-    let offset = pos.x - column.min;
+    // Both ends on whole physical pixels: egui rounds where it paints the
+    // galley, not this shift, so a fractional offset left every glyph of a
+    // bubble between pixels and blurred it (0.21 px at 133%).
+    let ppp = ui.pixels_per_point();
+    let pos = Pos2::new(snap_to_pixels(pos.x, ppp), pos.y);
+    let offset = pos.x - snap_to_pixels(column.min, ppp);
     for row in &mut galley.rows {
         row.pos.x += offset;
     }
     galley.rect.min.x = 0.0;
     galley.rect.max.x = column.span();
     galley.mesh_bounds = galley.mesh_bounds.translate(egui::vec2(offset, 0.0));
-    let selection_pos = Pos2::new(column.min, pos.y);
+    let selection_pos = Pos2::new(snap_to_pixels(column.min, ppp), pos.y);
     egui::text_selection::LabelSelectionState::label_text_selection(
         ui,
         response,

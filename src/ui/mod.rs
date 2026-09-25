@@ -22,7 +22,6 @@ use crate::app::App;
 use crate::backend::LinkStatus;
 use crate::model::{Action, Page, SidebarDisplayMode, ToastKind};
 use crate::theme::{self, Icon};
-use focus::{Stop, TabStop};
 
 pub fn show(app: &mut App, ui: &mut egui::Ui) {
     let ctx = ui.ctx().clone();
@@ -61,7 +60,6 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
     match app.sidebar_mode() {
         SidebarDisplayMode::Expanded => chats::show(app, ui),
         SidebarDisplayMode::CollapsedIconsOnly => chats::compact_show(app, ui),
-        SidebarDisplayMode::Hidden => {}
     }
     let search_overlay = pane::show(app, ui);
     egui::CentralPanel::default()
@@ -536,47 +534,6 @@ pub fn titlebar_drag(ui: &mut egui::Ui, rect: egui::Rect) {
     if response.is_pointer_button_down_on() && ui.input(|input| input.pointer.primary_pressed()) {
         ui.ctx().send_viewport_cmd(egui::ViewportCommand::StartDrag);
     }
-}
-
-/// Header for pages without a conversation toolbar and with the sidebar hidden.
-pub fn standalone_header(app: &mut App, ui: &mut egui::Ui) {
-    if !theme::macos_chrome(ui.ctx()) || app.sidebar_mode() != SidebarDisplayMode::Hidden {
-        return;
-    }
-    let palette = app.palette;
-    egui::Panel::top("standalone-header")
-        .exact_size(60.0)
-        .show_separator_line(false)
-        .frame(
-            Frame::new()
-                .fill(palette.panel)
-                .inner_margin(Margin::symmetric(14, 8)),
-        )
-        .show(ui, |ui| {
-            let mut drag = ui.max_rect();
-            drag.min.x += theme::traffic_light_inset(ui.ctx());
-            titlebar_drag(ui, drag);
-            ui.horizontal(|ui| {
-                ui.set_min_height(44.0);
-                ui.add_space((theme::traffic_light_inset(ui.ctx()) - 14.0).max(0.0));
-                if theme::icon_button(
-                    ui,
-                    Icon::PanelLeft,
-                    18.0,
-                    palette.secondary,
-                    palette.text,
-                    &keys::label(&crate::i18n::gettext(
-                        app.locale,
-                        "Show the chat list (Ctrl+B)",
-                    )),
-                )
-                .tab_stop(Stop::Sidebar)
-                .clicked()
-                {
-                    app.actions.push(Action::ToggleSidebar);
-                }
-            });
-        });
 }
 
 #[cfg(test)]

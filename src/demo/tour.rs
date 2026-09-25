@@ -1226,10 +1226,8 @@ mod tests {
     fn the_theme_dropdown_selects_spotifast_palettes_and_returns_to_follow_system() {
         let mut app = super::super::tests::app();
         app.page = Page::Settings;
-        app.custom_themes = crate::theme::custom::Catalog::preview(
-            crate::theme::presets::themes().collect(),
-            false,
-        );
+        app.custom_themes =
+            crate::theme::Catalog::preview(crate::theme::presets().collect(), false);
         let ctx = egui::Context::default();
         app.attach(&ctx);
         let mut tour = Tour::new(None, None);

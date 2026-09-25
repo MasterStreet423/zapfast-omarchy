@@ -5,10 +5,8 @@
 //! English is both the source language and the fallback for any untranslated
 //! message. Only languages with a catalog are offered.
 
-use std::borrow::Cow;
-
+pub use fastframe_i18n::{gettext, ngettext, pgettext};
 use serde::{Deserialize, Serialize};
-use tr::Translator;
 
 include!(concat!(env!("OUT_DIR"), "/catalogs.rs"));
 
@@ -57,15 +55,14 @@ impl Locale {
         }
     }
 
-    /// Maps a BCP 47 system-locale identifier to a supported locale by its
-    /// language subtag, so `pt-PT` and `pt_BR` both resolve to Portuguese.
+    /// Maps a system language tag (BCP 47 or POSIX) to a supported locale by
+    /// its language subtag, so `pt-PT` and `pt_BR` both resolve to Portuguese.
     pub fn from_system(identifier: &str) -> Option<Locale> {
-        let language = identifier
-            .split(['-', '_'])
-            .next()
-            .unwrap_or_default()
-            .to_ascii_lowercase();
-        Some(match language.as_str() {
+        fastframe_i18n::LanguageTag::parse(identifier).and_then(|tag| Self::from_tag(&tag))
+    }
+
+    fn from_tag(tag: &fastframe_i18n::LanguageTag) -> Option<Locale> {
+        Some(match tag.language.as_str() {
             "en" => Self::English,
             "pt" => Self::PortugueseBrazil,
             "de" => Self::German,
@@ -76,8 +73,10 @@ impl Locale {
             _ => return None,
         })
     }
+}
 
-    fn translator(self) -> Option<&'static dyn Translator> {
+impl fastframe_i18n::Locale for Locale {
+    fn catalog(self) -> Option<&'static dyn fastframe_i18n::Translator> {
         match self {
             Self::PortugueseBrazil => Some(&pt_br::Translator),
             Self::German => Some(&de::Translator),
@@ -90,7 +89,8 @@ impl Locale {
     }
 }
 
-/// The operating system's preferred locale, falling back to English.
+/// The first supported language the operating system prefers, falling back
+/// to English.
 ///
 /// Unit tests assert the English source strings, so the machine the suite runs
 /// on must not decide their outcome: a developer with a Portuguese Brazil
@@ -100,46 +100,12 @@ pub fn detect() -> Locale {
     if cfg!(test) {
         return Locale::English;
     }
-    sys_locale::get_locale()
-        .as_deref()
-        .and_then(Locale::from_system)
-        .unwrap_or_default()
+    fastframe_i18n::detect(Locale::from_tag).unwrap_or_default()
 }
 
 /// Resolves a stored preference: an explicit choice wins, otherwise detect.
 pub fn resolve(interface_language: Option<Locale>) -> Locale {
     interface_language.unwrap_or_else(detect)
-}
-
-/// The English source is also the fallback for untranslated messages.
-pub fn gettext(locale: Locale, source: &'static str) -> Cow<'static, str> {
-    locale
-        .translator()
-        .map_or(Cow::Borrowed(source), |catalog| {
-            catalog.translate(source, None)
-        })
-}
-
-/// Translate a phrase whose meaning depends on its interface context.
-pub fn pgettext(locale: Locale, context: &'static str, source: &'static str) -> Cow<'static, str> {
-    locale
-        .translator()
-        .map_or(Cow::Borrowed(source), |catalog| {
-            catalog.translate(source, Some(context))
-        })
-}
-
-/// Select a whole translated phrase using the catalog's gettext plural rules.
-pub fn ngettext(
-    locale: Locale,
-    singular: &'static str,
-    plural: &'static str,
-    count: u32,
-) -> Cow<'static, str> {
-    locale.translator().map_or(
-        Cow::Borrowed(if count == 1 { singular } else { plural }),
-        |catalog| catalog.ntranslate(count.into(), singular, plural, None),
-    )
 }
 
 #[cfg(test)]
@@ -159,6 +125,20 @@ mod tests {
         assert_eq!(Locale::from_system("en-US"), Some(Locale::English));
         assert_eq!(Locale::from_system("ja-JP"), None);
         assert_eq!(Locale::default(), Locale::English);
+    }
+
+    /// Every preferred language is tried in order, not only the first: a
+    /// desktop that lists an unsupported language first still gets the next.
+    #[test]
+    fn the_first_supported_preferred_language_wins() {
+        assert_eq!(
+            fastframe_i18n::first_supported(["nb-NO", "de-DE", "fr-FR"], Locale::from_tag),
+            Some(Locale::German)
+        );
+        assert_eq!(
+            Locale::from_system("pt_BR.UTF-8"),
+            Some(Locale::PortugueseBrazil)
+        );
     }
 
     /// The suite asserts the English source strings, so the language of the

@@ -783,7 +783,7 @@ mod tests {
     fn assert_visual(text: &str) {
         let galley = layout_fixed(text);
         let visual = visual_chars(&galley);
-        let expected = uba_visual(text);
+        let expected = drawn_in_order(&galley, text);
         assert_eq!(visual, expected, "logical {text:?}");
         assert_eq!(
             galley.rows[0].glyphs.len(),
@@ -797,6 +797,32 @@ mod tests {
             visual_chars(&clone)
         };
         assert_eq!(again, visual, "reorder must be idempotent for {text:?}");
+    }
+
+    /// The algorithm's visual order, kept to the characters the layout drew.
+    ///
+    /// A font without a glyph for a character gets a zero-width, inkless
+    /// stand-in from the shaper, which `visual_chars` skips because it has no
+    /// ink to place. The character has to leave the expected order with it, or
+    /// a gap in the font reads as a fault in the ordering: Arial and Times New
+    /// Roman have no glyph for `آ`, so the whole suite failed on a machine that
+    /// falls back to either, and on the runners that do the same. The order of
+    /// everything the font can draw still has to match the algorithm.
+    fn drawn_in_order(galley: &Galley, text: &str) -> String {
+        let mut drawn: Vec<char> = galley.rows[0]
+            .glyphs
+            .iter()
+            .filter(|glyph| glyph.advance_width > 0.01)
+            .map(|glyph| glyph.chr)
+            .collect();
+        let mut out = String::new();
+        for character in uba_visual(text).chars() {
+            if let Some(at) = drawn.iter().position(|&drawn| drawn == character) {
+                drawn.remove(at);
+                out.push(character);
+            }
+        }
+        out
     }
 
     fn uba_visual(text: &str) -> String {
@@ -1255,7 +1281,7 @@ mod tests {
             );
         let path = path.to_str().expect("utf-8 font path");
         let mut fonts = FontDefinitions::default();
-        let inter = include_bytes!("../assets/fonts/InterVariable.ttf");
+        let inter = fastframe_fonts::INTER;
         fonts
             .font_data
             .insert("inter".into(), Arc::new(FontData::from_static(inter)));
