@@ -19,7 +19,9 @@ defecto) es la distribución: el oficial al día más estos cambios.
 - **Fondo de Omarchy en el chat.** Si el tema sigue al sistema en Omarchy, el
   fondo del escritorio se pinta detrás de la conversación, con un velo del
   color del chat para que se lea, y cambia en vivo con el fondo. Se apaga en
-  Ajustes → Apariencia.
+  Ajustes → Apariencia. Código en `src/desktop_background.rs`: el catálogo
+  de temas vive en el crate `fastframe-theme` de upstream, así que el fondo
+  no se mete en él; se recarga cada vez que el catálogo avisa un cambio.
 - **Abrir chats desde el escritorio.** Mientras corre, ZapFast deja sus 60
   chats más recientes (sin bloqueados ni archivados) en
   `$XDG_RUNTIME_DIR/zapfast/chats.json`, legible solo por el usuario, y
