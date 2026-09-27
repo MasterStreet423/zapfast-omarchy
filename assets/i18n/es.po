@@ -158,9 +158,8 @@ msgid "You"
 msgstr "Tú"
 
 #: src/ui/chats.rs:107
-#, fuzzy
 msgid "Close settings"
-msgstr "Cerrar reacciones"
+msgstr "Cerrar ajustes"
 
 #: src/ui/chats.rs:109
 msgid "Your profile and settings"
@@ -172,9 +171,8 @@ msgid "Chats"
 msgstr "Chats"
 
 #: src/ui/chats.rs:140
-#, fuzzy
 msgid "Close settings (Ctrl+,)"
-msgstr "Ajustes (Ctrl+,)"
+msgstr "Cerrar ajustes (Ctrl+,)"
 
 #: src/ui/chats.rs:142
 msgid "Settings (Ctrl+,)"
@@ -265,14 +263,12 @@ msgid "Use New chat to message a contact or yourself."
 msgstr "Usa Nuevo chat para escribirle a un contacto o a ti mismo."
 
 #: src/ui/chats.rs:657
-#, fuzzy
 msgid "Messages"
-msgstr "Mensaje"
+msgstr "Mensajes"
 
 #: src/ui/chats.rs:663
-#, fuzzy
 msgid "Contacts"
-msgstr "Contacto"
+msgstr "Contactos"
 
 #: src/ui/chats.rs:800 src/app.rs:1406
 msgid "Message yourself"
@@ -330,9 +326,8 @@ msgid "Unarchive"
 msgstr "Desarchivar"
 
 #: src/ui/conversation.rs:232 src/ui/conversation.rs:289 src/ui/dialogs.rs:838
-#, fuzzy
 msgid "Clear chat"
-msgstr "Cerrar chat"
+msgstr "Vaciar chat"
 
 #: src/ui/conversation.rs:234 src/ui/conversation.rs:316 src/ui/dialogs.rs:2034
 msgid "Copy number"
@@ -975,19 +970,19 @@ msgid "Delete"
 msgstr "Eliminar"
 
 #: src/ui/dialogs.rs:824
-#, fuzzy
 msgid "Clear chat?"
-msgstr "Cerrar chat"
+msgstr "¿Vaciar chat?"
 
 #: src/ui/dialogs.rs:829
-#, fuzzy, rust-format
+#, rust-format
 msgid ""
 "This clears every message in your chat with {name}, including downloaded "
 "media, on this computer and on your phone. The chat itself stays. It cannot "
 "be undone."
 msgstr ""
-"Esto elimina tu chat con {name}, con todos sus mensajes, en este computador "
-"y en tu teléfono. No se puede deshacer."
+"Esto borra todos los mensajes de tu chat con {name}, incluidos los archivos "
+"descargados, en este computador y en tu teléfono. El chat se mantiene. No se "
+"puede deshacer."
 
 #: src/ui/dialogs.rs:865 src/ui/dialogs.rs:880
 msgid "Group invite"
@@ -1081,26 +1076,28 @@ msgid "Start over"
 msgstr "Empezar de cero"
 
 #: src/ui/dialogs.rs:1211
-#, fuzzy
 msgid "Delete for everyone?"
-msgstr "Eliminar para todos"
+msgstr "¿Eliminar para todos?"
 
 #: src/ui/dialogs.rs:1214
 msgid ""
 "Everyone in this chat will see \"This message was deleted\" instead. It "
 "cannot be undone."
 msgstr ""
+"Todos en este chat verán «Se eliminó este mensaje» en su lugar. No se puede "
+"deshacer."
 
 #: src/ui/dialogs.rs:1219
-#, fuzzy
 msgid "Delete for me?"
-msgstr "Eliminar para mí"
+msgstr "¿Eliminar para mí?"
 
 #: src/ui/dialogs.rs:1222
 msgid ""
 "This removes the message from this computer. Other people keep their copy. "
 "Your phone will not send it again, so it cannot be undone."
 msgstr ""
+"Esto quita el mensaje de este computador. Los demás conservan su copia. Tu "
+"teléfono no lo volverá a enviar, así que no se puede deshacer."
 
 #: src/ui/dialogs.rs:1259
 msgid "Unlink this computer?"
@@ -2133,18 +2130,16 @@ msgid "New chat or message yourself"
 msgstr "Nuevo chat o mensaje para ti"
 
 #: src/i18n_extra.rs:59
-#, fuzzy
 msgid "Collapse or expand the chat list"
-msgstr "Reducir la lista de chats a íconos"
+msgstr "Contraer o expandir la lista de chats"
 
 #: src/i18n_extra.rs:60
 msgid "Scroll the open chat by a page"
-msgstr ""
+msgstr "Desplazar el chat abierto una página"
 
 #: src/i18n_extra.rs:63
-#, fuzzy
 msgid "Top / bottom of the open chat (when the input is empty)"
-msgstr "Editar el mensaje anterior (con el campo vacío)"
+msgstr "Inicio / final del chat abierto (con el campo vacío)"
 
 #: src/i18n_extra.rs:66
 msgid "Paste text, or stage a picture from the clipboard"
