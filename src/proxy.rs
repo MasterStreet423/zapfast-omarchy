@@ -4,15 +4,13 @@
 //! the setting is empty. `http://`, `socks5://`, and `socks5h://` proxies
 //! are supported, with an optional `user:password@`.
 
-use std::sync::{Arc, OnceLock, RwLock};
+use std::sync::{OnceLock, RwLock};
 use std::time::Duration;
 
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::net::TcpStream;
-use whatsapp_rust::transport::{
-    Connector, Transport, TransportEvent, TransportFactory, default_tls_connector, from_websocket,
-};
-use whatsapp_rust::wacore::net::{WHATSAPP_WEB_ORIGIN, WHATSAPP_WEB_WS_URL};
+use whatsapp_rust::transport::{Connector, TransportFactory};
+use whatsapp_rust::wacore::net::WHATSAPP_WEB_WS_URL;
 
 /// Time allowed to reach the proxy and open the tunnel.
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(20);
@@ -428,15 +426,7 @@ impl ProxyTransportFactory {
 
 #[whatsapp_rust::async_trait]
 impl TransportFactory for ProxyTransportFactory {
-    async fn create_transport(
-        &self,
-    ) -> Result<
-        (
-            Arc<dyn Transport>,
-            whatsapp_rust::async_channel::Receiver<TransportEvent>,
-        ),
-        anyhow::Error,
-    > {
+    async fn create_transport(&self) -> Result<crate::transport::Link, anyhow::Error> {
         let uri: http::Uri = WHATSAPP_WEB_WS_URL.parse()?;
         let host = uri.host().unwrap_or("web.whatsapp.com").to_owned();
         let port = uri.port_u16().unwrap_or(443);
@@ -444,20 +434,7 @@ impl TransportFactory for ProxyTransportFactory {
             .await
             .map_err(|_| anyhow::anyhow!("The proxy {} did not answer", self.proxy.redacted()))?
             .map_err(|error| anyhow::anyhow!("Proxy {}: {error}", self.proxy.redacted()))?;
-        let connector = self.connector.get_or_init(default_tls_connector);
-        let stream = connector
-            .wrap(&host, stream)
-            .await
-            .map_err(|error| anyhow::anyhow!("TLS through the proxy failed: {error}"))?;
-        let (ws, _) = tokio_websockets::ClientBuilder::from_uri(uri)
-            .add_header(
-                http::header::ORIGIN,
-                http::HeaderValue::from_static(WHATSAPP_WEB_ORIGIN),
-            )?
-            .connect_on(stream)
-            .await
-            .map_err(|error| anyhow::anyhow!("WebSocket connect failed: {error}"))?;
-        Ok(from_websocket(ws))
+        crate::transport::websocket(&self.connector, uri, &host, stream, "through the proxy").await
     }
 }
 

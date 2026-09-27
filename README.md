@@ -13,8 +13,10 @@ companion device, and has no browser engine. In our Linux test, it opens in
 under a second and uses about 200 MB of idle RAM, compared with 1.13 GB for
 WhatsApp Web and its Chromium processes. [See the measurements](https://zapfast.rocks/benchmarks/).
 
-ZapFast is a sibling of [Spotifast](https://spotifast.rocks),
-with the same native UI for a different service.
+**Want Spotify just as fast and native?** [Spotifast](https://spotifast.rocks)
+is ZapFast's sibling: the same native interface, for Spotify. Both are built
+on [fastframe](https://github.com/crmne/fastframe), the shared foundation for
+native Rust apps built with egui.
 
 <picture>
   <source media="(prefers-color-scheme: light)" srcset="docs/screenshot-light.png">
@@ -172,6 +174,12 @@ See **[zapfast.rocks](https://zapfast.rocks)** for downloads and guides.
   and the chat only leaves this computer once the phone has confirmed. Chats
   you delete or clear on the phone disappear here as well, and history that
   was already on its way does not bring them back.
+- **Clear chats.** Empty a chat's messages from the menu in its header, in the
+  same way as WhatsApp Web, and keep the chat itself in the list. The phone
+  clears it first, so this needs a connection, and the messages only go from
+  this computer once the phone has confirmed. Starred messages and downloaded
+  media go with them, and history that was already on its way does not bring
+  them back.
 - **Voice messages.** Play, seek, record, reply with, and send voice messages
   in the chat. The speed chip cycles between 1x, 1.5x, and 2x, and the
   message menu offers 1x, 1.25x, 1.5x, 1.75x, and 2x, keeping the speaker's
@@ -210,6 +218,10 @@ See **[zapfast.rocks](https://zapfast.rocks)** for downloads and guides.
   of inserted emoji. These preferences do not sync from the phone.
   Hovering a message also shows a small smiley control beside it; clicking it
   opens the full reaction picker for that message, so right-click is never required.
+  Deleting a message asks first and says which copies go:
+  deleting for everyone leaves "This message was deleted" in the chat, while
+  deleting for yourself removes the message from this computer only. Neither
+  can be undone, because the archive here is the only copy.
 - **Disappearing-message timers.** Outgoing messages use the chat's known
   timer, including replies, attachments, edits, and forwards. Forwarded copies
   use the destination chat's timer. Received messages remain in the local archive
@@ -220,8 +232,13 @@ See **[zapfast.rocks](https://zapfast.rocks)** for downloads and guides.
   on click. Photos, stickers, GIFs, voice messages, audio, locations, contacts,
   polls, and link previews appear in the chat. Click a downloaded JPEG, PNG,
   WebP, or GIF photo to preview it in ZapFast with fit and zoom controls, or
-  choose **Open externally**. In the preview, copy the image to your clipboard
-  via the copy button in the header, the right-click menu (**Copy image**), or
+  choose **Open externally**. In the preview, the mouse wheel and Ctrl+wheel
+  (Cmd+wheel on macOS) zoom around the pointer, as does a trackpad pinch on
+  macOS and Windows. Drag a zoomed picture to move it; where a trackpad scrolls
+  smoothly (macOS, Wayland), two-finger scrolling moves it instead of zooming.
+  Double-click to switch between fitting the window and the original size.
+  Copy the image to your clipboard via the copy button in the header, the
+  right-click menu (**Copy image**), or
   Ctrl+C (Cmd+C on macOS). Click a video to play it in its message, with
   sound, a seek bar, and a mute switch; round video messages play inside their
   circle with a progress ring, like on the phone. A video that is not
@@ -260,10 +277,13 @@ See **[zapfast.rocks](https://zapfast.rocks)** for downloads and guides.
   choose it. GIF search needs a free GIPHY API key unless the build includes
   one.
 - **Sticker packs.** A tab strip like WhatsApp's holds Recent, Favorites, and
-  every pack. Search stickers by emoji, by a word that names one, or by pack
-  name. Import a pack from a `signal.art` link or `.wastickers` file, or make
-  your own packs from any sticker with a right-click. Open WhatsApp sticker
-  packs shared in a chat and add them, or send any of your packs as one.
+  every pack. ZapFast adds a Received tab (the speech bubble) with the
+  stickers people sent you that are already downloaded, newest first, each
+  once, leaving out locked chats. Search stickers by emoji, by a word that
+  names one, or by pack name. Import a pack from a `signal.art` link or
+  `.wastickers` file, or make your own packs from any sticker with a
+  right-click. Open WhatsApp sticker packs shared in a chat and add them, or
+  send any of your packs as one.
   Turn any picture into a sticker: crop it square, keep its transparent
   background, and tag it with emojis.
   Animated packs remain animated. Packs are stored as WebP files on your
@@ -273,7 +293,13 @@ See **[zapfast.rocks](https://zapfast.rocks)** for downloads and guides.
   chats, replies, mentions, and notifications.
 - **Groups.** See members, sender names, and sender pictures (shown in groups
   only, as on WhatsApp). Announcement
-  groups are read-only for non-admins. Clicking a `chat.whatsapp.com` invite
+  groups are read-only for non-admins. Rename a group with the pencil beside
+  its name in the group's info (Enter saves, Escape cancels), and click its
+  photo to change or remove it; the picture is cropped to a centred square
+  and sent at up to 640 pixels. These appear when WhatsApp lets you edit the
+  group's info (every member, or only admins when the group is set that
+  way), apply for everyone in the group, and show here once WhatsApp accepts
+  them. Changes made on the phone or by other members arrive as before. Clicking a `chat.whatsapp.com` invite
   link shows the group's name, size, and description, and joins it (or sends a
   join request when admins approve members) without leaving ZapFast.
 - **Presence.** See online, last-seen, and typing status, and send your typing
@@ -288,6 +314,15 @@ See **[zapfast.rocks](https://zapfast.rocks)** for downloads and guides.
   when validation fails. Private read-state updates run one at a time. Failures
   pause the whole queue with backoff from 30 seconds to 15 minutes; pending reads
   remain saved and resume automatically. New messages can still arrive.
+- **Connects over either address family.** On a direct connection, ZapFast
+  dials every address the WhatsApp host resolves to, IPv6 and IPv4, starting
+  the next one a quarter of a second after the last, and keeps the first that
+  answers. A network whose IPv6 has a route but no path past the gateway, as on
+  some phone hotspots and captive portals, still links over IPv4. Each
+  reconnect resolves the names again, so changing networks does not need a
+  restart. With a proxy configured, ZapFast dials the proxy instead:
+  `socks5h://` and `http://` proxies resolve WhatsApp's host themselves, and
+  `socks5://` hands the proxy the first address this computer resolves.
 - **Reconnects after sleep.** After the computer wakes from sleep, or when the
   connection has received nothing for two minutes, ZapFast reconnects and
   fetches what arrived meanwhile, instead of waiting on a connection that
@@ -312,7 +347,9 @@ See **[zapfast.rocks](https://zapfast.rocks)** for downloads and guides.
   installed and portable builds register this identity in the current user's registry.
   On Linux and Windows, clicking a notification opens the chat at the message
   it announced. On Linux, reading the chat here or on another device dismisses
-  its outstanding notifications. On macOS, notifications use
+  its outstanding notifications. Linux keeps this link for the 32 most recent
+  notifications: older ones stay on the desktop, but clicking them or reading
+  their chat no longer reaches them. On macOS, notifications use
   the installed ZapFast application's identity without an application chooser;
   unregistered development builds skip notifications if that identity is unavailable.
   Sounds follow Pidgin: **Message sound** plays for every new message, in
@@ -325,12 +362,14 @@ See **[zapfast.rocks](https://zapfast.rocks)** for downloads and guides.
   mention or answer you. **Notification sound** in a chat's right-click menu
   gives that chat its own sound for every message in it, mentions included,
   stored in the encrypted archive.
-- **Unread count on the taskbar.** On Linux, ZapFast publishes the unread total
-  through the Unity Launcher API, so KDE Plasma shows it as a badge on the
-  taskbar icon, with **Show badges** enabled in the Task Manager settings. Other
-  launchers that implement the same API, such as GNOME's Dash to Dock or Dash to
-  Panel and the Plank dock, show it too. Clearing chats lowers the count, and
-  zero removes it.
+- **Unread count on the taskbar.** Linux desktops that implement the Unity
+  Launcher API show the unread total on the app icon; KDE Plasma needs **Show
+  badges** enabled in Task Manager. On Windows, ZapFast overlays a compact count
+  on its taskbar button while the window is open, showing `99+` above 99. Windows
+  must be using its regular taskbar icon size for overlays to appear. The count
+  covers unread messages in unarchived, unmuted, and unlocked
+  chats, not toasts kept in Windows notification history. Reading messages
+  lowers the count, and zero removes the overlay.
 - **Update notices.** ZapFast checks GitHub once a day and shows a download
   link when a newer release is available. You can turn this off in Settings.
 - **Themes.** Light, dark, follow the system, or a local JSON palette. Native
@@ -348,7 +387,9 @@ See **[zapfast.rocks](https://zapfast.rocks)** for downloads and guides.
   Settings it searches the settings), `Alt+↑/↓` or WhatsApp's
   `Ctrl+Shift+[`/`Ctrl+Shift+]` switches chats and
   keeps the active chat visible in the list, `↑` in an empty input edits your
-  previous message, `Esc` cancels the current action, `Ctrl+L` focuses the
+  previous message, `PgUp`/`PgDn` scroll the open chat by about a page,
+  `Home`/`End` jump to the top or newest message of the open chat (when the
+  input is empty), `Esc` cancels the current action, `Ctrl+L` focuses the
   message input, `Ctrl+N` opens New chat, `Ctrl+B` collapses or expands the
   chat list, and `?` (outside text fields) or
   `Ctrl+/` opens Keyboard shortcuts (use Command instead of Ctrl on macOS).
@@ -370,7 +411,8 @@ See **[zapfast.rocks](https://zapfast.rocks)** for downloads and guides.
 
 - Play videos in codecs other than H.264 in the app (they open in your system
   player).
-- Calls, status posts, communities, newsletters, and group administration.
+- Calls, status posts, communities, newsletters, and group administration
+  beyond a group's name and photo (members, admins, descriptions, settings).
 - Submit interactive forms, payments, shopping flows, or carousel selections.
   Use these in WhatsApp Web or on your phone. Embedded videos and documents,
   and templates without readable text also need another client.
@@ -483,7 +525,19 @@ With Nix, `nix develop` provides the pinned Rust toolchain and all native build
 dependencies. From the checkout, use `nix build .#zapfast` to build the package
 or `nix run .#zapfast` to run it.
 
-The desktop file and icon are in `packaging/`.
+`cargo install` puts the binary on your `PATH`, but it does not add a launcher
+entry. On Linux, a source build can have the entry the packages install:
+
+```sh
+cargo build --release --locked
+packaging/install-user.sh
+```
+
+The script installs the binary, the icon, and a desktop entry under
+`~/.local` (or the prefix you pass), with `Exec=` set to the installed binary's
+full path, since a graphical session often lacks `~/.local/bin` on `PATH`. It
+is Linux-only; on macOS and Windows use a packaged release or run the binary
+directly.
 
 `whatsapp-rust` is pinned to a Git commit because version 0.7.0 on crates.io
 enables a `simd` feature that needs nightly Rust. The pinned commit builds on
@@ -504,8 +558,8 @@ stay on the same network.
 
 Right-click a chat or message to open its menu. Double-click beside a message,
 or on its edge, to reply to it (a double-click on its text still selects the
-word). Open Settings from the gear or
-with `Ctrl+,`. The pencil opens **New chat**, with **Message yourself** and
+word). Open Settings from the gear or with `Ctrl+,`, and close them the same
+way. The pencil opens **New chat**, with **Message yourself** and
 **+ Add contact** at the top, followed by searchable contacts. Add contact also
 lets you message a new number without saving it. **Also save to your phone's
 contacts** in that dialog adds the contact to your phone's address book too, as
@@ -547,6 +601,9 @@ Offline previews for these states use `--demo --demo-page channel`,
 `--demo --demo-page keyring`. The open locked-folder preview uses `demo-code`.
 Use `--demo-page locked-prompt`, `locked-setup`, `new-chat`, `unnamed-group`,
 or `react-picker` for the new dialogs, shared group summaries, and reactions.
+`group-info`, `group-info-rename`, `group-info-saving`, and `group-info-locked`
+show a group's info with its name and photo editable, being renamed, saving,
+and locked to admins.
 
 The protocol dependency includes the upstream WhatsApp Business pairing fix.
 Device-store migration waits until an updated window is acknowledged, preserving
@@ -596,9 +653,10 @@ English. `Ctrl+F` on the Settings page focuses the field, and `Esc` clears it.
 
 **Settings > Appearance > Language** chooses the interface language. **Auto**
 follows the first of the operating system's preferred languages that ZapFast
-has a translation for, and falls back to English when it has none. Brazilian Portuguese, German, Spanish, Italian,
-French, and Russian cover the chat list, search, composer, shortcut hints,
-Settings, and dates. Translations are compiled from gettext PO
+has a translation for, and falls back to English when it has none. Brazilian
+Portuguese, German, Spanish, Italian, French, Russian, and Simplified Chinese
+cover the chat list, search, composer, shortcut hints, Settings, and dates.
+Translations are compiled from gettext PO
 files at build time, with no runtime parsing or network access. Message
 contents, contact names, logs, and protocol errors are never translated, and
 copied messages keep WhatsApp's `[time, date] Name:` format.
@@ -622,6 +680,7 @@ from the environment and honors `NO_PROXY`.
 | Messages | `~/.local/state/zapfast/archive.db` | SQLCipher-encrypted SQLite, unlocked by the OS keyring; raw messages retain attachment keys |
 | Attachments, avatars | `~/.cache/zapfast/` | Safe to delete; **Settings > Files > Change…** sends new downloads to another folder, leaving earlier ones in place |
 | Favorite stickers and packs | `~/.local/state/zapfast/stickers/` | Plain WebP files; each pack is a folder |
+| Wallpaper image | `~/.local/state/zapfast/wallpaper.jpg` | Copy of the chosen picture, or `.png`, `.webp`, `.gif`; deleted by **Remove image** |
 | Log of the last run | `~/.local/state/zapfast/zapfast.log` | `--verbose` for more |
 
 macOS and Windows use the standard platform directories selected by the
@@ -643,8 +702,11 @@ logs or databases. Windows uses the permissions inherited from your user profile
 Follow system, Light, Dark, and its Catppuccin, Catppuccin Latte, Nord, Ristretto,
 Tokyo Night, Rose Pine, Rose Pine Moon, and Rose Pine Dawn palettes.
 Choose **Open themes folder** below the picker to add
-JSON palettes beside `settings.json`. A local file with a bundled palette's name
-overrides it. For example:
+JSON palettes beside `settings.json`; **How to make a theme** opens
+[the guide](https://zapfast.rocks/themes/) with every colour name. The
+bundled palettes are written into the themes folder once, as ordinary files
+to read or change; ZapFast never rewrites them, and a deleted one stays
+deleted. For example:
 
 ```json
 {"base":"dark","colors":{"accent":"#89b4fa","bubble_out":"#293954"}}
@@ -659,12 +721,26 @@ Linux watches the themes folder for changes without periodic repaints. On other
 platforms, use `zapfast reload-themes` after editing. The command also works while
 the window is closed and never launches a stopped app.
 
-**Settings → Appearance → Wallpaper** offers WhatsApp's light and dark wallpaper
-colours, with a live preview of the selected colour and doodles. **Add
+**Settings → Appearance → Wallpaper** offers **Theme** first, then WhatsApp's
+light and dark wallpaper colours, with a live preview that shows exactly what
+the chat will. Theme, the default, uses the active palette's chat colour, so a
+local or Omarchy theme colours the conversation too and a theme change shows at
+once. Settings from earlier versions that still had the old default (Beige, or
+Black in dark mode) move to Theme once; a colour you chose stays. **Add
 doodles** controls only the SVG layer, so disabling it leaves the selected
-background colour in place. Light and dark selections are stored independently,
+background colour in place; the doodles switch between dark and light lines to
+stay visible on any colour. Light and dark selections are stored independently,
 and the embedded SVG is rendered at its native size and repeated across the
 conversation without stretching.
+
+**Choose image…** on the same page uses a picture of your own instead, in light
+and dark mode alike, filling the conversation and cropped from the centre
+without stretching. ZapFast keeps its own copy as `wallpaper.jpg` (or `.png`,
+`.webp`, `.gif`) in its state directory, so the original can move; a picture
+larger than 2560 pixels on its long side is scaled down first. The image
+replaces the colour and doodles, which return with **Remove image**, which also
+deletes the copy. If the copy goes missing or cannot be read, the colour shows
+instead.
 
 On Omarchy, **Follow system** and **Omarchy** read the active desktop palette and
 follow its changes in native, portable, and source builds, even without installed
@@ -759,7 +835,8 @@ English lines.
 Use `--demo-page composer-tools` to preview the WhatsApp-style composer pill
 and its attachment and poll menu. `typing`, `mention`, and
 `emoji-complete` preview the multiline field and inline suggestions.
-Use `--demo-page chat-menu` to preview the compact chat context menu, and
+Use `--demo-page chat-menu` to preview the compact chat context menu,
+`--demo-page chat-header-menu` for the menu at the top of an open chat, and
 `--demo-page chat,voice,voice-menu` for a voice message's menu with its speeds.
 `--demo-page video` shows a video and round video messages, and
 `video-playing` or `note-playing` starts one of them, silently.

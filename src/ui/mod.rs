@@ -84,7 +84,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
 
 fn central_background(app: &App) -> egui::Color32 {
     if app.page == Page::Chats {
-        app.settings.wallpaper_color_for(app.palette.dark).color32()
+        app.settings.wallpaper_background(&app.palette)
     } else {
         app.palette.panel
     }

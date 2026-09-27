@@ -10,11 +10,11 @@ use egui::{
 };
 
 use crate::animation;
-use crate::app::{App, Conversation, JumpHighlight, RowHeight};
+use crate::app::{App, Conversation, JumpHighlight, KeyScroll, RowHeight};
 use crate::markup;
 use crate::model::{
     Action, Chat, ChatId, Content, Delivery, Dialog, LinkPreview, Media, MediaState, Message,
-    PickerTab,
+    PickerTab, Scroll,
 };
 use crate::theme::{self, Icon, Palette};
 use crate::wallpaper;
@@ -25,6 +25,8 @@ use super::widgets;
 /// Group-message avatar size.
 const SENDER_AVATAR: f32 = 28.0;
 const BODY_SIZE: f32 = 14.5;
+/// Extra space above the first message of a run from one side.
+const RUN_GAP: f32 = 5.0;
 /// Footer label on an outgoing message that failed to send.
 const NOT_SENT: &str = "Not sent";
 const NOT_SENT_HINT: &str =
@@ -38,17 +40,24 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
         empty(app, ui);
         return;
     };
-    if let Some(texture) = app.chat_wallpaper() {
-        super::paint_wallpaper(ui, texture, app.palette.chat);
-    } else if app.settings.show_wallpaper {
-        wallpaper::paint(ui, app.settings.wallpaper_color_for(app.palette.dark));
+    match app.chat_wallpaper() {
+        Some(texture) => super::paint_wallpaper(ui, texture, app.palette.chat),
+        None => wallpaper::paint(ui, &app.wallpaper()),
     }
-    header(app, ui, &chat);
+    let header = header(app, ui, &chat);
     if theme::macos_chrome(ui.ctx()) {
         super::banner(app, ui);
     }
     composer(app, ui, &chat);
     messages(app, ui, &chat);
+    // Over the messages, which scroll under the header.
+    widgets::paint_shadow_below(
+        ui,
+        &app.palette,
+        header.left(),
+        header.right(),
+        header.bottom(),
+    );
 }
 
 fn empty(app: &mut App, ui: &mut egui::Ui) {
@@ -94,7 +103,7 @@ fn empty(app: &mut App, ui: &mut egui::Ui) {
     }
 }
 
-fn header(app: &mut App, ui: &mut egui::Ui, chat: &Chat) {
+fn header(app: &mut App, ui: &mut egui::Ui, chat: &Chat) -> Rect {
     let palette = app.palette;
     let title = app.chat_title(chat);
     egui::Panel::top("chat-header")
@@ -220,12 +229,18 @@ fn header(app: &mut App, ui: &mut egui::Ui, chat: &Chat) {
                             &crate::i18n::gettext(app.locale, "Info"),
                             &crate::i18n::gettext(app.locale, "Pin to top"),
                             &crate::i18n::gettext(app.locale, "Unarchive"),
+                            &crate::i18n::gettext(app.locale, "Clear chat"),
                             leave_label.as_ref(),
                             &crate::i18n::gettext(app.locale, "Copy number"),
                             &crate::i18n::gettext(app.locale, "Close chat"),
                         ],
                         true,
                     );
+                    // Demo/test: hold this menu open for a screenshot.
+                    #[cfg(any(test, feature = "demo"))]
+                    if app.open_header_menu.as_deref() == Some(chat.id.as_str()) {
+                        egui::Popup::open_id(ui.ctx(), more.id.with("popup"));
+                    }
                     egui::Popup::menu(&more)
                         .width(width)
                         .frame(widgets::menu_frame(&palette))
@@ -264,6 +279,20 @@ fn header(app: &mut App, ui: &mut egui::Ui, chat: &Chat) {
                             ) {
                                 app.actions
                                     .push(Action::SetArchived(chat.id.clone(), !chat.archived));
+                            }
+                            // Clearing reaches the phone, so it waits for a
+                            // connection, as deleting does in the chat list.
+                            if widgets::menu_item_enabled(
+                                ui,
+                                &palette,
+                                Some(Icon::Eraser),
+                                &crate::i18n::gettext(app.locale, "Clear chat"),
+                                app.is_connected(),
+                            ) {
+                                app.actions
+                                    .push(Action::ShowDialog(Dialog::ConfirmClearChat(
+                                        chat.id.clone(),
+                                    )));
                             }
                             widgets::menu_separator(ui, &palette);
                             if chat.can_leave(&app.our_ids())
@@ -327,7 +356,9 @@ fn header(app: &mut App, ui: &mut egui::Ui, chat: &Chat) {
                     }
                 });
             });
-        });
+        })
+        .response
+        .rect
 }
 
 /// Chat-header subtitle.
@@ -922,7 +953,9 @@ fn composer(app: &mut App, ui: &mut egui::Ui, chat: &Chat) {
                 pending_strip(app, ui);
             }
             if app.recording.is_some() {
-                composer_pill(&palette).show(ui, |ui| recording_strip(app, ui));
+                widgets::raised(ui, &palette, composer_pill(&palette), |ui| {
+                    recording_strip(app, ui)
+                });
                 return;
             }
             emoji_suggestions(app, ui, id);
@@ -987,7 +1020,7 @@ fn composer(app: &mut App, ui: &mut egui::Ui, chat: &Chat) {
                 .unwrap_or(line_height)
                 .clamp(line_height, line_height * 6.0);
             let row_height = (text_height + 2.0 * field_margin).max(line);
-            let pill = composer_pill(&palette).show(ui, |ui| {
+            let pill = widgets::raised(ui, &palette, composer_pill(&palette), |ui| {
             ui.allocate_ui_with_layout(
                 vec2(ui.available_width(), row_height),
                 Layout::left_to_right(Align::Max),
@@ -1031,23 +1064,39 @@ fn composer(app: &mut App, ui: &mut egui::Ui, chat: &Chat) {
                         }
                         app.actions.push(Action::TogglePicker(PickerTab::Emoji));
                     }
+                    // The text follows the pair as closely as the emoji
+                    // follows the plus (the field's own left margin included).
+                    ui.add_space(COMPOSER_TEXT_GAP - ui.spacing().item_spacing.x - 8.0);
                 }
                 // The send button closes the row, flush with the field's end.
                 let field_width =
                     (ui.available_width() - button_width - ui.spacing().item_spacing.x).max(0.0);
+                // The ink is centred on the controls, not the line box: the
+                // span from a capital's top to a descender's bottom sits as far
+                // from the field's top as from its bottom. Inter's box leaves
+                // more room above the capitals than below the descenders, and
+                // at fractional scales the glyphs round to the pixel grid off
+                // centre in it. Measured at this scale, snapped to a pixel.
+                let ink_middle = ink_middle(ui, line_height);
+                let top = fastframe_text::snap_to_pixels(
+                    row_height - line / 2.0 - (text_height - line_height) - ink_middle,
+                    ui.ctx().pixels_per_point(),
+                )
+                .max(0.0);
+                let bottom = (row_height - text_height - top).max(0.0);
                 Frame::new()
                     .fill(Color32::TRANSPARENT)
-                    // One point higher than the geometric centre: most lines
-                    // have letters that drop below the baseline, which makes a
-                    // centred line look low.
                     .inner_margin(Margin {
                         left: 8,
                         right: 8,
-                        top: (field_margin - 1.0).max(0.0) as i8,
-                        bottom: (field_margin + 1.0) as i8,
+                        top: 0,
+                        bottom: 0,
                     })
                     .show(ui, |ui| {
                         ui.set_width((field_width - 16.0).max(0.0));
+                        ui.vertical(|ui| {
+                        ui.spacing_mut().item_spacing.y = 0.0;
+                        ui.add_space(top);
                         // Grow from one to six lines, then scroll. The height
                         // is this frame's draft, measured above, rather than
                         // the scroll area's memory of the last frame.
@@ -1215,6 +1264,8 @@ fn composer(app: &mut App, ui: &mut egui::Ui, chat: &Chat) {
                                     response.request_focus();
                                 }
                             });
+                        ui.add_space(bottom);
+                        });
                     });
                 let ready = !app.composer.trim().is_empty()
                     || !app.pending.is_empty()
@@ -1356,6 +1407,11 @@ const COMPOSER_INSET: i8 = 2;
 /// 22-point icon by six points a side, so this leaves eight between the
 /// icons, a pair.
 const COMPOSER_PAIR_GAP: f32 = -4.0;
+/// From the emoji button's edge to the text. The plus's glyph leaves more of
+/// its box empty than the round emoji's, so this is wider than the pair's
+/// gap: at it, the text starts as far from the emoji's ink as the emoji
+/// starts from the plus's.
+pub(crate) const COMPOSER_TEXT_GAP: f32 = 6.0;
 /// Width of the plus button: its 22-point icon and `icon_button`'s padding.
 const PLUS_EDGE: f32 = 34.0;
 
@@ -1370,6 +1426,31 @@ pub(crate) fn composer_pill_id() -> egui::Id {
     egui::Id::new("composer-pill")
 }
 
+/// The open chat's message list scroll offset and viewport height, as
+/// `(offset.y, height)`, as of its last frame: for tests that need them
+/// precisely. `App::at_bottom` covers ordinary UI checks.
+pub(crate) fn scroll_metrics_id(chat: &ChatId) -> egui::Id {
+    egui::Id::new(("message-scroll-metrics", chat))
+}
+
+/// How far below the top of a composer text row the middle of its ink sits,
+/// at this scale: halfway from a capital's top to a descender's bottom.
+fn ink_middle(ui: &egui::Ui, line_height: f32) -> f32 {
+    let format = egui::TextFormat::simple(theme::regular(BODY_SIZE), Color32::WHITE);
+    let (galley, _) = crate::bidi::layout_editor(ui, "Hy", &format, f32::INFINITY, true);
+    galley
+        .rows
+        .first()
+        .and_then(|row| {
+            let [capital, descender] = [row.glyphs.first()?, row.glyphs.get(1)?];
+            let top = capital.pos.y + capital.uv_rect.offset.y;
+            let bottom = descender.pos.y + descender.uv_rect.offset.y + descender.uv_rect.size.y;
+            (!capital.uv_rect.is_nothing() && !descender.uv_rect.is_nothing())
+                .then(|| row.pos.y + (top + bottom) / 2.0)
+        })
+        .unwrap_or(line_height / 2.0)
+}
+
 /// Lays out a control centred in the composer's last-line band, however
 /// tall the draft has grown, so every control shares one vertical centre.
 fn last_line<R>(ui: &mut egui::Ui, line: f32, add: impl FnOnce(&mut egui::Ui) -> R) -> R {
@@ -1382,12 +1463,6 @@ fn composer_pill(palette: &Palette) -> Frame {
     Frame::new()
         .fill(palette.surface)
         .corner_radius(CornerRadius::same(COMPOSER_RADIUS))
-        .shadow(egui::epaint::Shadow {
-            offset: [0, 0],
-            blur: 6,
-            spread: 0,
-            color: Color32::from_black_alpha(31),
-        })
         // The end buttons are inset by as much at the sides as above and
         // below, so they sit evenly in the rounded ends.
         .inner_margin(Margin {
@@ -1435,6 +1510,15 @@ fn composer_tools_menu(app: &mut App, chat: &Chat, plus: &egui::Response) {
 }
 
 /// Offers a refused voice message for another try, or to discard it.
+/// From a strip above the composer (reply, edit, unsent voice) to the field
+/// it belongs to: close enough to read as one piece.
+pub(crate) const STRIP_GAP: f32 = 3.0;
+
+/// Leaves [`STRIP_GAP`] below a strip, the layout's own spacing included.
+fn strip_gap(ui: &mut egui::Ui) {
+    ui.add_space(STRIP_GAP - ui.spacing().item_spacing.y);
+}
+
 fn unsent_voice_strip(app: &mut App, ui: &mut egui::Ui, samples: usize) {
     let palette = app.palette;
     let seconds = (samples as f64 / f64::from(crate::voice::RATE))
@@ -1443,11 +1527,14 @@ fn unsent_voice_strip(app: &mut App, ui: &mut egui::Ui, samples: usize) {
     let label = crate::i18n::gettext(app.locale, "Voice message ({duration}) not sent")
         .replace("{duration}", &crate::util::duration(seconds));
     let discard = crate::i18n::gettext(app.locale, "Discard voice message");
-    Frame::new()
-        .fill(palette.surface)
-        .corner_radius(CornerRadius::same(theme::RADIUS))
-        .inner_margin(Margin::symmetric(10, 6))
-        .show(ui, |ui| {
+    widgets::raised(
+        ui,
+        &palette,
+        Frame::new()
+            .fill(palette.surface)
+            .corner_radius(CornerRadius::same(theme::RADIUS))
+            .inner_margin(Margin::symmetric(10, 6)),
+        |ui| {
             ui.set_width(ui.available_width());
             ui.horizontal(|ui| {
                 theme::icon(ui, Icon::Mic, 16.0, palette.danger);
@@ -1470,17 +1557,21 @@ fn unsent_voice_strip(app: &mut App, ui: &mut egui::Ui, samples: usize) {
                     }
                 });
             });
-        });
-    ui.add_space(6.0);
+        },
+    );
+    strip_gap(ui);
 }
 
 fn edit_strip(app: &mut App, ui: &mut egui::Ui) {
     let palette = app.palette;
-    Frame::new()
-        .fill(palette.surface)
-        .corner_radius(CornerRadius::same(theme::RADIUS))
-        .inner_margin(Margin::symmetric(10, 6))
-        .show(ui, |ui| {
+    widgets::raised(
+        ui,
+        &palette,
+        Frame::new()
+            .fill(palette.surface)
+            .corner_radius(CornerRadius::same(theme::RADIUS))
+            .inner_margin(Margin::symmetric(10, 6)),
+        |ui| {
             ui.set_width(ui.available_width());
             ui.horizontal(|ui| {
                 theme::icon(ui, Icon::Pencil, 16.0, palette.accent);
@@ -1505,8 +1596,9 @@ fn edit_strip(app: &mut App, ui: &mut egui::Ui) {
                     }
                 });
             });
-        });
-    ui.add_space(6.0);
+        },
+    );
+    strip_gap(ui);
 }
 
 fn reply_strip(app: &mut App, ui: &mut egui::Ui, quoted: &Message) {
@@ -1520,11 +1612,14 @@ fn reply_strip(app: &mut App, ui: &mut egui::Ui, quoted: &Message) {
         &crate::i18n_extra::summary(&quoted.summary()),
         &app.mention_list(quoted),
     );
-    Frame::new()
-        .fill(palette.surface)
-        .corner_radius(CornerRadius::same(theme::RADIUS))
-        .inner_margin(Margin::symmetric(10, 6))
-        .show(ui, |ui| {
+    let strip = widgets::raised(
+        ui,
+        &palette,
+        Frame::new()
+            .fill(palette.surface)
+            .corner_radius(CornerRadius::same(theme::RADIUS))
+            .inner_margin(Margin::symmetric(10, 6)),
+        |ui| {
             ui.set_width(ui.available_width().max(0.0));
             ui.horizontal(|ui| {
                 let (bar, _) = ui.allocate_exact_size(vec2(3.0, 34.0), Sense::hover());
@@ -1556,8 +1651,16 @@ fn reply_strip(app: &mut App, ui: &mut egui::Ui, quoted: &Message) {
                     }
                 });
             });
-        });
-    ui.add_space(6.0);
+        },
+    );
+    ui.ctx()
+        .data_mut(|data| data.insert_temp(reply_strip_id(), strip.response.rect));
+    strip_gap(ui);
+}
+
+/// Where the reply strip was drawn, for layout tests.
+pub(crate) fn reply_strip_id() -> egui::Id {
+    egui::Id::new("reply-strip")
 }
 
 /// App data needed while drawing a checked-out conversation.
@@ -1634,6 +1737,12 @@ fn shows_sender_pictures(chat: &Chat) -> bool {
 
 fn messages(app: &mut App, ui: &mut egui::Ui, chat: &Chat) {
     let palette = app.palette;
+    // Taken up front: `names_or` below borrows the rest of `app` for the
+    // whole function, so a pending scroll must come out before that.
+    let pending_scroll = app.scroll_page.take();
+    // An explicit jump (Ctrl+End, or the return-to-bottom button) must reach
+    // the bottom even while a message bubble retains keyboard focus.
+    let scroll_forced = std::mem::take(&mut app.scroll_to_bottom_forced);
     // Check out the conversation while drawing rows and collecting actions.
     let mut conversation = app.conversations.remove(&chat.id).unwrap_or_default();
     let typing = app.typing_in(&chat.id);
@@ -1720,7 +1829,8 @@ fn messages(app: &mut App, ui: &mut egui::Ui, chat: &Chat) {
     let jump_since = std::cell::Cell::new(jump.as_ref().and_then(|jump| jump.since));
     let time = ui.input(|input| input.time);
     // Do not animate programmatic scrolling. Pending animations can delay a
-    // later request to reach the end.
+    // later request to reach the end. Keyboard page, Home, and End scrolls
+    // ease by applying small instant steps each frame instead (`KeyScroll`).
     let mut edge_scrolled_up = false;
     // Rows far from the viewport are skipped rather than laid out, keeping the
     // height they last took (or an estimate), so a long history costs the rows
@@ -1753,6 +1863,39 @@ fn messages(app: &mut App, ui: &mut egui::Ui, chat: &Chat) {
     // follows, so what the reader looks at stays put while rows scrolled past
     // are measured for the first time.
     let mut grew_above = 0.0;
+    // The offset the message list is about to load, the distance a Home
+    // scroll still has to cover: the same id the `ScrollArea` below loads.
+    // `.id_salt()` hashes its salt into an `IdSalt` before combining it with
+    // the `Ui`'s id, so the salt must go through the same `IdSalt::new` here
+    // to land on the same id.
+    let scroll_id = ui.make_persistent_id(egui::IdSalt::new(("messages", &chat.id)));
+    let offset =
+        egui::scroll_area::State::load(ui.ctx(), scroll_id).map_or(0.0, |state| state.offset.y);
+    // A keyboard scroll under way stops for a jump to a message, for the
+    // reaction bar, which holds the view still, and for a wheel or trackpad
+    // turn over the message list, before it takes another step.
+    let mut key_scroll = conversation.key_scroll.take();
+    let list = ui.available_rect_before_wrap();
+    let wheel_over_list = ui.input(|input| {
+        (input.smooth_scroll_delta.y != 0.0
+            || input
+                .raw
+                .events
+                .iter()
+                .any(|event| matches!(event, egui::Event::MouseWheel { .. })))
+            && input
+                .pointer
+                .hover_pos()
+                .is_some_and(|pos| list.contains(pos))
+    });
+    if view.anchor.is_some() || view.reaction.is_some() || wheel_over_list {
+        key_scroll = None;
+    }
+    let key_duration = ui.style().scroll_animation.duration.max;
+    // A key scroll starts one frame back, so it moves on its first frame and
+    // a held key's repeats, which restart it, never stall it.
+    let key_start = time - f64::from(ui.input(|input| input.stable_dt.min(0.1)));
+    let mut pinned = false;
     let output = egui::ScrollArea::vertical()
         .id_salt(("messages", &chat.id))
         .auto_shrink([false, false])
@@ -1786,6 +1929,7 @@ fn messages(app: &mut App, ui: &mut egui::Ui, chat: &Chat) {
                     if delta < 0.0 {
                         edge_scrolled_up = true;
                     }
+                    key_scroll = None;
                     ui.scroll_with_delta_animation(
                         vec2(0.0, -delta),
                         egui::style::ScrollAnimation::none(),
@@ -1883,11 +2027,22 @@ fn messages(app: &mut App, ui: &mut egui::Ui, chat: &Chat) {
                                 || previous.is_none_or(|previous| {
                                     previous.sender != message.sender || previous.from_me
                                 }));
+                        // The first message of a run from one side, as the
+                        // phone draws it: a little apart, with a tail.
+                        let first_in_run = new_day
+                            || previous.is_none_or(|previous| {
+                                previous.from_me != message.from_me
+                                    || (!message.from_me && previous.sender != message.sender)
+                            });
+                        if first_in_run && !new_day && previous.is_some() {
+                            ui.add_space(RUN_GAP);
+                        }
                         let flash = jump
                             .as_ref()
                             .filter(|jump| jump.message == message.id)
                             .map(|_| (ui.painter().add(egui::Shape::Noop), ui.cursor().top()));
-                        let response = bubble(ui, &view, message, show_sender, &mut actions);
+                        let response =
+                            bubble(ui, &view, message, show_sender, first_in_run, &mut actions);
                         if let Some((slot, top)) = flash {
                             if view.anchor == Some(message.id.as_str()) && response.is_some() {
                                 jump_since.set(Some(time));
@@ -1963,17 +2118,75 @@ fn messages(app: &mut App, ui: &mut egui::Ui, chat: &Chat) {
                         typing_bubble(ui, &view, &typing);
                     }
                     ui.add_space(4.0);
-                    if scroll_to_bottom && !keyboard_navigation.get() && view.reaction.is_none() {
+                    // An explicit jump (Ctrl+End, or the return-to-bottom
+                    // button) wins over a message bubble's retained keyboard
+                    // focus; other triggers still defer to it, so an
+                    // automatic pin does not pull the view away from what a
+                    // keyboard-navigating reader is looking at.
+                    if scroll_to_bottom
+                        && (scroll_forced || !keyboard_navigation.get())
+                        && view.reaction.is_none()
+                    {
                         ui.scroll_to_rect_animation(
                             Rect::from_min_size(ui.cursor().min, Vec2::ZERO),
                             None,
                             egui::style::ScrollAnimation::none(),
                         );
+                        pinned = true;
                     }
                 });
+            // A keyboard PgUp/PgDn/Home/End scroll moves by the next slice of
+            // its eased distance each frame, as an instant scroll: relative
+            // steps compose with the row-height compensation below, and
+            // `scroll_with_delta` releases stick-to-bottom like edge-scroll
+            // above. An instant jump to the end this frame wins over it.
+            if pinned {
+                key_scroll = None;
+            } else if let Some(kind) = pending_scroll
+                && view.reaction.is_none()
+            {
+                // A repeated page key adds a page to the distance left, so a
+                // held key keeps moving; anything else starts over.
+                let page = match kind {
+                    Scroll::PageUp => viewport.height() * 0.9,
+                    Scroll::PageDown => -(viewport.height() * 0.9),
+                    Scroll::Top | Scroll::Bottom => 0.0,
+                };
+                let left = key_scroll
+                    .filter(|scroll| scroll.kind == kind)
+                    .map_or(0.0, |scroll| scroll.remaining);
+                key_scroll = Some(KeyScroll::new(kind, left + page, key_start, key_duration));
+            }
+            if let Some(scroll) = &mut key_scroll {
+                let fraction = scroll.advance(time);
+                let step = match scroll.kind {
+                    Scroll::PageUp | Scroll::PageDown => {
+                        let step = scroll.remaining * fraction;
+                        scroll.remaining -= step;
+                        step
+                    }
+                    Scroll::Top => offset * fraction,
+                    // Measured again every frame, so messages that arrive
+                    // on the way are included.
+                    Scroll::Bottom => {
+                        -(ui.min_rect().bottom() - viewport.bottom()).max(0.0) * fraction
+                    }
+                };
+                ui.scroll_with_delta_animation(
+                    vec2(0.0, step),
+                    egui::style::ScrollAnimation::none(),
+                );
+                ui.ctx().request_repaint();
+            }
         });
     let at_bottom =
         output.state.offset.y + output.inner_rect.height() >= output.content_size.y - 24.0;
+    ui.ctx().data_mut(|data| {
+        data.insert_temp(
+            scroll_metrics_id(&chat.id),
+            (output.state.offset.y, output.inner_rect.height()),
+        );
+    });
     // Keep the view at the end while initial content expands, until the user
     // scrolls with the wheel, trackpad, or scrollbar.
     let bar = Rect::from_min_max(
@@ -2001,18 +2214,39 @@ fn messages(app: &mut App, ui: &mut egui::Ui, chat: &Chat) {
     // Keep the rows on screen where they were when rows above them changed
     // height, unless this frame scrolled on purpose (to the end, a jump, or
     // the divider) or sticks to the end, where egui keeps the offset anyway.
-    // The pass is redone at the new offset, so the shift never shows.
-    if grew_above.abs() >= 0.5 && !lay_out_all && !scroll_to_bottom && !at_bottom {
+    // Home targets an absolute offset (0), so it is skipped while Home
+    // scrolls, rather than pushing the offset away from the top; PgUp/PgDn
+    // steps are relative and still get it. The pass is redone at the new
+    // offset, so the shift never shows.
+    if grew_above.abs() >= 0.5
+        && !lay_out_all
+        && !scroll_to_bottom
+        && !at_bottom
+        && key_scroll.is_none_or(|scroll| scroll.kind != Scroll::Top)
+    {
         let mut state = output.state;
         state.offset.y = (state.offset.y + grew_above).max(0.0);
         state.store(ui.ctx(), output.id);
         ui.ctx()
             .request_discard("transcript rows above the viewport changed height");
     }
+    if reader_scrolled {
+        key_scroll = None;
+    }
+    if let Some(scroll) = key_scroll
+        && scroll.done()
+    {
+        key_scroll = None;
+        if scroll.kind == Scroll::Bottom {
+            // Keep later messages pinned, as Ctrl+End already does.
+            app.scroll_to_bottom = true;
+        }
+    }
+    conversation.key_scroll = key_scroll;
     app.conversations
         .insert(chat.id.clone(), std::mem::take(&mut conversation));
     app.at_bottom = at_bottom;
-    if app.scroll_to_bottom && (reader_scrolled || keyboard_navigation.get()) {
+    if app.scroll_to_bottom && (reader_scrolled || (keyboard_navigation.get() && !scroll_forced)) {
         app.scroll_to_bottom = false;
     }
     if divider_placed {
@@ -2200,11 +2434,16 @@ fn typing_bubble(ui: &mut egui::Ui, view: &View<'_>, typers: &[(String, String)]
             }
             ui.add_space(2.0);
         }
-        Frame::new()
-            .fill(palette.bubble_in)
-            .corner_radius(CornerRadius::same(10))
+        let backdrop = ui.painter().add(egui::Shape::Noop);
+        let rect = Frame::new()
             .inner_margin(Margin::symmetric(12, 9))
-            .show(ui, |ui| typing_dots(ui, &palette));
+            .show(ui, |ui| typing_dots(ui, &palette))
+            .response
+            .rect;
+        ui.painter().set(
+            backdrop,
+            widgets::bubble_shape(&palette, rect, palette.bubble_in, Some(widgets::Side::Left)),
+        );
     });
 }
 
@@ -2219,8 +2458,9 @@ fn typing_dots(ui: &mut egui::Ui, palette: &Palette) {
     if !ui.is_rect_visible(rect) {
         return;
     }
-    ui.ctx()
-        .request_repaint_after(std::time::Duration::from_millis(100));
+    // Every frame, paced by vsync like egui's own animations; drawn only
+    // while visible, and a hidden window gets no frames at all.
+    ui.ctx().request_repaint();
     let time = ui.input(|input| input.time);
     for index in 0..3 {
         let wave = ((time * std::f64::consts::TAU / 1.2) - f64::from(index) * 0.9).sin() as f32;
@@ -2429,6 +2669,7 @@ fn bubble(
     view: &View<'_>,
     message: &Message,
     show_sender: bool,
+    first_in_run: bool,
     actions: &mut Vec<Action>,
 ) -> Option<egui::Response> {
     let own = message.from_me;
@@ -2498,6 +2739,7 @@ fn bubble(
                             view,
                             message,
                             show_sender,
+                            first_in_run,
                             max_width,
                             actions,
                         ));
@@ -2509,6 +2751,7 @@ fn bubble(
                     view,
                     message,
                     show_sender,
+                    first_in_run,
                     max_width,
                     actions,
                 ));
@@ -2823,6 +3066,7 @@ fn bubble_frame(
     view: &View<'_>,
     message: &Message,
     show_sender: bool,
+    first_in_run: bool,
     max_width: f32,
     actions: &mut Vec<Action>,
 ) -> egui::Response {
@@ -2849,9 +3093,14 @@ fn bubble_frame(
     let rect_id = bubble_id.with("rect");
     let previous = ui.ctx().data(|data| data.get_temp::<Rect>(rect_id));
     let early = previous.map(|rect| ui.interact(rect, bubble_id, Sense::CLICK));
+    // Painted once the contents are measured, beneath them.
+    let backdrop = ui.painter().add(egui::Shape::Noop);
+    let tail = (first_in_run && fill != Color32::TRANSPARENT).then_some(if own {
+        widgets::Side::Right
+    } else {
+        widgets::Side::Left
+    });
     let inner = Frame::new()
-        .fill(fill)
-        .corner_radius(CornerRadius::same(10))
         .inner_margin(Margin {
             left: 10,
             right: 10,
@@ -2935,6 +3184,12 @@ fn bubble_frame(
                 interactive_buttons(ui, view, message, card, settled.unwrap_or(cap), actions);
             }
         });
+    if fill != Color32::TRANSPARENT && ui.is_rect_visible(inner.response.rect) {
+        ui.painter().set(
+            backdrop,
+            widgets::bubble_shape(&palette, inner.response.rect, fill, tail),
+        );
+    }
     ui.ctx()
         .data_mut(|data| data.insert_temp(rect_id, inner.response.rect));
     let bubble = early.unwrap_or_else(|| ui.interact(inner.response.rect, bubble_id, Sense::CLICK));
@@ -3171,7 +3426,10 @@ fn quote_block(
     } else {
         (view.names_or)(&quoted.sender, quoted.sender_name.as_deref())
     };
-    let summary = markup::plain(&crate::i18n_extra::summary(&quoted.summary), &quote_mentions(view, quoted));
+    let summary = markup::plain(
+        &crate::i18n_extra::summary(&quoted.summary),
+        &quote_mentions(view, quoted),
+    );
     // As in WhatsApp, the bar and name take the quoted sender's colour, the
     // one their name has in groups, kept readable on this bubble.
     let bubble = if message.from_me {
@@ -3655,7 +3913,11 @@ fn context_menu(ui: &mut egui::Ui, view: &View<'_>, message: &Message, actions: 
             &crate::i18n::gettext(view.locale, "Delete for everyone"),
         )
     {
-        actions.push(Action::DeleteForEveryone(message.id.clone()));
+        actions.push(Action::ShowDialog(Dialog::ConfirmDeleteMessage {
+            chat: view.chat.id.clone(),
+            message: message.id.clone(),
+            for_everyone: true,
+        }));
     }
     if widgets::menu_item(
         ui,
@@ -3663,7 +3925,11 @@ fn context_menu(ui: &mut egui::Ui, view: &View<'_>, message: &Message, actions: 
         Some(Icon::EyeOff),
         &crate::i18n::gettext(view.locale, "Delete for me"),
     ) {
-        actions.push(Action::DeleteForMe(message.id.clone()));
+        actions.push(Action::ShowDialog(Dialog::ConfirmDeleteMessage {
+            chat: view.chat.id.clone(),
+            message: message.id.clone(),
+            for_everyone: false,
+        }));
     }
     if let Content::Sticker { media, .. } = &message.content
         && let Some(path) = &media.path
@@ -3758,7 +4024,12 @@ fn context_menu(ui: &mut egui::Ui, view: &View<'_>, message: &Message, actions: 
         }));
     }
     // The id helps when looking a message up for a bug report.
-    if widgets::menu_item(ui, &palette, Some(Icon::Copy), &crate::i18n::gettext(view.locale, "Copy message ID")) {
+    if widgets::menu_item(
+        ui,
+        &palette,
+        Some(Icon::Copy),
+        &crate::i18n::gettext(view.locale, "Copy message ID"),
+    ) {
         actions.push(Action::CopyText(message.id.clone()));
     }
 }
@@ -6766,6 +7037,17 @@ mod tests {
         assert!(!auto_download_allowed(&sticker, false, false));
         sticker.size = crate::model::ATTACHMENT_DOWNLOAD_LIMIT + 1;
         assert!(!auto_download_allowed(&sticker, true, false));
+    }
+
+    /// The typing dots animate at the display's rate, not a fixed timer.
+    #[test]
+    fn typing_dots_repaint_every_frame() {
+        let ctx = egui::Context::default();
+        let palette = crate::theme::Palette::dark();
+        let mut output = ctx.run_ui(egui::RawInput::default(), |ui| typing_dots(ui, &palette));
+        output.textures_delta.clear();
+        let delay = output.viewport_output[&egui::ViewportId::ROOT].repaint_delay;
+        assert_eq!(delay, std::time::Duration::ZERO);
     }
 
     #[test]

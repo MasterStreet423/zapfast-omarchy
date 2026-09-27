@@ -552,6 +552,10 @@ pub fn populate(app: &mut App) {
                 .chain(std::iter::once(ME.to_owned()))
                 .collect();
             chat.read_only = sample.name == "Section 8 Berlin";
+            // Rust Berlin lets every member edit its info, Family is locked
+            // but we are an admin, and Section 8 Berlin is locked for us.
+            chat.info_locked = Some(sample.name != "Rust Berlin");
+            chat.admin = sample.name == "Family";
         }
         chat.last = conversation
             .messages
@@ -969,6 +973,7 @@ fn sticker_sample(app: &mut App, shelf: crate::model::StickerShelf, search: &str
     app.picker = Some(crate::model::PickerTab::Stickers);
     app.stickers = set("😂🐸🎉👋😎🚀🥳🙏🔥");
     app.stickers_saved = set("❤😍🤣🐱");
+    app.stickers_received = set("🐶🌮🎈🦄");
     let ducks = set("🦆🐤🐣🐥🦢🪿");
     let local = set("☕🌅🌻");
     app.sticker_packs = vec![
@@ -989,6 +994,7 @@ fn sticker_sample(app: &mut App, shelf: crate::model::StickerShelf, search: &str
         .stickers
         .iter()
         .chain(&app.stickers_saved)
+        .chain(&app.stickers_received)
         .chain(app.sticker_packs.iter().flat_map(|pack| &pack.stickers))
         .filter_map(|path| {
             let emojis = crate::sticker_meta::emojis(&std::fs::read(path).ok()?);
@@ -1554,6 +1560,31 @@ fn labels_sample(app: &mut App) {
     }
 }
 
+/// A synthetic dusk gradient as the wallpaper image, shown at once. The file
+/// is never written: the sample hands the decoded image over directly.
+fn wallpaper_image_sample(app: &mut App) {
+    let (width, height) = (1600usize, 1000usize);
+    let pixels = (0..height)
+        .flat_map(|y| {
+            (0..width).map(move |x| {
+                let across = x as f32 / width as f32;
+                let down = y as f32 / height as f32;
+                let sun =
+                    (1.0 - ((across - 0.7).powi(2) + (down - 0.35).powi(2)).sqrt() * 3.0).max(0.0);
+                egui::Color32::from_rgb(
+                    (40.0 + 150.0 * down + 60.0 * sun) as u8,
+                    (50.0 + 60.0 * down + 50.0 * sun) as u8,
+                    (110.0 - 40.0 * down + 20.0 * sun) as u8,
+                )
+            })
+        })
+        .collect();
+    let image = egui::ColorImage::new([width, height], pixels);
+    let path = app.dirs.wallpaper_file("png");
+    app.wallpaper_image.show_now(&path, image);
+    app.settings.wallpaper_image = Some(path);
+}
+
 pub fn apply_flags(app: &mut App, page: Option<&str>) {
     let Some(page) = page else {
         return;
@@ -1562,6 +1593,7 @@ pub fn apply_flags(app: &mut App, page: Option<&str>) {
         match part {
             "chat" | "" => {}
             "chat-menu" => app.open_chat_menu = Some(app.chats[0].id.clone()),
+            "chat-header-menu" => app.open_header_menu = app.open_chat.clone(),
             "interactive-actions" => interactive_actions_sample(app),
             "interactive-list" => interactive_list_sample(app),
             "interactive-list-dialog" => {
@@ -1842,6 +1874,7 @@ pub fn apply_flags(app: &mut App, page: Option<&str>) {
                 app.settings_search = choice["settings-search=".len()..].to_owned();
             }
             "wallpaper" => app.page = Page::Wallpaper,
+            "wallpaper-image" => wallpaper_image_sample(app),
             "omarchy" | "omarchy-light" => {
                 let mut themes: Vec<_> = crate::theme::presets().collect();
                 let filename = if part == "omarchy-light" {
@@ -1956,6 +1989,23 @@ pub fn apply_flags(app: &mut App, page: Option<&str>) {
             "info" => {
                 app.dialog = app.open_chat.clone().map(Dialog::ChatInfo);
             }
+            "group-info" | "group-info-rename" | "group-info-locked" | "group-info-saving" => {
+                // A group whose name and photo we may change, the same with its
+                // name being typed or its change on the way, and one locked for us.
+                let group = if part == "group-info-locked" {
+                    "120363011122233344@g.us"
+                } else {
+                    SAMPLES[1].id
+                };
+                app.open_chat = Some(group.to_owned());
+                app.dialog = Some(Dialog::ChatInfo(group.to_owned()));
+                if part == "group-info-rename" {
+                    app.group_name_edit = Some("Rust Berlin 🦀".to_owned());
+                }
+                if part == "group-info-saving" {
+                    app.group_saving.insert(group.to_owned());
+                }
+            }
             "forward" => {
                 app.dialog = app.open_chat.clone().map(|chat| Dialog::Forward {
                     chat,
@@ -1997,6 +2047,9 @@ pub fn apply_flags(app: &mut App, page: Option<&str>) {
             }
             "delete-chat" => {
                 app.dialog = app.open_chat.clone().map(Dialog::ConfirmDeleteChat);
+            }
+            "clear-chat" => {
+                app.dialog = app.open_chat.clone().map(Dialog::ConfirmClearChat);
             }
             "select" => {
                 if let Some(chat) = app.open_chat.clone() {
@@ -2059,6 +2112,26 @@ pub fn apply_flags(app: &mut App, page: Option<&str>) {
                     }),
                 });
                 app.dialog = Some(Dialog::JoinGroup);
+            }
+            "delete-message" => {
+                app.dialog = app
+                    .open_chat
+                    .clone()
+                    .map(|chat| Dialog::ConfirmDeleteMessage {
+                        chat,
+                        message: "ada-emoji".to_owned(),
+                        for_everyone: true,
+                    });
+            }
+            "delete-message-mine" => {
+                app.dialog = app
+                    .open_chat
+                    .clone()
+                    .map(|chat| Dialog::ConfirmDeleteMessage {
+                        chat,
+                        message: "ada-format".to_owned(),
+                        for_everyone: false,
+                    });
             }
             "new-contact" => app.dialog = Some(Dialog::NewContact),
             "light" => {
@@ -2351,6 +2424,7 @@ pub fn apply_flags(app: &mut App, page: Option<&str>) {
             "picker" => app.picker = Some(crate::model::PickerTab::Emoji),
             "stickers" => sticker_sample(app, crate::model::StickerShelf::Recent, ""),
             "sticker-favorites" => sticker_sample(app, crate::model::StickerShelf::Favorites, ""),
+            "sticker-received" => sticker_sample(app, crate::model::StickerShelf::Received, ""),
             "sticker-pack" => {
                 let pack =
                     crate::model::StickerShelf::Pack(app.dirs.media_cache_dir().join("Ducks"));
@@ -3637,6 +3711,7 @@ mod tests {
         }
         for page in [
             "chat-menu",
+            "chat-header-menu",
             "channel",
             "locked",
             "locked-open",
@@ -3671,6 +3746,10 @@ mod tests {
             "settings-search=System",
             "wallpaper",
             "wallpaper,light",
+            "wallpaper,wallpaper-image",
+            "wallpaper,wallpaper-image,light",
+            "wallpaper,theme=Nord.json",
+            "wallpaper-image",
             "update",
             "update-downloading",
             "update-ready",
@@ -3693,6 +3772,10 @@ mod tests {
             "about",
             "failed",
             "info",
+            "group-info",
+            "group-info-rename",
+            "group-info-locked",
+            "group-info-saving",
             "forward",
             "unlink",
             "leave-group",
@@ -3700,11 +3783,14 @@ mod tests {
             "leave-channel",
             "toasts",
             "delete-chat",
+            "clear-chat",
             "invite",
             "unread-divider",
             "quotes",
             "quote-jump",
             "select",
+            "delete-message",
+            "delete-message-mine",
             "new-contact",
             "light",
             "archived",
@@ -3720,6 +3806,7 @@ mod tests {
             "picker",
             "stickers",
             "sticker-favorites",
+            "sticker-received",
             "sticker-pack",
             "sticker-search",
             "sticker-animated",
@@ -3822,6 +3909,14 @@ mod tests {
             },
         );
         output.textures_delta.clear();
+    }
+
+    /// Lets an eased key scroll's animation settle: tests advance time by the
+    /// predicted ~1/60s per frame, and the animation lasts up to 0.3s.
+    fn settle_key_scroll(app: &mut App, ctx: &egui::Context) {
+        for _ in 0..10 {
+            render(app, ctx);
+        }
     }
 
     /// Resting the pointer on a chat row's cut-short preview shows the whole
@@ -3962,6 +4057,126 @@ mod tests {
             repeat: false,
             modifiers,
         }
+    }
+
+    /// The group dialog offers the pencil and the photo menu only when we may
+    /// change the group's info, and not while a change is on its way.
+    #[test]
+    fn group_info_offers_editing_only_when_allowed() {
+        use crate::ui::dialogs::{group_name_button_id, group_photo_id};
+        for (page, offered) in [
+            ("group-info", true),
+            ("group-info-locked", false),
+            ("group-info-saving", false),
+        ] {
+            let mut app = app();
+            let ctx = egui::Context::default();
+            app.attach(&ctx);
+            apply_flags(&mut app, Some(page));
+            render(&mut app, &ctx);
+            let drawn = |id| ctx.data(|data| data.get_temp::<egui::Rect>(id)).is_some();
+            assert_eq!(drawn(group_name_button_id()), offered, "{page}: the pencil");
+            assert_eq!(drawn(group_photo_id()), offered, "{page}: the photo menu");
+        }
+    }
+
+    /// The pencil opens the name editor; Enter renames the group on WhatsApp,
+    /// an unchanged name sends nothing, and Escape cancels without closing the
+    /// dialog. The photo opens its menu.
+    #[test]
+    fn a_group_is_renamed_from_its_info_dialog() {
+        use crate::backend::Command;
+        use crate::ui::dialogs::{group_name_button_id, group_photo_id};
+        let mut app = app();
+        let ctx = egui::Context::default();
+        app.attach(&ctx);
+        app.backend.record_demo_commands();
+        apply_flags(&mut app, Some("group-info"));
+        render(&mut app, &ctx);
+        let group = SAMPLES[1].id;
+        let click = |app: &mut App, id: egui::Id| {
+            let pos = ctx
+                .data(|data| data.get_temp::<egui::Rect>(id))
+                .expect("the control is on screen")
+                .center();
+            let press = |pressed| egui::Event::PointerButton {
+                pos,
+                button: egui::PointerButton::Primary,
+                pressed,
+                modifiers: egui::Modifiers::NONE,
+            };
+            frame_with(app, &ctx, vec![egui::Event::PointerMoved(pos), press(true)]);
+            frame_with(app, &ctx, vec![press(false)]);
+            render(app, &ctx);
+        };
+        let enter = |app: &mut App| {
+            frame_with(
+                app,
+                &ctx,
+                vec![key(egui::Key::Enter, egui::Modifiers::NONE)],
+            );
+            render(app, &ctx);
+            app.backend.take_demo_commands()
+        };
+
+        click(&mut app, group_name_button_id());
+        assert_eq!(app.group_name_edit.as_deref(), Some("Rust Berlin"));
+        // Unchanged: the editor closes and nothing is sent.
+        let sent = enter(&mut app);
+        assert!(app.group_name_edit.is_none());
+        assert!(
+            !sent
+                .iter()
+                .any(|command| matches!(command, Command::SetGroupName { .. })),
+            "an unchanged name is not sent"
+        );
+
+        click(&mut app, group_name_button_id());
+        app.group_name_edit = Some("  Rust Berlin meetups ".into());
+        render(&mut app, &ctx);
+        let sent = enter(&mut app);
+        assert!(
+            sent.iter().any(|command| matches!(command,
+                Command::SetGroupName { chat, name }
+                    if chat == group && name == "Rust Berlin meetups")),
+            "Enter renames the group, trimmed"
+        );
+        assert!(app.group_name_edit.is_none());
+        assert_eq!(
+            app.chat(group).map(|chat| chat.name.as_str()),
+            Some("Rust Berlin"),
+            "the name waits for WhatsApp to accept it"
+        );
+
+        click(&mut app, group_name_button_id());
+        assert!(app.group_name_edit.is_some());
+        frame_with(
+            &mut app,
+            &ctx,
+            vec![key(egui::Key::Escape, egui::Modifiers::NONE)],
+        );
+        render(&mut app, &ctx);
+        assert!(app.group_name_edit.is_none(), "Escape cancels the rename");
+        assert!(
+            matches!(app.dialog, Some(Dialog::ChatInfo(_))),
+            "and keeps the dialog"
+        );
+
+        click(&mut app, group_photo_id());
+        assert!(egui::Popup::is_any_open(&ctx), "the photo opens its menu");
+        app.actions
+            .push(crate::model::Action::RemoveGroupPicture(group.into()));
+        render(&mut app, &ctx);
+        assert!(
+            app.backend
+                .take_demo_commands()
+                .iter()
+                .any(|command| matches!(
+                    command,
+                    Command::SetGroupPicture { chat, jpeg: None } if chat == group
+                )),
+            "Remove photo asks WhatsApp to remove it"
+        );
     }
 
     #[test]
@@ -4179,12 +4394,8 @@ mod tests {
     fn zoom_shortcuts_zoom_the_previewed_image_only() {
         let mut app = app();
         let ctx = egui::Context::default();
-        app.attach(&ctx);
-        render(&mut app, &ctx);
+        let fitted = open_sample_preview(&mut app, &ctx);
         let interface_zoom = ctx.zoom_factor();
-        let (photo, _) = sample_files(&app);
-        app.actions.push(crate::model::Action::PreviewImage(photo));
-        render(&mut app, &ctx);
 
         let ctrl_shift = egui::Modifiers {
             ctrl: true,
@@ -4192,28 +4403,6 @@ mod tests {
             command: !cfg!(target_os = "macos"),
             ..Default::default()
         };
-        // The picture decodes on a loader thread; wait until its fitted
-        // scale is known so zooming starts from a settled size.
-        let loaded = |app: &App| {
-            let path = app.image_preview.as_ref().unwrap().path().to_owned();
-            matches!(
-                ctx.try_load_texture(
-                    &crate::util::image_uri(&path),
-                    egui::TextureOptions::default(),
-                    egui::SizeHint::default(),
-                ),
-                Ok(egui::load::TexturePoll::Ready { .. })
-            )
-        };
-        for _ in 0..200 {
-            render(&mut app, &ctx);
-            if loaded(&app) {
-                break;
-            }
-            std::thread::sleep(std::time::Duration::from_millis(10));
-        }
-        render(&mut app, &ctx);
-        let fitted = app.image_preview.as_ref().unwrap().scale();
         frame_with(&mut app, &ctx, vec![key(egui::Key::Equals, ctrl_shift)]);
         render(&mut app, &ctx);
         let first = app.image_preview.as_ref().unwrap().zoom();
@@ -4236,6 +4425,321 @@ mod tests {
         render(&mut app, &ctx);
         assert!(app.image_preview.as_ref().unwrap().is_fit());
         assert_eq!(ctx.zoom_factor(), interface_zoom);
+    }
+
+    /// Opens the sample photo in the preview and waits for it to decode, so
+    /// input meets a settled, fitted picture. Returns the fitted scale.
+    fn open_sample_preview(app: &mut App, ctx: &egui::Context) -> f32 {
+        app.attach(ctx);
+        render(app, ctx);
+        let (photo, _) = sample_files(app);
+        let uri = crate::util::image_uri(&photo);
+        app.actions.push(crate::model::Action::PreviewImage(photo));
+        for _ in 0..200 {
+            render(app, ctx);
+            if matches!(
+                ctx.try_load_texture(
+                    &uri,
+                    egui::TextureOptions::default(),
+                    egui::SizeHint::default(),
+                ),
+                Ok(egui::load::TexturePoll::Ready { .. })
+            ) {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        render(app, ctx);
+        app.image_preview.as_ref().unwrap().scale()
+    }
+
+    /// Runs one frame and returns where the preview drew its picture.
+    fn preview_frame(app: &mut App, ctx: &egui::Context, events: Vec<egui::Event>) -> egui::Rect {
+        picture_rect(&frame_sized(app, ctx, 780.0, events))
+    }
+
+    /// The largest textured shape: the chat behind shows the same file smaller.
+    fn picture_rect(shapes: &[egui::epaint::ClippedShape]) -> egui::Rect {
+        shapes
+            .iter()
+            .filter(|clipped| clipped.shape.texture_id() != egui::TextureId::default())
+            .map(|clipped| clipped.shape.visual_bounding_rect())
+            .max_by(|a, b| a.area().total_cmp(&b.area()))
+            .expect("the preview draws its picture")
+    }
+
+    /// Moves the pointer to `pos` and turns the wheel with `modifiers` held;
+    /// egui smooths the notch over several frames, so this runs until it has
+    /// all arrived.
+    fn wheel_at(
+        app: &mut App,
+        ctx: &egui::Context,
+        pos: egui::Pos2,
+        unit: egui::MouseWheelUnit,
+        delta: f32,
+        modifiers: egui::Modifiers,
+    ) {
+        preview_frame(
+            app,
+            ctx,
+            vec![
+                egui::Event::ModifiersChanged(modifiers),
+                egui::Event::PointerMoved(pos),
+                egui::Event::MouseWheel {
+                    unit,
+                    delta: egui::vec2(0.0, delta),
+                    modifiers,
+                    phase: egui::TouchPhase::Move,
+                },
+            ],
+        );
+        for _ in 0..40 {
+            preview_frame(app, ctx, vec![]);
+        }
+    }
+
+    fn primary(pos: egui::Pos2, pressed: bool) -> egui::Event {
+        egui::Event::PointerButton {
+            pos,
+            button: egui::PointerButton::Primary,
+            pressed,
+            modifiers: egui::Modifiers::NONE,
+        }
+    }
+
+    fn double_click_at(app: &mut App, ctx: &egui::Context, pos: egui::Pos2) {
+        preview_frame(
+            app,
+            ctx,
+            vec![egui::Event::PointerMoved(pos), primary(pos, true)],
+        );
+        preview_frame(app, ctx, vec![primary(pos, false)]);
+        preview_frame(app, ctx, vec![primary(pos, true)]);
+        preview_frame(app, ctx, vec![primary(pos, false)]);
+        render(app, ctx);
+    }
+
+    /// One notch of the mouse wheel zooms like the + button and the opposite
+    /// notch undoes it, also with Ctrl/Cmd held, which egui turns into its own
+    /// steeper zoom curve. The interface keeps its own zoom.
+    #[test]
+    fn a_wheel_notch_zooms_the_previewed_image_like_the_zoom_buttons() {
+        let mut app = app();
+        let ctx = egui::Context::default();
+        let fitted = open_sample_preview(&mut app, &ctx);
+        let interface_zoom = ctx.zoom_factor();
+        let picture = preview_frame(&mut app, &ctx, vec![]);
+        for modifiers in [egui::Modifiers::NONE, egui::Modifiers::COMMAND] {
+            for (notch, expected) in [(1.0, fitted * 1.25), (-1.0, fitted)] {
+                wheel_at(
+                    &mut app,
+                    &ctx,
+                    picture.center(),
+                    egui::MouseWheelUnit::Line,
+                    notch,
+                    modifiers,
+                );
+                let scale = app.image_preview.as_ref().unwrap().scale();
+                assert!(
+                    (scale - expected).abs() < 1e-4,
+                    "{modifiers:?} notch {notch}: {scale}, not {expected}"
+                );
+            }
+        }
+        assert_eq!(ctx.zoom_factor(), interface_zoom);
+    }
+
+    /// egui keeps zooming a Ctrl/Cmd+wheel notch after the key comes up, so
+    /// letting go early must still leave exactly one step.
+    #[test]
+    fn releasing_ctrl_mid_notch_still_zooms_one_step() {
+        let mut app = app();
+        let ctx = egui::Context::default();
+        let fitted = open_sample_preview(&mut app, &ctx);
+        let centre = preview_frame(&mut app, &ctx, vec![]).center();
+        preview_frame(
+            &mut app,
+            &ctx,
+            vec![
+                egui::Event::ModifiersChanged(egui::Modifiers::COMMAND),
+                egui::Event::PointerMoved(centre),
+                egui::Event::MouseWheel {
+                    unit: egui::MouseWheelUnit::Line,
+                    delta: egui::vec2(0.0, 1.0),
+                    modifiers: egui::Modifiers::COMMAND,
+                    phase: egui::TouchPhase::Move,
+                },
+            ],
+        );
+        for _ in 0..3 {
+            preview_frame(&mut app, &ctx, vec![]);
+        }
+        preview_frame(
+            &mut app,
+            &ctx,
+            vec![egui::Event::ModifiersChanged(egui::Modifiers::NONE)],
+        );
+        for _ in 0..40 {
+            preview_frame(&mut app, &ctx, vec![]);
+        }
+        let scale = app.image_preview.as_ref().unwrap().scale();
+        assert!(
+            (scale - fitted * 1.25).abs() < 1e-4,
+            "{scale}, not {}",
+            fitted * 1.25
+        );
+    }
+
+    /// A pinch follows the fingers, even with Ctrl/Cmd held.
+    #[test]
+    fn a_pinch_zooms_the_previewed_image_by_its_own_factor() {
+        let mut app = app();
+        let ctx = egui::Context::default();
+        let fitted = open_sample_preview(&mut app, &ctx);
+        let centre = preview_frame(&mut app, &ctx, vec![]).center();
+        preview_frame(
+            &mut app,
+            &ctx,
+            vec![
+                egui::Event::ModifiersChanged(egui::Modifiers::COMMAND),
+                egui::Event::PointerMoved(centre),
+                egui::Event::Zoom(1.2),
+            ],
+        );
+        let scale = app.image_preview.as_ref().unwrap().scale();
+        assert!(
+            (scale - fitted * 1.2).abs() < 1e-4,
+            "{scale}, not {}",
+            fitted * 1.2
+        );
+    }
+
+    /// macOS and Wayland report trackpad scrolling in points; a two-finger
+    /// scroll moves a picture larger than the area.
+    #[test]
+    fn a_trackpad_scroll_moves_the_previewed_image_instead_of_zooming() {
+        let mut app = app();
+        let ctx = egui::Context::default();
+        open_sample_preview(&mut app, &ctx);
+        app.actions.push(crate::model::Action::ImageActualSize);
+        render(&mut app, &ctx);
+        let before = preview_frame(&mut app, &ctx, vec![]);
+        wheel_at(
+            &mut app,
+            &ctx,
+            before.center(),
+            egui::MouseWheelUnit::Point,
+            -60.0,
+            egui::Modifiers::NONE,
+        );
+        let after = preview_frame(&mut app, &ctx, vec![]);
+        assert!(
+            before.top() - after.top() > 30.0,
+            "{before:?} did not scroll to {after:?}"
+        );
+        let preview = app.image_preview.as_ref().unwrap();
+        assert!(!preview.is_fit());
+        assert_eq!(preview.zoom(), 1.0);
+    }
+
+    /// Zooming with the wheel keeps the picture point under the pointer in
+    /// place, as laid out on screen.
+    #[test]
+    fn wheel_zoom_keeps_the_pointed_at_pixel_under_the_pointer() {
+        let mut app = app();
+        let ctx = egui::Context::default();
+        open_sample_preview(&mut app, &ctx);
+        // A fitted picture fills the area's height, centred: its centre is
+        // the area's.
+        let pointer = preview_frame(&mut app, &ctx, vec![]).center() + egui::vec2(-200.0, -150.0);
+        // Larger than the area both ways, so each axis can scroll.
+        app.actions.push(crate::model::Action::ImageActualSize);
+        app.actions.push(crate::model::Action::ZoomImageIn);
+        render(&mut app, &ctx);
+        let before = preview_frame(&mut app, &ctx, vec![]);
+        let spot = (pointer - before.min) / before.size();
+        wheel_at(
+            &mut app,
+            &ctx,
+            pointer,
+            egui::MouseWheelUnit::Line,
+            1.0,
+            egui::Modifiers::NONE,
+        );
+        let after = preview_frame(&mut app, &ctx, vec![]);
+        assert!(after.width() > before.width() * 1.2, "the wheel zoomed");
+        let drift = after.min + spot * after.size() - pointer;
+        assert!(drift.length() < 1.5, "the pixel drifted by {drift:?}");
+    }
+
+    /// A picture larger than the area follows a mouse drag.
+    #[test]
+    fn dragging_moves_a_zoomed_picture() {
+        let mut app = app();
+        let ctx = egui::Context::default();
+        open_sample_preview(&mut app, &ctx);
+        let start = preview_frame(&mut app, &ctx, vec![]).center();
+        app.actions.push(crate::model::Action::ImageActualSize);
+        render(&mut app, &ctx);
+        let before = preview_frame(&mut app, &ctx, vec![]);
+        preview_frame(
+            &mut app,
+            &ctx,
+            vec![egui::Event::PointerMoved(start), primary(start, true)],
+        );
+        let end = start - egui::vec2(0.0, 150.0);
+        for step in 1..=10 {
+            let pos = start - egui::vec2(0.0, 15.0 * step as f32);
+            preview_frame(&mut app, &ctx, vec![egui::Event::PointerMoved(pos)]);
+        }
+        preview_frame(&mut app, &ctx, vec![primary(end, false)]);
+        let after = preview_frame(&mut app, &ctx, vec![]);
+        assert!(
+            before.top() - after.top() > 100.0,
+            "{before:?} did not follow the drag to {after:?}"
+        );
+    }
+
+    /// Double-clicking switches between fitting and the original size, as
+    /// the header's Fit/% control does.
+    #[test]
+    fn double_clicking_the_picture_toggles_fit_and_original_size() {
+        let mut app = app();
+        let ctx = egui::Context::default();
+        open_sample_preview(&mut app, &ctx);
+        let centre = preview_frame(&mut app, &ctx, vec![]).center();
+        double_click_at(&mut app, &ctx, centre);
+        let preview = app.image_preview.as_ref().unwrap();
+        assert!(!preview.is_fit());
+        assert_eq!(preview.zoom(), 1.0);
+        // Frames are 1/60 s apart: wait out egui's triple-click window
+        // (twice the double-click delay) so the next two clicks are a
+        // double click of their own.
+        for _ in 0..14 {
+            render(&mut app, &ctx);
+        }
+        double_click_at(&mut app, &ctx, centre);
+        assert!(app.image_preview.as_ref().unwrap().is_fit());
+    }
+
+    /// The original size opens with the double-clicked point in the middle
+    /// of the area rather than wherever the top left lands.
+    #[test]
+    fn double_click_centres_the_clicked_point_at_original_size() {
+        let mut app = app();
+        let ctx = egui::Context::default();
+        open_sample_preview(&mut app, &ctx);
+        // Fitted, the picture spans the area's height, centred.
+        let fitted = preview_frame(&mut app, &ctx, vec![]);
+        let spot = egui::vec2(0.5, 0.4);
+        double_click_at(&mut app, &ctx, fitted.min + spot * fitted.size());
+        let actual = preview_frame(&mut app, &ctx, vec![]);
+        let clicked = actual.min + spot * actual.size();
+        assert!(
+            (clicked - fitted.center()).length() < 1.5,
+            "{clicked:?} is not the centre {:?}",
+            fitted.center()
+        );
     }
 
     #[test]
@@ -5143,6 +5647,143 @@ mod tests {
         );
     }
 
+    /// The gear opens settings, and a second click on it closes them again,
+    /// landing back on the chat that was open. No close button is added.
+    #[test]
+    fn a_second_click_on_the_settings_button_closes_settings() {
+        use crate::ui::focus::Stop;
+        let mut app = app();
+        let ctx = egui::Context::default();
+        app.attach(&ctx);
+        render(&mut app, &ctx);
+        let chat = app.open_chat.clone().expect("a chat is open to start");
+        // The macOS header carries neither the avatar nor the gear: Settings
+        // lives in the menu bar there, and a headless test draws no menu bar.
+        // The toggle is the same action everywhere, so macOS drives it through
+        // the action and the clicks are exercised where the buttons exist.
+        if crate::theme::macos_chrome(&ctx) {
+            for expected in [crate::model::Page::Settings, crate::model::Page::Chats] {
+                app.actions.push(crate::model::Action::ToggleSettings);
+                frame_sized(&mut app, &ctx, 780.0, Vec::new());
+                assert_eq!(app.page, expected, "the action toggles the page");
+            }
+            assert_eq!(
+                app.open_chat.as_deref(),
+                Some(chat.as_str()),
+                "closing settings lands back on the chat that was open"
+            );
+            return;
+        }
+        let gear = |ctx: &egui::Context| {
+            let id = crate::ui::focus::stops(ctx)
+                .into_iter()
+                .find(|(stop, _)| *stop == Stop::Settings)
+                .map(|(_, id)| id)
+                .expect("the settings button is drawn");
+            ctx.read_response(id).expect("it publishes its rect").rect
+        };
+        let click = |app: &mut App, ctx: &egui::Context, rect: egui::Rect| {
+            let pos = rect.center();
+            for pressed in [true, false] {
+                frame_sized(
+                    app,
+                    ctx,
+                    780.0,
+                    vec![
+                        egui::Event::PointerMoved(pos),
+                        egui::Event::PointerButton {
+                            pos,
+                            button: egui::PointerButton::Primary,
+                            pressed,
+                            modifiers: egui::Modifiers::NONE,
+                        },
+                    ],
+                );
+            }
+        };
+        click(&mut app, &ctx, gear(&ctx));
+        assert_eq!(
+            app.page,
+            crate::model::Page::Settings,
+            "the first click opens settings"
+        );
+        click(&mut app, &ctx, gear(&ctx));
+        assert_eq!(
+            app.page,
+            crate::model::Page::Chats,
+            "the second click closes settings"
+        );
+        assert_eq!(
+            app.open_chat.as_deref(),
+            Some(chat.as_str()),
+            "closing settings lands back on the chat that was open"
+        );
+    }
+
+    /// While Settings are showing, both header buttons say what a click does
+    /// now: a screen reader reads the label, not the accent colour.
+    #[test]
+    fn the_header_buttons_say_they_close_settings() {
+        let mut app = app();
+        let ctx = egui::Context::default();
+        // The macOS header carries neither button, so nothing follows the page
+        // there.
+        if crate::theme::macos_chrome(&ctx) {
+            return;
+        }
+        ctx.enable_accesskit();
+        app.attach(&ctx);
+        let labels = |app: &mut App, ctx: &egui::Context| -> Vec<String> {
+            let mut labels = Vec::new();
+            for _ in 0..3 {
+                let mut output = ctx.run_ui(
+                    egui::RawInput {
+                        screen_rect: Some(egui::Rect::from_min_size(
+                            egui::Pos2::ZERO,
+                            egui::vec2(1180.0, 780.0),
+                        )),
+                        ..Default::default()
+                    },
+                    |ui| {
+                        let ctx = ui.ctx().clone();
+                        app.background_frame(&ctx);
+                        app.frame_ui(ui);
+                    },
+                );
+                output.textures_delta.clear();
+                labels = output
+                    .platform_output
+                    .accesskit_update
+                    .expect("accessibility tree")
+                    .nodes
+                    .iter()
+                    .filter_map(|(_, node)| node.label().map(str::to_owned))
+                    .collect();
+            }
+            labels
+        };
+        let closed = labels(&mut app, &ctx);
+        assert!(
+            closed.contains(&"Your profile and settings".to_owned()),
+            "the avatar opens settings: {closed:?}"
+        );
+        assert!(
+            closed.contains(&"Settings (Ctrl+,)".to_owned()),
+            "the gear opens settings: {closed:?}"
+        );
+        app.actions
+            .push(crate::model::Action::Open(crate::model::Page::Settings));
+        let open = labels(&mut app, &ctx);
+        assert!(
+            open.contains(&"Close settings".to_owned()),
+            "the avatar says it closes settings: {open:?}"
+        );
+        assert!(
+            open.contains(&"Close settings (Ctrl+,)".to_owned()),
+            "the gear says it closes settings: {open:?}"
+        );
+    }
+
     #[test]
     fn account_privacy_fetch_fills_the_rows() {
         let mut app = app();
@@ -5337,6 +5978,75 @@ mod tests {
         assert_eq!(after, listed, "every opened chat is still listed");
     }
 
+    /// Opening the dialog must not delete anything on its own, and confirming
+    /// must delete with the scope the menu asked for.
+    #[test]
+    fn confirming_a_message_deletion_uses_the_chosen_scope() {
+        for (page, message, expected_everyone) in [
+            ("delete-message", "ada-emoji", true),
+            ("delete-message-mine", "ada-format", false),
+        ] {
+            let mut app = app();
+            apply_flags(&mut app, Some(page));
+            assert_eq!(
+                app.dialog,
+                Some(crate::model::Dialog::ConfirmDeleteMessage {
+                    chat: SAMPLES[0].id.to_owned(),
+                    message: message.to_owned(),
+                    for_everyone: expected_everyone,
+                })
+            );
+            let ctx = egui::Context::default();
+            ctx.enable_accesskit();
+            app.attach(&ctx);
+            render(&mut app, &ctx);
+            // Laying the dialog out must not delete the message.
+            assert!(
+                app.conversations
+                    .values()
+                    .any(|conversation| conversation.message(message).is_some()),
+                "{page}: the message survives an open dialog"
+            );
+
+            let pos = accessible_nodes(&mut app, &ctx, Vec::new())
+                .into_iter()
+                .find(|(label, role, _)| {
+                    label == "Delete" && *role == egui::accesskit::Role::Button
+                })
+                .map(|(_, _, centre)| centre)
+                .expect("the confirm button is on screen");
+            let press = |pressed| egui::Event::PointerButton {
+                pos,
+                button: egui::PointerButton::Primary,
+                pressed,
+                modifiers: egui::Modifiers::NONE,
+            };
+            frame_with(
+                &mut app,
+                &ctx,
+                vec![egui::Event::PointerMoved(pos), press(true)],
+            );
+            frame_with(&mut app, &ctx, vec![press(false)]);
+
+            assert!(app.dialog.is_none(), "{page}: the dialog closes");
+            let row = app
+                .conversations
+                .values()
+                .find_map(|conversation| conversation.message(message));
+            if expected_everyone {
+                assert!(
+                    matches!(
+                        row.map(|message| &message.content),
+                        Some(crate::model::Content::Revoked)
+                    ),
+                    "{page}: a revoked message stays as a tombstone"
+                );
+            } else {
+                assert!(row.is_none(), "{page}: a local delete removes the row");
+            }
+        }
+    }
+
     #[test]
     fn errors_stay_until_dismissed_while_info_fades() {
         let mut app = app();
@@ -5506,6 +6216,619 @@ mod tests {
             ],
         );
         assert!(!app.scroll_to_bottom, "a wheel releases the pin");
+    }
+
+    #[test]
+    fn page_keys_scroll_the_open_chat_and_jump_to_its_ends() {
+        let mut app = app();
+        let ctx = egui::Context::default();
+        app.attach(&ctx);
+        let chat = sample_ids()[0].to_owned();
+        let when = crate::util::now();
+        let conversation = app.conversations.get_mut(&chat).expect("open chat");
+        for n in 0..60 {
+            conversation.messages.push(message(
+                &chat,
+                &format!("page-key-{n}"),
+                n % 2 == 0,
+                when - (60 - n),
+                Content::text(format!("Line {n}")),
+            ));
+        }
+        render(&mut app, &ctx);
+        assert!(app.at_bottom, "opens at the end");
+        // PgUp scrolls up by about a page and releases the pin to the end.
+        frame_with(
+            &mut app,
+            &ctx,
+            vec![key(egui::Key::PageUp, egui::Modifiers::NONE)],
+        );
+        settle_key_scroll(&mut app, &ctx);
+        assert!(!app.at_bottom, "PgUp leaves the end");
+        assert!(!app.scroll_to_bottom, "PgUp releases the pin");
+        // PgDn pages back down by the same amount.
+        frame_with(
+            &mut app,
+            &ctx,
+            vec![key(egui::Key::PageDown, egui::Modifiers::NONE)],
+        );
+        settle_key_scroll(&mut app, &ctx);
+        assert!(app.at_bottom, "PgDn returns to the end it paged from");
+        // Home reaches the top of the loaded history.
+        frame_with(
+            &mut app,
+            &ctx,
+            vec![key(egui::Key::Home, egui::Modifiers::NONE)],
+        );
+        settle_key_scroll(&mut app, &ctx);
+        assert!(!app.at_bottom, "Home leaves the end");
+        // End returns to the newest message.
+        frame_with(
+            &mut app,
+            &ctx,
+            vec![key(egui::Key::End, egui::Modifiers::NONE)],
+        );
+        settle_key_scroll(&mut app, &ctx);
+        assert!(app.at_bottom, "End reaches the newest message");
+        // With text in the focused composer, Home moves the text cursor
+        // instead of scrolling.
+        app.composer = "draft".into();
+        frame_with(
+            &mut app,
+            &ctx,
+            vec![key(egui::Key::Home, egui::Modifiers::NONE)],
+        );
+        settle_key_scroll(&mut app, &ctx);
+        assert!(app.at_bottom, "Home in a non-empty composer did not scroll");
+        assert_eq!(app.composer, "draft", "the composer text is unchanged");
+    }
+
+    /// Pushes `count` short synthetic messages onto the open sample chat so
+    /// its message list needs several pages to scroll through.
+    fn lengthen_chat(app: &mut App, chat: &str, count: i32, prefix: &str) {
+        let when = crate::util::now();
+        let conversation = app.conversations.get_mut(chat).expect("open chat");
+        for n in 0..count {
+            conversation.messages.push(message(
+                chat,
+                &format!("{prefix}-{n}"),
+                n % 2 == 0,
+                when - i64::from(count - n),
+                Content::text(format!("Line {n}")),
+            ));
+        }
+    }
+
+    /// Goes to the top and back to the end, so every row has been measured.
+    /// A page step also carries the offset along with rows above the
+    /// viewport that grow when first measured, so exact offset checks need
+    /// them measured first.
+    fn measure_all_rows(app: &mut App, ctx: &egui::Context) {
+        for end in [egui::Key::Home, egui::Key::End] {
+            frame_with(app, ctx, vec![key(end, egui::Modifiers::NONE)]);
+            settle_key_scroll(app, ctx);
+        }
+    }
+
+    /// The open chat's message list scroll offset and viewport height, as
+    /// stashed by `conversation::scroll_metrics_id`.
+    fn scroll_metrics(ctx: &egui::Context, chat: &str) -> (f32, f32) {
+        ctx.data(|data| data.get_temp(crate::ui::conversation::scroll_metrics_id(&chat.to_owned())))
+            .expect("the message list has drawn")
+    }
+
+    /// Inserts a voted poll at `index`, whose "Show votes" button is a real
+    /// focusable control inside its bubble's rect (a message bubble itself
+    /// uses `Sense::CLICK`, which egui never focuses).
+    fn insert_poll_message(app: &mut App, chat: &str, index: usize, id: &str, when: i64) {
+        let conversation = app.conversations.get_mut(chat).expect("open chat");
+        let poll = message(
+            chat,
+            id,
+            false,
+            when,
+            Content::Poll {
+                question: "Pizza tonight?".into(),
+                options: vec!["Yes".into(), "No".into()],
+                state: crate::model::PollState {
+                    voters: 1,
+                    ..Default::default()
+                },
+            },
+        );
+        conversation.messages.insert(index, poll);
+    }
+
+    /// Gives a poll's "Show votes" button keyboard focus, the way real Tab
+    /// navigation does (see `track_keyboard_focus` in `ui/mod.rs`).
+    fn focus_bubble(ctx: &egui::Context, chat: &str, message_id: &str) {
+        let target = crate::ui::conversation::bubble_id(chat, message_id).with("poll-results");
+        ctx.data_mut(|data| data.insert_temp(crate::theme::keyboard_focus_id(), true));
+        ctx.memory_mut(|memory| memory.request_focus(target));
+    }
+
+    #[test]
+    fn ctrl_end_reaches_the_bottom_despite_a_focused_message_bubble() {
+        let mut app = app();
+        let ctx = egui::Context::default();
+        app.attach(&ctx);
+        let chat = sample_ids()[0].to_owned();
+        lengthen_chat(&mut app, &chat, 25, "bubble-focus");
+        insert_poll_message(
+            &mut app,
+            &chat,
+            20,
+            "bubble-focus-poll",
+            crate::util::now() - 5,
+        );
+        render(&mut app, &ctx);
+        assert!(app.at_bottom, "opens at the end");
+        frame_with(
+            &mut app,
+            &ctx,
+            vec![key(egui::Key::PageUp, egui::Modifiers::NONE)],
+        );
+        settle_key_scroll(&mut app, &ctx);
+        assert!(!app.at_bottom, "set up off the end");
+        // A message bubble keeps keyboard focus, as it would while reading
+        // older messages after Tab navigation.
+        focus_bubble(&ctx, &chat, "bubble-focus-poll");
+        render(&mut app, &ctx);
+        // Ctrl+End is explicit: it must still reach the bottom.
+        frame_with(
+            &mut app,
+            &ctx,
+            vec![key(egui::Key::End, egui::Modifiers::COMMAND)],
+        );
+        settle_key_scroll(&mut app, &ctx);
+        assert!(
+            app.at_bottom,
+            "Ctrl+End reached the end despite the focused bubble"
+        );
+    }
+
+    #[test]
+    fn plain_end_animates_to_the_bottom_despite_a_focused_message_bubble() {
+        let mut app = app();
+        let ctx = egui::Context::default();
+        app.attach(&ctx);
+        let chat = sample_ids()[0].to_owned();
+        lengthen_chat(&mut app, &chat, 25, "end-focus");
+        insert_poll_message(
+            &mut app,
+            &chat,
+            20,
+            "end-focus-poll",
+            crate::util::now() - 5,
+        );
+        render(&mut app, &ctx);
+        frame_with(
+            &mut app,
+            &ctx,
+            vec![key(egui::Key::PageUp, egui::Modifiers::NONE)],
+        );
+        settle_key_scroll(&mut app, &ctx);
+        assert!(!app.at_bottom, "set up off the end");
+        focus_bubble(&ctx, &chat, "end-focus-poll");
+        render(&mut app, &ctx);
+        // End does not depend on the keyboard-navigation guard at all, so it
+        // reaches the bottom despite the focused bubble, eased rather than
+        // instant.
+        frame_with(
+            &mut app,
+            &ctx,
+            vec![key(egui::Key::End, egui::Modifiers::NONE)],
+        );
+        render(&mut app, &ctx);
+        assert!(!app.at_bottom, "End eases rather than jumping instantly");
+        settle_key_scroll(&mut app, &ctx);
+        assert!(
+            app.at_bottom,
+            "End reached the end despite the focused bubble"
+        );
+    }
+
+    #[test]
+    fn home_reaches_the_top_exactly_and_pgup_moves_about_a_page() {
+        let mut app = app();
+        let ctx = egui::Context::default();
+        app.attach(&ctx);
+        let chat = sample_ids()[0].to_owned();
+        lengthen_chat(&mut app, &chat, 60, "home-exact");
+        render(&mut app, &ctx);
+        measure_all_rows(&mut app, &ctx);
+        let (before, viewport_height) = scroll_metrics(&ctx, &chat);
+        frame_with(
+            &mut app,
+            &ctx,
+            vec![key(egui::Key::PageUp, egui::Modifiers::NONE)],
+        );
+        settle_key_scroll(&mut app, &ctx);
+        let (after_page_up, _) = scroll_metrics(&ctx, &chat);
+        let moved = before - after_page_up;
+        assert!(
+            (moved - viewport_height * 0.9).abs() < 2.0,
+            "PgUp moved {moved}, expected about {} of a {viewport_height} viewport",
+            viewport_height * 0.9
+        );
+        frame_with(
+            &mut app,
+            &ctx,
+            vec![key(egui::Key::Home, egui::Modifiers::NONE)],
+        );
+        settle_key_scroll(&mut app, &ctx);
+        let (after_home, _) = scroll_metrics(&ctx, &chat);
+        assert!(
+            after_home.abs() < 0.5,
+            "Home settled at {after_home}, not the top"
+        );
+    }
+
+    #[test]
+    fn pgup_eases_toward_its_target_instead_of_jumping() {
+        let mut app = app();
+        let ctx = egui::Context::default();
+        app.attach(&ctx);
+        let chat = sample_ids()[0].to_owned();
+        lengthen_chat(&mut app, &chat, 60, "pgup-anim");
+        render(&mut app, &ctx);
+        measure_all_rows(&mut app, &ctx);
+        let (before, viewport_height) = scroll_metrics(&ctx, &chat);
+        let target = before - viewport_height * 0.9;
+        frame_with(
+            &mut app,
+            &ctx,
+            vec![key(egui::Key::PageUp, egui::Modifiers::NONE)],
+        );
+        render(&mut app, &ctx);
+        let (soon, _) = scroll_metrics(&ctx, &chat);
+        assert!(
+            soon < before && soon > target,
+            "PgUp jumped straight to {soon} instead of easing from {before} toward {target}"
+        );
+        settle_key_scroll(&mut app, &ctx);
+        let (settled, _) = scroll_metrics(&ctx, &chat);
+        assert!(
+            (settled - target).abs() < 2.0,
+            "PgUp settled at {settled}, expected about {target}"
+        );
+    }
+
+    #[test]
+    fn a_wheel_event_stops_an_in_flight_key_scroll_animation() {
+        let mut app = app();
+        let ctx = egui::Context::default();
+        app.attach(&ctx);
+        let chat = sample_ids()[0].to_owned();
+        lengthen_chat(&mut app, &chat, 60, "wheel-stop");
+        render(&mut app, &ctx);
+        frame_with(
+            &mut app,
+            &ctx,
+            vec![key(egui::Key::PageUp, egui::Modifiers::NONE)],
+        );
+        render(&mut app, &ctx);
+        // A wheel event interrupts the in-flight animation.
+        frame_with(
+            &mut app,
+            &ctx,
+            vec![
+                egui::Event::PointerMoved(egui::pos2(800.0, 400.0)),
+                egui::Event::MouseWheel {
+                    unit: egui::MouseWheelUnit::Point,
+                    delta: egui::vec2(0.0, -300.0),
+                    modifiers: egui::Modifiers::NONE,
+                    phase: egui::TouchPhase::Move,
+                },
+            ],
+        );
+        let (after_wheel, _) = scroll_metrics(&ctx, &chat);
+        // The wheel turns down, against PgUp. egui eases a wheel turn over a
+        // few frames, so the offset may keep moving down; a PgUp animation
+        // still in flight would pull it back up toward its target instead.
+        settle_key_scroll(&mut app, &ctx);
+        let (later, _) = scroll_metrics(&ctx, &chat);
+        assert!(
+            later >= after_wheel - 2.0,
+            "the PgUp animation kept pulling up ({after_wheel} -> {later}) after the wheel event"
+        );
+    }
+
+    #[test]
+    fn ctrl_end_during_a_pgup_animation_still_reaches_the_bottom() {
+        let mut app = app();
+        let ctx = egui::Context::default();
+        app.attach(&ctx);
+        let chat = sample_ids()[0].to_owned();
+        lengthen_chat(&mut app, &chat, 60, "redirect");
+        render(&mut app, &ctx);
+        frame_with(
+            &mut app,
+            &ctx,
+            vec![key(egui::Key::PageUp, egui::Modifiers::NONE)],
+        );
+        // Partway through the eased eighteen or so frames: enough progress to
+        // leave the end, but the PgUp animation is still under way.
+        for _ in 0..3 {
+            render(&mut app, &ctx);
+        }
+        assert!(!app.at_bottom, "PgUp is under way");
+        // An instant jump requested while the PgUp animation is in flight
+        // must still land exactly at the end, not be pulled back toward the
+        // PgUp target by the animation still in progress.
+        frame_with(
+            &mut app,
+            &ctx,
+            vec![key(egui::Key::End, egui::Modifiers::COMMAND)],
+        );
+        settle_key_scroll(&mut app, &ctx);
+        assert!(
+            app.at_bottom,
+            "Ctrl+End during the PgUp animation still reaches the end"
+        );
+    }
+
+    /// Presses a plain key, then lets one more frame run so the key scroll
+    /// it queued starts and moves part of the way.
+    fn press_and_step(app: &mut App, ctx: &egui::Context, key_pressed: egui::Key) {
+        frame_with(app, ctx, vec![key(key_pressed, egui::Modifiers::NONE)]);
+        render(app, ctx);
+    }
+
+    #[test]
+    fn home_during_an_end_animation_reaches_the_top_exactly() {
+        let mut app = app();
+        let ctx = egui::Context::default();
+        app.attach(&ctx);
+        let chat = sample_ids()[0].to_owned();
+        lengthen_chat(&mut app, &chat, 60, "end-home");
+        render(&mut app, &ctx);
+        press_and_step(&mut app, &ctx, egui::Key::PageUp);
+        settle_key_scroll(&mut app, &ctx);
+        press_and_step(&mut app, &ctx, egui::Key::End);
+        press_and_step(&mut app, &ctx, egui::Key::Home);
+        settle_key_scroll(&mut app, &ctx);
+        let (offset, _) = scroll_metrics(&ctx, &chat);
+        assert!(offset.abs() < 0.5, "Home settled at {offset}, not the top");
+    }
+
+    #[test]
+    fn home_during_a_pgdn_animation_reaches_the_top_exactly() {
+        let mut app = app();
+        let ctx = egui::Context::default();
+        app.attach(&ctx);
+        let chat = sample_ids()[0].to_owned();
+        lengthen_chat(&mut app, &chat, 60, "pgdn-home");
+        render(&mut app, &ctx);
+        for _ in 0..2 {
+            press_and_step(&mut app, &ctx, egui::Key::PageUp);
+            settle_key_scroll(&mut app, &ctx);
+        }
+        press_and_step(&mut app, &ctx, egui::Key::PageDown);
+        press_and_step(&mut app, &ctx, egui::Key::Home);
+        settle_key_scroll(&mut app, &ctx);
+        let (offset, _) = scroll_metrics(&ctx, &chat);
+        assert!(offset.abs() < 0.5, "Home settled at {offset}, not the top");
+    }
+
+    #[test]
+    fn end_includes_a_message_that_arrives_during_its_animation() {
+        let mut app = app();
+        let ctx = egui::Context::default();
+        app.attach(&ctx);
+        let chat = sample_ids()[0].to_owned();
+        lengthen_chat(&mut app, &chat, 60, "end-arrival");
+        render(&mut app, &ctx);
+        for _ in 0..2 {
+            press_and_step(&mut app, &ctx, egui::Key::PageUp);
+            settle_key_scroll(&mut app, &ctx);
+        }
+        press_and_step(&mut app, &ctx, egui::Key::End);
+        assert!(!app.at_bottom, "End is under way");
+        let tall = (0..30)
+            .map(|n| format!("Line {n}"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        app.conversations
+            .get_mut(&chat)
+            .expect("open chat")
+            .messages
+            .push(message(
+                &chat,
+                "end-arrival-tall",
+                false,
+                crate::util::now() + 1,
+                Content::text(tall),
+            ));
+        settle_key_scroll(&mut app, &ctx);
+        assert!(
+            app.at_bottom,
+            "End reached the bottom below the new message"
+        );
+        assert!(app.scroll_to_bottom, "End pins later messages to the end");
+    }
+
+    #[test]
+    fn ctrl_end_during_a_pgup_animation_jumps_at_once() {
+        let mut app = app();
+        let ctx = egui::Context::default();
+        app.attach(&ctx);
+        let chat = sample_ids()[0].to_owned();
+        lengthen_chat(&mut app, &chat, 60, "ctrl-end-now");
+        render(&mut app, &ctx);
+        press_and_step(&mut app, &ctx, egui::Key::PageUp);
+        render(&mut app, &ctx);
+        assert!(!app.at_bottom, "PgUp is under way");
+        frame_with(
+            &mut app,
+            &ctx,
+            vec![key(egui::Key::End, egui::Modifiers::COMMAND)],
+        );
+        frame_with(&mut app, &ctx, Vec::new());
+        assert!(app.at_bottom, "Ctrl+End jumped to the end at once");
+        let (jumped, _) = scroll_metrics(&ctx, &chat);
+        for _ in 0..20 {
+            frame_with(&mut app, &ctx, Vec::new());
+            let (offset, _) = scroll_metrics(&ctx, &chat);
+            assert!(
+                offset >= jumped - 0.5 && app.at_bottom,
+                "the PgUp animation pulled the view back up ({jumped} -> {offset})"
+            );
+        }
+    }
+
+    /// Runs one frame with input events at an explicit input time.
+    fn frame_at(app: &mut App, ctx: &egui::Context, events: Vec<egui::Event>, time: f64) {
+        let mut output = ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    egui::vec2(1180.0, 780.0),
+                )),
+                time: Some(time),
+                events,
+                ..Default::default()
+            },
+            |ui| {
+                let ctx = ui.ctx().clone();
+                app.background_frame(&ctx);
+                app.frame_ui(ui);
+            },
+        );
+        output.textures_delta.clear();
+    }
+
+    /// Runs `frames` frames 1/60 s apart, each with `events`, and returns
+    /// the message list offset after each.
+    fn frames_at_60(
+        app: &mut App,
+        ctx: &egui::Context,
+        chat: &str,
+        time: &mut f64,
+        frames: usize,
+        events: &[egui::Event],
+    ) -> Vec<f32> {
+        (0..frames)
+            .map(|_| {
+                *time += 1.0 / 60.0;
+                frame_at(app, ctx, events.to_vec(), *time);
+                scroll_metrics(ctx, chat).0
+            })
+            .collect()
+    }
+
+    #[test]
+    fn a_held_pgup_moves_on_every_frame_and_stops_after_release() {
+        let mut app = app();
+        let ctx = egui::Context::default();
+        app.attach(&ctx);
+        let chat = sample_ids()[0].to_owned();
+        lengthen_chat(&mut app, &chat, 400, "held-pgup");
+        render(&mut app, &ctx);
+        let mut time = ctx.input(|input| input.time);
+        let held = [key(egui::Key::PageUp, egui::Modifiers::NONE)];
+        // A first run measures the rows the held key passes, so the second
+        // run's offsets carry no row-height compensation.
+        frames_at_60(&mut app, &ctx, &chat, &mut time, 20, &held);
+        frames_at_60(&mut app, &ctx, &chat, &mut time, 40, &[]);
+        let end = [key(egui::Key::End, egui::Modifiers::NONE)];
+        frames_at_60(&mut app, &ctx, &chat, &mut time, 1, &end);
+        frames_at_60(&mut app, &ctx, &chat, &mut time, 40, &[]);
+        assert!(app.at_bottom, "set up at the end");
+        let (before, viewport_height) = scroll_metrics(&ctx, &chat);
+        let offsets = frames_at_60(&mut app, &ctx, &chat, &mut time, 20, &held);
+        // The first frame only queues the key; each later one moves.
+        let mut previous = offsets[0];
+        let mut stalled = 0;
+        for (frame, &offset) in offsets.iter().enumerate().skip(1) {
+            if offset < previous - 0.5 {
+                stalled = 0;
+            } else {
+                stalled += 1;
+                assert!(
+                    stalled <= 1,
+                    "a held PgUp paused at frame {frame}: {offsets:?}"
+                );
+            }
+            previous = offset;
+        }
+        // After release it settles within the animation's longest duration.
+        let released = frames_at_60(&mut app, &ctx, &chat, &mut time, 40, &[]);
+        let settled = released[20];
+        assert!(
+            (released[39] - settled).abs() < 0.5,
+            "still moving after release: {released:?}"
+        );
+        let expected = before - 20.0 * viewport_height * 0.9;
+        assert!(
+            (settled - expected).abs() < 3.0,
+            "twenty PgUp presses settled at {settled}, expected about {expected}"
+        );
+    }
+
+    #[test]
+    fn a_wheel_turn_stops_home_before_its_next_step() {
+        let mut app = app();
+        let ctx = egui::Context::default();
+        app.attach(&ctx);
+        let chat = sample_ids()[0].to_owned();
+        lengthen_chat(&mut app, &chat, 400, "wheel-home");
+        render(&mut app, &ctx);
+        let mut time = ctx.input(|input| input.time);
+        // A held PgUp to the top and End back measure every row, so the
+        // offsets below carry no row-height compensation.
+        let held = [key(egui::Key::PageUp, egui::Modifiers::NONE)];
+        frames_at_60(&mut app, &ctx, &chat, &mut time, 80, &held);
+        let end = [key(egui::Key::End, egui::Modifiers::NONE)];
+        frames_at_60(&mut app, &ctx, &chat, &mut time, 1, &end);
+        frames_at_60(&mut app, &ctx, &chat, &mut time, 40, &[]);
+        assert!(app.at_bottom, "set up at the end");
+        let home = [key(egui::Key::Home, egui::Modifiers::NONE)];
+        frames_at_60(&mut app, &ctx, &chat, &mut time, 1, &home);
+        let under_way = frames_at_60(&mut app, &ctx, &chat, &mut time, 3, &[]);
+        let before = under_way[2];
+        assert!(before > 5000.0, "Home is far from the top: {before}");
+        let wheel = [
+            egui::Event::PointerMoved(egui::pos2(800.0, 400.0)),
+            egui::Event::MouseWheel {
+                unit: egui::MouseWheelUnit::Point,
+                delta: egui::vec2(0.0, -300.0),
+                modifiers: egui::Modifiers::NONE,
+                phase: egui::TouchPhase::Move,
+            },
+        ];
+        let turned = frames_at_60(&mut app, &ctx, &chat, &mut time, 1, &wheel)[0];
+        // The wheel turns down, against Home: the offset may only grow.
+        assert!(
+            turned >= before - 0.5,
+            "Home still stepped on the wheel's frame ({before} -> {turned})"
+        );
+        let later = frames_at_60(&mut app, &ctx, &chat, &mut time, 30, &[]);
+        assert!(
+            later.iter().all(|&offset| offset >= turned - 0.5),
+            "Home kept stepping after the wheel: {later:?}"
+        );
+    }
+
+    #[test]
+    fn a_repeated_pgup_during_its_animation_adds_another_page() {
+        let mut app = app();
+        let ctx = egui::Context::default();
+        app.attach(&ctx);
+        let chat = sample_ids()[0].to_owned();
+        lengthen_chat(&mut app, &chat, 60, "pgup-repeat");
+        render(&mut app, &ctx);
+        measure_all_rows(&mut app, &ctx);
+        let (before, viewport_height) = scroll_metrics(&ctx, &chat);
+        press_and_step(&mut app, &ctx, egui::Key::PageUp);
+        press_and_step(&mut app, &ctx, egui::Key::PageUp);
+        settle_key_scroll(&mut app, &ctx);
+        let (settled, _) = scroll_metrics(&ctx, &chat);
+        let expected = before - viewport_height * 1.8;
+        assert!(
+            (settled - expected).abs() < 2.0,
+            "two PgUp presses settled at {settled}, expected about {expected}"
+        );
     }
 
     #[test]
@@ -6726,6 +8049,236 @@ mod tests {
         );
     }
 
+    /// A draft sits as far below the field's top as above its bottom: the
+    /// span from the capitals' top to the descenders' bottom centres on the
+    /// plus and emoji buttons at every scale. Centring the line box left
+    /// typed text two points high at 133%; centring the capitals alone left
+    /// it low, since descenders reach further down than accents rise.
+    #[test]
+    fn the_composers_text_centres_on_its_controls_at_every_scale() {
+        use crate::ui::focus::Stop;
+        const DRAFT: &str = "Hy";
+        for scale in [1.0_f32, 1.25, 1.333_333, 1.5, 2.0] {
+            let mut app = app();
+            app.composer = DRAFT.into();
+            let ctx = egui::Context::default();
+            app.attach(&ctx);
+            let mut shapes = Vec::new();
+            for _ in 0..4 {
+                let mut input = egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(1180.0, 780.0),
+                    )),
+                    ..Default::default()
+                };
+                input
+                    .viewports
+                    .entry(egui::ViewportId::ROOT)
+                    .or_default()
+                    .native_pixels_per_point = Some(scale);
+                let mut output = ctx.run_ui(input, |ui| {
+                    let ctx = ui.ctx().clone();
+                    app.background_frame(&ctx);
+                    app.frame_ui(ui);
+                });
+                output.textures_delta.clear();
+                shapes = output.shapes;
+            }
+            assert!((ctx.pixels_per_point() - scale).abs() < 1e-4);
+            let id = crate::ui::focus::stops(&ctx)
+                .into_iter()
+                .find(|(found, _)| *found == Stop::Attach)
+                .map(|(_, id)| id)
+                .expect("the plus is drawn");
+            let control = ctx.read_response(id).unwrap().rect.center().y;
+            let mut ink: Option<(f32, f32)> = None;
+            let mut stack: Vec<&egui::Shape> =
+                shapes.iter().map(|clipped| &clipped.shape).collect();
+            while let Some(shape) = stack.pop() {
+                match shape {
+                    egui::Shape::Vec(shapes) => stack.extend(shapes.iter()),
+                    egui::Shape::Text(text) if text.galley.text() == DRAFT => {
+                        for row in &text.galley.rows {
+                            for glyph in row
+                                .glyphs
+                                .iter()
+                                .filter(|glyph| !glyph.uv_rect.is_nothing())
+                            {
+                                let top =
+                                    text.pos.y + row.pos.y + glyph.pos.y + glyph.uv_rect.offset.y;
+                                let bottom = top + glyph.uv_rect.size.y;
+                                ink =
+                                    Some(ink.map_or((top, bottom), |(t, b)| {
+                                        (t.min(top), b.max(bottom))
+                                    }));
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            let (top, bottom) = ink.expect("the draft is painted");
+            let middle = (top + bottom) / 2.0;
+            // Within a physical pixel, plus rounding: snapping to the grid
+            // may cost up to one, and macOS positions glyphs unhinted.
+            assert!(
+                (middle - control).abs() <= 1.0 / scale + 0.05,
+                "at {scale}x the text centres on {middle}, the controls on {control}"
+            );
+        }
+    }
+
+    /// The theme row links to the website's guide to writing a theme.
+    #[test]
+    fn the_theme_row_opens_the_guide_to_making_a_theme() {
+        let mut app = app();
+        app.page = crate::model::Page::Settings;
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        app.attach(&ctx);
+        render(&mut app, &ctx);
+        let nodes = accessible_nodes(&mut app, &ctx, Vec::new());
+        let pos = nodes
+            .into_iter()
+            .find(|(label, role, _)| {
+                label == "How to make a theme" && *role == egui::accesskit::Role::Button
+            })
+            .map(|(_, _, centre)| centre)
+            .expect("the guide button is on the Settings page");
+        let mut opened = Vec::new();
+        for pressed in [true, false] {
+            let mut output = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(1180.0, 780.0),
+                    )),
+                    events: vec![
+                        egui::Event::PointerMoved(pos),
+                        egui::Event::PointerButton {
+                            pos,
+                            button: egui::PointerButton::Primary,
+                            pressed,
+                            modifiers: egui::Modifiers::NONE,
+                        },
+                    ],
+                    ..Default::default()
+                },
+                |ui| {
+                    let ctx = ui.ctx().clone();
+                    app.background_frame(&ctx);
+                    app.frame_ui(ui);
+                },
+            );
+            output.textures_delta.clear();
+            opened.extend(
+                output
+                    .platform_output
+                    .commands
+                    .into_iter()
+                    .filter_map(|command| match command {
+                        egui::OutputCommand::OpenUrl(open) => Some(open.url),
+                        _ => None,
+                    }),
+            );
+        }
+        assert_eq!(opened, ["https://zapfast.rocks/themes/"]);
+    }
+
+    /// The chat list is one clickable surface: each row starts where the one
+    /// above ends, with no gap or rule between them.
+    #[test]
+    fn chat_rows_touch_with_no_gap_between_them() {
+        let mut app = app();
+        let ctx = egui::Context::default();
+        app.attach(&ctx);
+        render(&mut app, &ctx);
+        render(&mut app, &ctx);
+        let rects: Vec<egui::Rect> = app
+            .visible_chats()
+            .iter()
+            .filter_map(|chat| {
+                ctx.data(|data| {
+                    data.get_temp::<egui::Rect>(crate::ui::chats::chat_row_id(&chat.id))
+                })
+            })
+            .collect();
+        assert!(rects.len() >= 3, "several rows are on screen");
+        for pair in rects.windows(2) {
+            assert!(
+                (pair[1].top() - pair[0].bottom()).abs() < 0.01,
+                "a gap between rows: {:?} then {:?}",
+                pair[0],
+                pair[1]
+            );
+        }
+    }
+
+    /// A reply strip sits right on the composer it belongs to.
+    #[test]
+    fn the_reply_strip_sits_close_above_the_composer() {
+        let mut app = app();
+        let ctx = egui::Context::default();
+        app.attach(&ctx);
+        render(&mut app, &ctx);
+        let chat = app.open_chat.clone().expect("a chat is open");
+        app.reply_to = app
+            .conversations
+            .get(&chat)
+            .and_then(|conversation| conversation.messages.last())
+            .map(|message| message.id.clone());
+        for _ in 0..4 {
+            frame_sized(&mut app, &ctx, 780.0, Vec::new());
+        }
+        let (strip, pill) = ctx.data(|data| {
+            (
+                data.get_temp::<egui::Rect>(crate::ui::conversation::reply_strip_id()),
+                data.get_temp::<egui::Rect>(crate::ui::conversation::composer_pill_id()),
+            )
+        });
+        let (strip, pill) = (
+            strip.expect("the strip is drawn"),
+            pill.expect("the composer"),
+        );
+        let gap = pill.top() - strip.bottom();
+        assert!(
+            (gap - crate::ui::conversation::STRIP_GAP).abs() < 0.5,
+            "the strip ends {gap} above the composer"
+        );
+    }
+
+    /// The text starts right after the plus and emoji pair, as close to the
+    /// emoji as the emoji is to the plus, not a field's width away.
+    #[test]
+    fn the_composers_text_follows_the_emoji_button_closely() {
+        use crate::ui::focus::Stop;
+        for draft in ["", "A synthetic draft"] {
+            let mut app = app();
+            app.composer = draft.into();
+            let ctx = egui::Context::default();
+            app.attach(&ctx);
+            for _ in 0..4 {
+                frame_sized(&mut app, &ctx, 780.0, Vec::new());
+            }
+            let emoji = crate::ui::focus::stops(&ctx)
+                .into_iter()
+                .find(|(found, _)| *found == Stop::Emoji)
+                .and_then(|(_, id)| ctx.read_response(id))
+                .expect("the emoji button is drawn")
+                .rect;
+            let text = ctx
+                .read_response(egui::Id::new("composer-text"))
+                .expect("the field is drawn")
+                .rect;
+            let gap = text.left() - emoji.right();
+            assert!(
+                (gap - crate::ui::conversation::COMPOSER_TEXT_GAP).abs() < 0.5,
+                "{draft:?}: the text starts {gap} after the emoji button"
+            );
+        }
+    }
+
     /// Plus, emoji, the first line of text and send or record share the
     /// rounded field's vertical centre; a longer draft keeps them on its
     /// last line.
@@ -6768,10 +8321,11 @@ mod tests {
             render(&mut app, &ctx);
             let (pill, text, controls) = measure(&mut app, &ctx);
             let middle = pill.center().y;
+            // The text's ink, not its line box, centres on the field: see
+            // `the_composers_text_centres_on_its_controls_at_every_scale`.
             assert!(
-                (text.center().y - middle).abs() <= 1.0,
-                "text {} vs field {middle} ({draft:?})",
-                text.center().y
+                pill.contains_rect(text),
+                "text {text:?} leaves the field {pill:?}"
             );
             for (stop, y) in [Stop::Attach, Stop::Emoji, Stop::Send].iter().zip(controls) {
                 assert!(
@@ -6791,8 +8345,13 @@ mod tests {
         assert!(pill.height() > 70.0, "the field grew: {pill:?}");
         let line = text.height() / 3.0;
         let last = text.bottom() - line / 2.0;
+        // The last line's ink centres on the controls, which puts its line box
+        // up to a couple of points higher (Inter's box is roomier above).
         for (stop, y) in [Stop::Attach, Stop::Emoji, Stop::Send].iter().zip(controls) {
-            assert!((y - last).abs() <= 1.0, "{stop:?} {y} vs last line {last}");
+            assert!(
+                (0.0..=2.5).contains(&(y - last)),
+                "{stop:?} {y} vs last line {last}"
+            );
         }
     }
 
@@ -7659,6 +9218,158 @@ mod tests {
 }
 
 /// A long transcript lays out only the rows near the screen.
+#[cfg(test)]
+mod wallpaper_tests {
+    use super::tests::{app, render};
+    use super::*;
+    use crate::settings::WallpaperColor;
+    use egui::epaint::{ClippedShape, Shape};
+
+    fn shapes(app: &mut App, ctx: &egui::Context) -> Vec<Shape> {
+        render(app, ctx);
+        let mut output = ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    egui::vec2(1180.0, 780.0),
+                )),
+                ..Default::default()
+            },
+            |ui| {
+                let ctx = ui.ctx().clone();
+                app.background_frame(&ctx);
+                app.frame_ui(ui);
+            },
+        );
+        output.textures_delta.clear();
+        let mut flat = Vec::new();
+        fn flatten(shape: Shape, into: &mut Vec<Shape>) {
+            match shape {
+                Shape::Vec(shapes) => shapes.into_iter().for_each(|shape| flatten(shape, into)),
+                shape => into.push(shape),
+            }
+        }
+        for ClippedShape { shape, .. } in output.shapes {
+            flatten(shape, &mut flat);
+        }
+        flat
+    }
+
+    /// Where meshes with this texture were painted.
+    fn textured(shapes: &[Shape], texture: egui::TextureId) -> Vec<egui::Rect> {
+        shapes
+            .iter()
+            .filter_map(|shape| match shape {
+                Shape::Mesh(mesh) if mesh.texture_id == texture => Some(mesh.calc_bounds()),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// Where rectangles of this colour were filled.
+    fn filled(shapes: &[Shape], color: egui::Color32) -> Vec<egui::Rect> {
+        shapes
+            .iter()
+            .filter_map(|shape| match shape {
+                Shape::Rect(rect) if rect.fill == color => Some(rect.rect),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// The default Theme wallpaper is the palette's chat colour, in the chat,
+    /// the preview, and its swatch, and follows a theme switch at once.
+    #[test]
+    fn the_theme_wallpaper_follows_the_palette() {
+        let mut app = app();
+        apply_flags(&mut app, Some("theme=Nord.json"));
+        let ctx = egui::Context::default();
+        app.attach(&ctx);
+        render(&mut app, &ctx);
+        assert_eq!(app.settings.dark_wallpaper_color, WallpaperColor::Theme);
+        assert!(app.current_chat().is_some(), "the sample opens a chat");
+        let nord = app.palette.chat;
+        assert_ne!(nord, crate::theme::Palette::dark().chat);
+        let chat = shapes(&mut app, &ctx);
+        assert!(
+            filled(&chat, nord)
+                .iter()
+                .any(|rect| rect.width() > 600.0 && rect.height() > 600.0),
+            "the conversation is filled with the theme's chat colour"
+        );
+        let (_, doodles) = crate::wallpaper::texture_ids(&ctx);
+        assert!(!textured(&chat, doodles).is_empty(), "doodles draw over it");
+
+        app.page = Page::Wallpaper;
+        let page = shapes(&mut app, &ctx);
+        let fills = filled(&page, nord);
+        assert!(
+            fills
+                .iter()
+                .any(|rect| rect.width() > 300.0 && rect.height() > 600.0),
+            "the preview shows the theme's chat colour"
+        );
+        assert!(
+            fills.iter().any(|rect| (rect.width() - 80.0).abs() < 1.0),
+            "the Theme swatch shows it too"
+        );
+
+        // Switching to a light theme recolours the preview with no new choice.
+        apply_flags(&mut app, Some("theme=Rose Pine Dawn.json"));
+        render(&mut app, &ctx);
+        assert!(!app.palette.dark);
+        let dawn = app.palette.chat;
+        assert_eq!(app.settings.wallpaper_color, WallpaperColor::Theme);
+        let page = shapes(&mut app, &ctx);
+        assert!(
+            filled(&page, dawn)
+                .iter()
+                .any(|rect| rect.width() > 300.0 && rect.height() > 600.0)
+        );
+    }
+
+    /// An image covers the chat and the preview in place of colour and
+    /// doodles, in light and dark mode, until it is removed.
+    #[test]
+    fn a_wallpaper_image_replaces_colour_and_doodles() {
+        let mut app = app();
+        apply_flags(&mut app, Some("wallpaper,wallpaper-image"));
+        let ctx = egui::Context::default();
+        app.attach(&ctx);
+        let page = shapes(&mut app, &ctx);
+        let (image, doodles) = crate::wallpaper::texture_ids(&ctx);
+        let image = image.expect("the image is uploaded");
+        let previews = textured(&page, image);
+        assert_eq!(previews.len(), 1, "one image fills the preview");
+        assert!(previews[0].width() > 300.0 && previews[0].height() > 600.0);
+        assert!(textured(&page, doodles).is_empty(), "no doodles over it");
+
+        app.page = Page::Chats;
+        let chat = shapes(&mut app, &ctx);
+        assert_eq!(
+            crate::wallpaper::texture_ids(&ctx).0,
+            Some(image),
+            "the texture is made once"
+        );
+        let covers = textured(&chat, image);
+        assert_eq!(covers.len(), 1);
+        assert!(covers[0].width() > 600.0 && covers[0].height() > 600.0);
+        assert!(textured(&chat, doodles).is_empty());
+
+        apply_flags(&mut app, Some("light"));
+        let light = shapes(&mut app, &ctx);
+        assert!(!app.palette.dark);
+        assert_eq!(textured(&light, image).len(), 1, "light mode keeps it");
+
+        app.actions.push(crate::model::Action::RemoveWallpaperImage);
+        let chat = shapes(&mut app, &ctx);
+        assert!(app.settings.wallpaper_image.is_none());
+        assert_eq!(crate::wallpaper::texture_ids(&ctx).0, None);
+        assert!(textured(&chat, image).is_empty());
+        assert!(!textured(&chat, doodles).is_empty(), "the doodles return");
+    }
+}
+
 #[cfg(test)]
 mod long_chat_tests {
     use super::tests::app;

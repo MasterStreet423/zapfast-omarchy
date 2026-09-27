@@ -129,6 +129,12 @@ impl AppDirs {
         self.state.join("stickers")
     }
 
+    /// ZapFast's copy of the chosen chat wallpaper image. User data, so it
+    /// sits beside saved stickers rather than in the cache.
+    pub fn wallpaper_file(&self, extension: &str) -> PathBuf {
+        self.state.join(format!("wallpaper.{extension}"))
+    }
+
     /// Cached profile-picture path. `full` selects the info-dialog size.
     pub fn avatar_file(&self, id: &str, full: bool) -> PathBuf {
         let stem: String = id

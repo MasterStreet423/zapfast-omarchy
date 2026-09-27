@@ -11,18 +11,22 @@ use std::sync::{Arc, Mutex};
 #[cfg(target_os = "linux")]
 mod badge;
 #[cfg(target_os = "windows")]
+mod badge_windows;
+#[cfg(target_os = "windows")]
 mod windows;
 #[cfg(target_os = "linux")]
 pub use badge::Badge;
+#[cfg(target_os = "windows")]
+pub use badge_windows::{Badge, Taskbar};
 
-/// A no-op taskbar badge where the desktop has no Unity Launcher API.
-#[cfg(not(target_os = "linux"))]
+/// A no-op taskbar badge on platforms without a taskbar badge implementation.
+#[cfg(not(any(target_os = "linux", target_os = "windows")))]
 #[derive(Default)]
 pub struct Badge;
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(any(target_os = "linux", target_os = "windows")))]
 impl Badge {
-    /// Does nothing; no desktop here reads a taskbar badge.
+    /// Does nothing; no supported desktop here reads a taskbar badge.
     pub fn set(&mut self, _count: u32) {}
 }
 
@@ -54,31 +58,87 @@ fn macos_application_ready() -> bool {
     })
 }
 
+/// Notifications that may still wait for a click. Each one waiting holds a
+/// thread, a runtime, and a D-Bus connection, about five file descriptors,
+/// and the desktop may never say it closed: KDE Plasma files notifications
+/// that arrive during Do Not Disturb (on by default while sharing the screen)
+/// straight into its history without a signal. Without a limit they piled up
+/// until the process ran out of descriptors and aborted.
+const WAITING_LIMIT: usize = 32;
+
+/// How a notification stops waiting for a click.
+#[derive(Debug, PartialEq, Eq)]
+enum Stop {
+    /// The chat was read: take the notification off the desktop.
+    Close,
+    /// Newer notifications took its place: leave it on the desktop, but stop
+    /// waiting, so a click on it no longer opens the chat.
+    Release,
+}
+
+/// What a notification still to be shown was told meanwhile: `None` when its
+/// chat was read (don't show it), else whether it may wait for a click. A
+/// notification released in a burst before it appeared is still shown.
+fn before_showing(cancelled: &mut tokio::sync::oneshot::Receiver<Stop>) -> Option<bool> {
+    match cancelled.try_recv() {
+        Err(tokio::sync::oneshot::error::TryRecvError::Empty) => Some(true),
+        Ok(Stop::Release) => Some(false),
+        Ok(Stop::Close) | Err(tokio::sync::oneshot::error::TryRecvError::Closed) => None,
+    }
+}
+
 /// Cancellation is registered before delivery starts, so reading a chat while
 /// its notification is still being delivered cannot leave a stale notification.
 #[derive(Default)]
 pub struct Notifications {
-    pending: std::collections::HashMap<String, Vec<tokio::sync::oneshot::Sender<()>>>,
+    pending: std::collections::HashMap<String, Vec<(u64, tokio::sync::oneshot::Sender<Stop>)>>,
+    /// Order of registration, so the oldest waiting notification is released first.
+    registered: u64,
 }
 
 impl Notifications {
-    fn register(&mut self, chat: &str) -> tokio::sync::oneshot::Receiver<()> {
+    fn register(&mut self, chat: &str) -> tokio::sync::oneshot::Receiver<Stop> {
         self.pending.retain(|_, entries| {
-            entries.retain(|entry| !entry.is_closed());
+            entries.retain(|(_, entry)| !entry.is_closed());
             !entries.is_empty()
         });
+        while self.pending.values().map(Vec::len).sum::<usize>() >= WAITING_LIMIT {
+            self.release_oldest();
+        }
         let (cancel, cancelled) = tokio::sync::oneshot::channel();
+        self.registered += 1;
         self.pending
             .entry(chat.to_owned())
             .or_default()
-            .push(cancel);
+            .push((self.registered, cancel));
         cancelled
+    }
+
+    fn release_oldest(&mut self) {
+        let oldest = self
+            .pending
+            .iter()
+            .flat_map(|(chat, entries)| entries.iter().map(move |(order, _)| (*order, chat)))
+            .min()
+            .map(|(order, chat)| (order, chat.clone()));
+        let Some((order, chat)) = oldest else {
+            return;
+        };
+        if let Some(entries) = self.pending.get_mut(&chat) {
+            if let Some(index) = entries.iter().position(|(entry, _)| *entry == order) {
+                let (_, cancel) = entries.remove(index);
+                let _ = cancel.send(Stop::Release);
+            }
+            if entries.is_empty() {
+                self.pending.remove(&chat);
+            }
+        }
     }
 
     pub fn clear(&mut self, chat: &str) {
         if let Some(entries) = self.pending.remove(chat) {
-            for cancel in entries {
-                let _ = cancel.send(());
+            for (_, cancel) in entries {
+                let _ = cancel.send(Stop::Close);
             }
         }
     }
@@ -184,14 +244,11 @@ fn deliver(
     target: NotificationTarget,
     opened: Arc<Mutex<Vec<NotificationTarget>>>,
     wake: impl Fn() + Send + 'static,
-    mut cancelled: tokio::sync::oneshot::Receiver<()>,
+    mut cancelled: tokio::sync::oneshot::Receiver<Stop>,
 ) {
-    if !matches!(
-        cancelled.try_recv(),
-        Err(tokio::sync::oneshot::error::TryRecvError::Empty)
-    ) {
+    let Some(may_wait) = before_showing(&mut cancelled) else {
         return;
-    }
+    };
     let mut notification = notify_rust::Notification::new();
     notification
         .appname("ZapFast")
@@ -210,6 +267,10 @@ fn deliver(
     }
     match notification.show() {
         Ok(handle) => {
+            if !may_wait {
+                // Shown, and left to the desktop: the handle does not close it.
+                return;
+            }
             let runtime = match tokio::runtime::Builder::new_current_thread()
                 .enable_all()
                 .build()
@@ -224,7 +285,11 @@ fn deliver(
             runtime.block_on(async {
                 tokio::select! {
                     biased;
-                    _ = &mut cancelled => handle.close_async().await,
+                    stop = &mut cancelled => {
+                        if stop != Ok(Stop::Release) {
+                            handle.close_async().await;
+                        }
+                    }
                     _ = handle.wait_for_action_async(|action| {
                         if matches!(action, notify_rust::NotificationResponse::Default) {
                             opened.lock().unwrap_or_else(|p| p.into_inner()).push(target);
@@ -248,12 +313,10 @@ fn deliver(
     target: NotificationTarget,
     opened: Arc<Mutex<Vec<NotificationTarget>>>,
     wake: impl Fn() + Send + 'static,
-    mut cancelled: tokio::sync::oneshot::Receiver<()>,
+    mut cancelled: tokio::sync::oneshot::Receiver<Stop>,
 ) {
-    if matches!(
-        cancelled.try_recv(),
-        Err(tokio::sync::oneshot::error::TryRecvError::Empty)
-    ) && let Err(error) = windows::show(title, body, picture, system_sound, target, opened, wake)
+    if before_showing(&mut cancelled).is_some()
+        && let Err(error) = windows::show(title, body, picture, system_sound, target, opened, wake)
     {
         log::debug!("no Windows notification: {error}");
     }
@@ -269,17 +332,14 @@ fn deliver(
     _target: NotificationTarget,
     _opened: Arc<Mutex<Vec<NotificationTarget>>>,
     _wake: impl Fn() + Send + 'static,
-    mut cancelled: tokio::sync::oneshot::Receiver<()>,
+    mut cancelled: tokio::sync::oneshot::Receiver<Stop>,
 ) {
     // Never fall back to application discovery, including for unbundled builds.
     #[cfg(target_os = "macos")]
     if !macos_application_ready() {
         return;
     }
-    if !matches!(
-        cancelled.try_recv(),
-        Err(tokio::sync::oneshot::error::TryRecvError::Empty)
-    ) {
+    if before_showing(&mut cancelled).is_none() {
         return;
     }
     let mut notification = notify_rust::Notification::new();
@@ -320,8 +380,8 @@ mod tests {
         let mut second = notifications.register("a");
         let mut other = notifications.register("b");
         notifications.clear("a");
-        assert_eq!(first.try_recv(), Ok(()));
-        assert_eq!(second.try_recv(), Ok(()));
+        assert_eq!(first.try_recv(), Ok(Stop::Close));
+        assert_eq!(second.try_recv(), Ok(Stop::Close));
         assert_eq!(
             other.try_recv(),
             Err(tokio::sync::oneshot::error::TryRecvError::Empty)
@@ -345,6 +405,63 @@ mod tests {
         drop(notifications.register("a"));
         let _next = notifications.register("b");
         assert!(!notifications.pending.contains_key("a"));
+    }
+
+    #[test]
+    fn the_oldest_waiting_notification_is_released_without_closing_it() {
+        use tokio::sync::oneshot::error::TryRecvError;
+        let mut notifications = Notifications::default();
+        let mut waiting: Vec<_> = (0..WAITING_LIMIT)
+            .map(|index| notifications.register(&format!("chat {}", index % 3)))
+            .collect();
+        let mut newest = notifications.register("chat 0");
+        assert_eq!(waiting[0].try_recv(), Ok(Stop::Release));
+        for later in &mut waiting[1..] {
+            assert_eq!(later.try_recv(), Err(TryRecvError::Empty));
+        }
+        assert_eq!(newest.try_recv(), Err(TryRecvError::Empty));
+        let count: usize = notifications.pending.values().map(Vec::len).sum();
+        assert_eq!(count, WAITING_LIMIT);
+
+        // Reading a chat still closes what is left of it.
+        notifications.clear("chat 0");
+        assert_eq!(newest.try_recv(), Ok(Stop::Close));
+        assert_eq!(waiting[3].try_recv(), Ok(Stop::Close));
+        assert_eq!(waiting[1].try_recv(), Err(TryRecvError::Empty));
+    }
+
+    /// A burst past the limit releases notifications that have not appeared
+    /// yet: they are still shown, only not waited on. A read chat's are not.
+    #[test]
+    fn a_notification_released_before_it_appears_is_still_shown() {
+        let mut notifications = Notifications::default();
+        let mut first = notifications.register("a");
+        let mut read = notifications.register("b");
+        let _waiting: Vec<_> = (0..WAITING_LIMIT - 1)
+            .map(|index| notifications.register(&format!("chat {index}")))
+            .collect();
+        notifications.clear("b");
+        assert_eq!(before_showing(&mut first), Some(false));
+        assert_eq!(before_showing(&mut read), None);
+        let mut fresh = notifications.register("c");
+        assert_eq!(before_showing(&mut fresh), Some(true));
+    }
+
+    #[test]
+    fn finished_notifications_do_not_count_against_the_limit() {
+        let mut notifications = Notifications::default();
+        for index in 0..WAITING_LIMIT * 2 {
+            drop(notifications.register(&format!("chat {index}")));
+        }
+        let mut waiting: Vec<_> = (0..WAITING_LIMIT)
+            .map(|index| notifications.register(&format!("chat {index}")))
+            .collect();
+        for receiver in &mut waiting {
+            assert_eq!(
+                receiver.try_recv(),
+                Err(tokio::sync::oneshot::error::TryRecvError::Empty)
+            );
+        }
     }
 
     /// Shows a test notification with an optional cached picture:

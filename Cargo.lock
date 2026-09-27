@@ -1470,7 +1470,7 @@ checksum = "117240f60069e65410b3ae1bb213295bd828f707b5bec6596a1afc8793ce0cbc"
 [[package]]
 name = "dpi"
 version = "0.1.1"
-source = "git+https://github.com/crmne/winit?rev=fc4f39ff0993dd235952b749dd16b856c0194e1f#fc4f39ff0993dd235952b749dd16b856c0194e1f"
+source = "git+https://github.com/crmne/winit?rev=f4fed12c0b1426ee00ba56cd60898b309d9d917b#f4fed12c0b1426ee00ba56cd60898b309d9d917b"
 
 [[package]]
 name = "dpi"
@@ -1844,8 +1844,8 @@ checksum = "7360491ce676a36bf9bb3c56c1aa791658183a54d2744120f27285738d90465a"
 
 [[package]]
 name = "fastframe-fonts"
-version = "0.1.0"
-source = "git+https://github.com/crmne/fastframe?rev=81e7d2d310052c360f0827957461da7e4ca80f7c#81e7d2d310052c360f0827957461da7e4ca80f7c"
+version = "0.1.7"
+source = "git+https://github.com/crmne/fastframe?tag=v0.1.7#9cb28309097ef313ca38570e4d9d53faed92bdd1"
 dependencies = [
  "directories",
  "egui",
@@ -1857,8 +1857,8 @@ dependencies = [
 
 [[package]]
 name = "fastframe-i18n"
-version = "0.1.0"
-source = "git+https://github.com/crmne/fastframe?rev=81e7d2d310052c360f0827957461da7e4ca80f7c#81e7d2d310052c360f0827957461da7e4ca80f7c"
+version = "0.1.7"
+source = "git+https://github.com/crmne/fastframe?tag=v0.1.7#9cb28309097ef313ca38570e4d9d53faed92bdd1"
 dependencies = [
  "include-po",
  "polib",
@@ -1868,16 +1868,16 @@ dependencies = [
 
 [[package]]
 name = "fastframe-icons"
-version = "0.1.0"
-source = "git+https://github.com/crmne/fastframe?rev=81e7d2d310052c360f0827957461da7e4ca80f7c#81e7d2d310052c360f0827957461da7e4ca80f7c"
+version = "0.1.7"
+source = "git+https://github.com/crmne/fastframe?tag=v0.1.7#9cb28309097ef313ca38570e4d9d53faed92bdd1"
 dependencies = [
  "egui",
 ]
 
 [[package]]
 name = "fastframe-log"
-version = "0.1.0"
-source = "git+https://github.com/crmne/fastframe?rev=81e7d2d310052c360f0827957461da7e4ca80f7c#81e7d2d310052c360f0827957461da7e4ca80f7c"
+version = "0.1.7"
+source = "git+https://github.com/crmne/fastframe?tag=v0.1.7#9cb28309097ef313ca38570e4d9d53faed92bdd1"
 dependencies = [
  "env_logger",
  "jiff",
@@ -1886,8 +1886,8 @@ dependencies = [
 
 [[package]]
 name = "fastframe-macos"
-version = "0.1.0"
-source = "git+https://github.com/crmne/fastframe?rev=81e7d2d310052c360f0827957461da7e4ca80f7c#81e7d2d310052c360f0827957461da7e4ca80f7c"
+version = "0.1.7"
+source = "git+https://github.com/crmne/fastframe?tag=v0.1.7#9cb28309097ef313ca38570e4d9d53faed92bdd1"
 dependencies = [
  "eframe",
  "egui",
@@ -1898,8 +1898,8 @@ dependencies = [
 
 [[package]]
 name = "fastframe-shell"
-version = "0.1.0"
-source = "git+https://github.com/crmne/fastframe?rev=81e7d2d310052c360f0827957461da7e4ca80f7c#81e7d2d310052c360f0827957461da7e4ca80f7c"
+version = "0.1.7"
+source = "git+https://github.com/crmne/fastframe?tag=v0.1.7#9cb28309097ef313ca38570e4d9d53faed92bdd1"
 dependencies = [
  "eframe",
  "egui",
@@ -1908,8 +1908,8 @@ dependencies = [
 
 [[package]]
 name = "fastframe-text"
-version = "0.1.0"
-source = "git+https://github.com/crmne/fastframe?rev=81e7d2d310052c360f0827957461da7e4ca80f7c#81e7d2d310052c360f0827957461da7e4ca80f7c"
+version = "0.1.7"
+source = "git+https://github.com/crmne/fastframe?tag=v0.1.7#9cb28309097ef313ca38570e4d9d53faed92bdd1"
 dependencies = [
  "egui",
  "zbus",
@@ -1917,8 +1917,8 @@ dependencies = [
 
 [[package]]
 name = "fastframe-theme"
-version = "0.1.0"
-source = "git+https://github.com/crmne/fastframe?rev=81e7d2d310052c360f0827957461da7e4ca80f7c#81e7d2d310052c360f0827957461da7e4ca80f7c"
+version = "0.1.7"
+source = "git+https://github.com/crmne/fastframe?tag=v0.1.7#9cb28309097ef313ca38570e4d9d53faed92bdd1"
 dependencies = [
  "directories",
  "egui",
@@ -1930,8 +1930,8 @@ dependencies = [
 
 [[package]]
 name = "fastframe-tray"
-version = "0.1.0"
-source = "git+https://github.com/crmne/fastframe?rev=81e7d2d310052c360f0827957461da7e4ca80f7c#81e7d2d310052c360f0827957461da7e4ca80f7c"
+version = "0.1.7"
+source = "git+https://github.com/crmne/fastframe?tag=v0.1.7#9cb28309097ef313ca38570e4d9d53faed92bdd1"
 dependencies = [
  "ksni",
  "log",
@@ -1944,8 +1944,8 @@ dependencies = [
 
 [[package]]
 name = "fastframe-update"
-version = "0.1.0"
-source = "git+https://github.com/crmne/fastframe?rev=81e7d2d310052c360f0827957461da7e4ca80f7c#81e7d2d310052c360f0827957461da7e4ca80f7c"
+version = "0.1.7"
+source = "git+https://github.com/crmne/fastframe?tag=v0.1.7#9cb28309097ef313ca38570e4d9d53faed92bdd1"
 dependencies = [
  "anyhow",
  "reqwest",
@@ -7347,7 +7347,7 @@ checksum = "d6bbff5f0aada427a1e5a6da5f1f98158182f26556f345ac9e04d36d0ebed650"
 [[package]]
 name = "winit"
 version = "0.30.13"
-source = "git+https://github.com/crmne/winit?rev=fc4f39ff0993dd235952b749dd16b856c0194e1f#fc4f39ff0993dd235952b749dd16b856c0194e1f"
+source = "git+https://github.com/crmne/winit?rev=f4fed12c0b1426ee00ba56cd60898b309d9d917b#f4fed12c0b1426ee00ba56cd60898b309d9d917b"
 dependencies = [
  "ahash",
  "android-activity",
@@ -7554,7 +7554,7 @@ dependencies = [
 
 [[package]]
 name = "zapfast"
-version = "0.16.4"
+version = "0.17.0"
 dependencies = [
  "aes",
  "anyhow",
@@ -7604,6 +7604,7 @@ dependencies = [
  "png 0.18.1",
  "qrcode",
  "rand 0.10.2",
+ "raw-window-handle",
  "reqwest",
  "resvg",
  "rfd",

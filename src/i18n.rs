@@ -28,11 +28,13 @@ pub enum Locale {
     French,
     #[serde(rename = "ru")]
     Russian,
+    #[serde(rename = "zh-Hans")]
+    ChineseSimplified,
 }
 
 impl Locale {
     /// Every locale shown in the language picker, in a stable order.
-    pub const ALL: [Locale; 7] = [
+    pub const ALL: [Locale; 8] = [
         Self::English,
         Self::PortugueseBrazil,
         Self::German,
@@ -40,6 +42,7 @@ impl Locale {
         Self::Italian,
         Self::French,
         Self::Russian,
+        Self::ChineseSimplified,
     ];
 
     /// The language's own name, for the picker.
@@ -52,11 +55,14 @@ impl Locale {
             Self::Italian => "Italiano",
             Self::French => "Français",
             Self::Russian => "Русский",
+            Self::ChineseSimplified => "简体中文",
         }
     }
 
     /// Maps a system language tag (BCP 47 or POSIX) to a supported locale by
     /// its language subtag, so `pt-PT` and `pt_BR` both resolve to Portuguese.
+    /// Chinese is the exception: its script decides, so a reader who asked for
+    /// Traditional keeps English instead of getting the wrong characters.
     pub fn from_system(identifier: &str) -> Option<Locale> {
         fastframe_i18n::LanguageTag::parse(identifier).and_then(|tag| Self::from_tag(&tag))
     }
@@ -70,6 +76,12 @@ impl Locale {
             "it" => Self::Italian,
             "fr" => Self::French,
             "ru" => Self::Russian,
+            "zh" => match (tag.script.as_deref(), tag.region.as_deref()) {
+                // Windows writes the legacy `zh-CHT` region, macOS and Linux
+                // the script or the region subtag.
+                (Some("hant"), _) | (_, Some("tw" | "hk" | "mo" | "cht")) => return None,
+                _ => Self::ChineseSimplified,
+            },
             _ => return None,
         })
     }
@@ -84,6 +96,7 @@ impl fastframe_i18n::Locale for Locale {
             Self::French => Some(&fr::Translator),
             Self::Italian => Some(&it::Translator),
             Self::Russian => Some(&ru::Translator),
+            Self::ChineseSimplified => Some(&zh_hans::Translator),
             Self::English => None,
         }
     }
@@ -121,7 +134,20 @@ mod tests {
         assert_eq!(Locale::from_system("it-IT"), Some(Locale::Italian));
         assert_eq!(Locale::from_system("fr-FR"), Some(Locale::French));
         assert_eq!(Locale::from_system("ru-RU"), Some(Locale::Russian));
-        assert_eq!(Locale::from_system("zh-Hans"), None);
+        assert_eq!(
+            Locale::from_system("zh-Hans"),
+            Some(Locale::ChineseSimplified)
+        );
+        assert_eq!(Locale::from_system("zh"), Some(Locale::ChineseSimplified));
+        assert_eq!(
+            Locale::from_system("zh_CN.GB2312"),
+            Some(Locale::ChineseSimplified)
+        );
+        // Traditional Chinese has no catalog, so it keeps English rather than
+        // showing Simplified characters to a reader who asked for another script.
+        assert_eq!(Locale::from_system("zh-TW"), None);
+        assert_eq!(Locale::from_system("zh-Hant"), None);
+        assert_eq!(Locale::from_system("zh-CHT"), None);
         assert_eq!(Locale::from_system("en-US"), Some(Locale::English));
         assert_eq!(Locale::from_system("ja-JP"), None);
         assert_eq!(Locale::default(), Locale::English);
@@ -235,6 +261,42 @@ mod tests {
         assert_eq!(pgettext(Locale::PortugueseBrazil, "verb", "Chats"), "Chats");
         assert_eq!(pgettext(Locale::English, "verb", "Chats"), "Chats");
         assert_eq!(gettext(Locale::PortugueseBrazil, "Chats"), "Conversas");
+    }
+
+    #[test]
+    fn chinese_simplified_catalog_translates() {
+        assert_eq!(gettext(Locale::ChineseSimplified, "Chats"), "聊天");
+        assert_eq!(gettext(Locale::ChineseSimplified, "Search"), "搜索");
+        assert_eq!(gettext(Locale::ChineseSimplified, "Settings"), "设置");
+        assert_eq!(
+            gettext(Locale::ChineseSimplified, "Type a message"),
+            "输入消息"
+        );
+        assert_eq!(gettext(Locale::ChineseSimplified, "Monday"), "周一");
+        assert_eq!(gettext(Locale::ChineseSimplified, "Yesterday"), "昨天");
+    }
+
+    /// Chinese has a single plural form, so one text covers every count.
+    #[test]
+    fn chinese_plural_rules_use_one_form() {
+        for count in [0, 1, 2, 21] {
+            assert_eq!(
+                ngettext(Locale::ChineseSimplified, "{} member", "{} members", count),
+                "{} 位成员"
+            );
+        }
+    }
+
+    /// The same English word with two meanings stays two different strings.
+    #[test]
+    fn chinese_contexts_stay_separate_from_plain_lookups() {
+        assert_eq!(gettext(Locale::ChineseSimplified, "About"), "关于");
+        assert_eq!(
+            pgettext(Locale::ChineseSimplified, "privacy", "About"),
+            "个人简介"
+        );
+        assert_eq!(gettext(Locale::ChineseSimplified, "Groups"), "群组");
+        assert_eq!(pgettext(Locale::ChineseSimplified, "sound", "None"), "无");
     }
 
     #[test]

@@ -374,6 +374,10 @@ pub enum Command {
     PickChatSound(ChatId),
     /// Asks for a folder for new downloads.
     PickDownloadFolder,
+    /// Asks for a wallpaper image and copies it into the state directory.
+    PickWallpaperImage,
+    /// Deletes the copied wallpaper image.
+    RemoveWallpaperImage,
     /// Changes our display name and About text; `None` keeps the current one.
     SetProfile {
         name: Option<String>,
@@ -383,6 +387,24 @@ pub enum Command {
     PickProfilePicture,
     /// Internal: a picked picture, cropped and encoded as JPEG.
     SetProfilePicture(Vec<u8>),
+    /// Renames a group on WhatsApp, for everyone in it.
+    SetGroupName {
+        chat: ChatId,
+        name: String,
+    },
+    /// Asks for a picture and makes it the group's photo.
+    PickGroupPicture(ChatId),
+    /// Sets the group's photo to a JPEG, or removes it with `None`.
+    SetGroupPicture {
+        chat: ChatId,
+        jpeg: Option<Vec<u8>>,
+    },
+    /// Internal: WhatsApp answered a change to a group's name or photo.
+    GroupEdited {
+        chat: ChatId,
+        edit: GroupEdit,
+        result: Result<(), String>,
+    },
     /// Internal: the server accepted a profile change.
     ProfileSaved {
         name: Option<String>,
@@ -518,6 +540,15 @@ pub enum Command {
         deleted: bool,
         through: i64,
     },
+    /// Clears a chat's messages on the phone, then here once the phone
+    /// agreed. The chat itself stays.
+    ClearChat(ChatId),
+    /// Whether the phone cleared a chat requested through `ClearChat`.
+    ChatCleared {
+        chat: ChatId,
+        cleared: bool,
+        through: i64,
+    },
     SetPinned(ChatId, bool),
     /// Marks a chat as a favorite, or removes the mark, here and on the phone.
     SetFavorite(ChatId, bool),
@@ -609,6 +640,13 @@ pub enum Command {
         /// The chat's leave generation when this metadata was asked for. A
         /// snapshot older than a confirmed leave cannot undo it.
         leave_generation: u64,
+        /// Whether only admins may edit the group's name and photo.
+        info_locked: bool,
+        /// Whether we are an admin of the group.
+        admin: bool,
+        /// The chat's rename generation when this metadata was asked for. A
+        /// snapshot older than a rename made here cannot restore the old name.
+        subject_generation: u64,
     },
     /// Internal pairing-code result.
     PairCode {
@@ -775,12 +813,13 @@ pub enum Event {
     /// A shared sticker pack, ready to view, with its publisher; or why it
     /// could not be opened.
     StickerPackPreview(Result<(StickerPack, String), String>),
-    /// Favorite stickers, packs, and recent stickers for the picker, with
-    /// the emojis each sticker is tagged with.
+    /// Favorite stickers, packs, recent stickers, and stickers others sent,
+    /// for the picker, with the emojis each sticker is tagged with.
     Stickers {
         favorites: Vec<PathBuf>,
         packs: Vec<StickerPack>,
         recent: Vec<PathBuf>,
+        received: Vec<PathBuf>,
         emojis: std::collections::HashMap<PathBuf, Vec<String>>,
     },
     Media {
@@ -827,6 +866,8 @@ pub enum Event {
     },
     /// A folder chosen for new downloads.
     DownloadFolderPicked(std::path::PathBuf),
+    /// The copy of a chosen wallpaper image, or why it could not be used.
+    WallpaperImagePicked(Result<std::path::PathBuf, String>),
     /// An audio file chosen as a notification sound.
     NotificationSoundPicked {
         mention: bool,
@@ -873,6 +914,21 @@ pub enum Event {
         reason: Refusal,
     },
     Error(String),
+    /// A change to a group's name or photo went to WhatsApp (`saving`), or
+    /// WhatsApp answered it.
+    GroupSaving {
+        chat: ChatId,
+        saving: bool,
+    },
+}
+
+/// A change to a group's info, as sent to WhatsApp.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum GroupEdit {
+    /// The new subject.
+    Name(String),
+    /// A new photo, or none.
+    Picture { removed: bool },
 }
 
 /// Why the worker refused a send.

@@ -23,6 +23,9 @@ pub const CONFIG: UpdateConfig = UpdateConfig {
         legacy_bundle_names: &["FastsApp.app"],
     },
     publisher_key: Some(include_str!("../assets/update-public-key.hex")),
+    // The next release key, backed up outside GitHub. Releases stay signed
+    // with the current key until installs trust this one too.
+    additional_publisher_keys: &[include_str!("../assets/update-public-key-next.hex")],
     ..UpdateConfig::new(
         "crmne/zapfast",
         "ZapFast",

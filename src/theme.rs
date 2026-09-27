@@ -17,6 +17,11 @@ pub type Catalog = fastframe_theme::Catalog<Palette>;
 pub const DESKTOP_THEMES: fastframe_theme::DesktopThemes = fastframe_theme::DesktopThemes {
     slug: "zapfast",
     omarchy_template: include_str!("../contrib/omarchy/zapfast.json.tpl"),
+    // Every template ZapFast shipped before, so an untouched copy installed
+    // by an older release is replaced with the current one.
+    omarchy_previous_templates: &[include_str!(
+        "../contrib/omarchy/previous/zapfast-1.json.tpl"
+    )],
     presets: true,
 };
 
@@ -134,7 +139,7 @@ impl Palette {
             danger: Color32::from_rgb(0xea, 0x00, 0x38),
             warning: Color32::from_rgb(0xa0, 0x6b, 0x00),
             overlay: Color32::from_rgb(0xff, 0xff, 0xff),
-            shadow: Color32::from_black_alpha(50),
+            shadow: Color32::from_black_alpha(LIGHT_SHADOW_ALPHA),
             chat: Color32::from_rgb(0xef, 0xea, 0xe2),
             bubble_in: Color32::from_rgb(0xff, 0xff, 0xff),
             bubble_out: Color32::from_rgb(0xd9, 0xfd, 0xd3),
@@ -156,6 +161,41 @@ impl Palette {
             // Icons need 3:1 (WCAG 1.4.11).
             read: readable_on(fill, self.read, self.text, 3.0),
             ..*self
+        }
+    }
+
+    /// The soft shadow that lifts message bubbles and date chips off the
+    /// wallpaper: two points down with a short blur, a little denser than
+    /// the palette's own shadow colour, so custom themes steer it. A shadow
+    /// alone barely darkens a dark chat; [`Palette::raised_edge`] lights
+    /// the top as well.
+    pub fn bubble_shadow(&self) -> egui::epaint::Shadow {
+        egui::epaint::Shadow {
+            offset: [0, 2],
+            blur: 6,
+            spread: 0,
+            color: denser(self.lift_shadow(), SHADOW_DENSITY),
+        }
+    }
+
+    /// The palette's shadow colour, no heavier than the light theme's: a
+    /// dark palette's own shadow is meant for popups and menus, and under
+    /// every bubble it weighed on an otherwise flat theme.
+    pub fn lift_shadow(&self) -> Color32 {
+        let [r, g, b, a] = self.shadow.to_srgba_unmultiplied();
+        Color32::from_rgba_unmultiplied(r, g, b, a.min(LIGHT_SHADOW_ALPHA))
+    }
+
+    /// The faint light along the top edge of a raised surface of colour
+    /// `fill`. In a dark theme the fill moves a little toward the text
+    /// colour, so it follows every dark palette, mid-dark ones included; in
+    /// a light one, where the text is dark, it moves toward white instead,
+    /// which shows on tinted surfaces and vanishes on white ones.
+    pub fn raised_edge(&self, fill: Color32) -> Color32 {
+        if self.dark {
+            fill.lerp_to_gamma(self.text, DARK_EDGE_TINT)
+        } else {
+            fill.lerp_to_gamma(Color32::WHITE, LIGHT_EDGE_TINT)
         }
     }
 
@@ -222,12 +262,14 @@ impl fastframe_theme::Palette for Palette {
         if given.contains("window") && !given.contains("chat") {
             self.chat = self.window;
         }
+        // Bubbles stand a little further from the chat than the interface's
+        // surfaces do, keeping text on them at 4.5:1 in every shared palette.
         if given.contains("surface") && !given.contains("bubble_in") {
-            self.bubble_in = self.surface;
+            self.bubble_in = self.surface.lerp_to_gamma(self.text, 0.05);
         }
         if given.contains("accent") {
             if !given.contains("bubble_out") {
-                self.bubble_out = self.surface.lerp_to_gamma(self.accent, 0.18);
+                self.bubble_out = self.surface.lerp_to_gamma(self.accent, 0.24);
             }
             if !given.contains("link") {
                 self.link = self.accent;
@@ -240,6 +282,24 @@ impl fastframe_theme::Palette for Palette {
             self.overlay = self.panel;
         }
     }
+}
+
+/// How much denser than the palette's shadow colour a bubble's shadow is.
+const SHADOW_DENSITY: f32 = 1.04;
+/// How far a dark theme's raised edge moves from the surface toward the text.
+const DARK_EDGE_TINT: f32 = 0.128;
+/// The light palette's shadow opacity, the most a raised surface casts.
+const LIGHT_SHADOW_ALPHA: u8 = 50;
+/// How far a light theme's raised edge moves from the surface toward white.
+const LIGHT_EDGE_TINT: f32 = 0.48;
+/// How thick the raised edge is, in points.
+pub const RAISED_EDGE: f32 = 1.0;
+
+/// `color` with its opacity scaled by `factor`, up to opaque.
+fn denser(color: Color32, factor: f32) -> Color32 {
+    let [r, g, b, a] = color.to_srgba_unmultiplied();
+    let alpha = (f32::from(a) * factor).round().clamp(0.0, 255.0) as u8;
+    Color32::from_rgba_unmultiplied(r, g, b, alpha)
 }
 
 /// Converts HSL to color bytes for non-egui drawing.
@@ -496,6 +556,7 @@ fastframe_icons::icons! {
         Download => "download",
         Timer => "timer",
         Ellipsis => lucide "ellipsis",
+        Eraser => "eraser",
         ExternalLink => lucide "external-link",
         Eye => lucide "eye",
         EyeOff => lucide "eye-off",
@@ -721,6 +782,9 @@ pub fn soft_button(
     let size = Vec2::new(galley.size().x + icon_width, galley.size().y) + padding * 2.0;
     let (rect, response) = ui.allocate_exact_size(size, Sense::click());
     reveal_focus(&response);
+    response.widget_info(|| {
+        egui::WidgetInfo::selected(egui::WidgetType::Button, ui.is_enabled(), active, label)
+    });
     focus_outline(ui, response.id, rect, rect.height() / 2.0);
     if ui.is_rect_visible(rect) {
         let hovered = response.hovered();
@@ -995,6 +1059,57 @@ pub fn titlebar_inset(ctx: &egui::Context) -> f32 {
 mod tests {
     use super::*;
 
+    #[test]
+    fn raised_surfaces_get_a_lit_edge_and_a_denser_shadow() {
+        let preset = |name: &str| {
+            crate::theme::presets()
+                .find(|theme| theme.filename == name)
+                .unwrap()
+                .palette
+        };
+        // A mid-dark custom palette follows too.
+        let mut mid = Palette::dark();
+        mid.chat = Color32::from_rgb(0x3a, 0x3f, 0x4b);
+        mid.bubble_in = Color32::from_rgb(0x4c, 0x52, 0x60);
+        let palettes = [
+            Palette::dark(),
+            preset("Catppuccin.json"),
+            mid,
+            Palette::light(),
+            preset("Catppuccin Latte.json"),
+        ];
+        let luminance = |color: Color32| contrast(color, Color32::BLACK);
+        for palette in palettes {
+            for fill in [palette.bubble_in, palette.bubble_out, palette.panel] {
+                let edge = palette.raised_edge(fill);
+                // Lighter than the surface, or the same where it is white.
+                assert!(
+                    luminance(edge) > luminance(fill) || fill == Color32::WHITE,
+                    "{fill:?} -> {edge:?}"
+                );
+                if palette.dark {
+                    // Close to a bubble: a hint, not an outline.
+                    if fill != palette.panel {
+                        let lift = contrast(edge, palette.chat) / contrast(fill, palette.chat);
+                        assert!(lift > 1.05 && lift < 1.6, "{fill:?} -> {edge:?}: {lift}");
+                    }
+                } else {
+                    // Toward white, never toward the dark text.
+                    assert_eq!(edge, fill.lerp_to_gamma(Color32::WHITE, LIGHT_EDGE_TINT));
+                }
+            }
+            // The same lift in every theme, as heavy as the light theme's.
+            let shadow = palette.bubble_shadow();
+            assert_eq!((shadow.offset, shadow.blur), ([0, 2], 6));
+            assert_eq!(
+                shadow.color,
+                Palette::light().bubble_shadow().color,
+                "{:?}",
+                palette.shadow
+            );
+        }
+    }
+
     /// The palette decides the theme, and the desktop's rendering its text
     /// options: linear coverage in both themes on Linux, as GTK draws it.
     #[test]
@@ -1096,6 +1211,19 @@ mod tests {
         }
     }
 
+    /// WCAG contrast ratio between two opaque colours.
+    fn contrast(a: Color32, b: Color32) -> f32 {
+        let luminance = |color: Color32| {
+            let linear = egui::Rgba::from(color);
+            0.2126 * linear.r() + 0.7152 * linear.g() + 0.0722 * linear.b()
+        };
+        let (light, dark) = {
+            let (a, b) = (luminance(a), luminance(b));
+            (a.max(b), a.min(b))
+        };
+        (light + 0.05) / (dark + 0.05)
+    }
+
     #[test]
     fn spotifast_palettes_also_colour_the_conversation() {
         let themes: Vec<_> = presets().collect();
@@ -1103,9 +1231,29 @@ mod tests {
         for theme in themes {
             let palette = theme.palette;
             assert_eq!(palette.chat, palette.window);
-            assert_eq!(palette.bubble_in, palette.surface);
+            assert_eq!(
+                palette.bubble_in,
+                palette.surface.lerp_to_gamma(palette.text, 0.05)
+            );
             assert_ne!(palette.bubble_out, palette.bubble_in);
             assert_eq!(palette.link, palette.accent);
+            // Bubbles stand out from the chat more than surfaces do, and
+            // their text stays readable.
+            let name = &theme.filename;
+            assert!(
+                contrast(palette.bubble_in, palette.chat) > contrast(palette.surface, palette.chat),
+                "{name}: incoming bubbles stand out"
+            );
+            assert!(
+                contrast(palette.bubble_out, palette.chat) > 1.35,
+                "{name}: outgoing bubbles stand out"
+            );
+            for bubble in [palette.bubble_in, palette.bubble_out] {
+                assert!(
+                    contrast(palette.text, bubble) >= 4.5,
+                    "{name}: text on {bubble:?} is readable"
+                );
+            }
             assert_eq!(
                 palette.dark,
                 !matches!(
@@ -1198,6 +1346,12 @@ mod tests {
             );
         }
         assert_eq!(DESKTOP_THEMES.omarchy_template, TEMPLATE);
+        // A copy of the current template is never taken for an outdated one.
+        assert!(
+            !DESKTOP_THEMES
+                .omarchy_previous_templates
+                .contains(&TEMPLATE)
+        );
     }
 
     /// The hook packages install must be the one fastframe-theme describes.

@@ -81,6 +81,8 @@ CREATE TABLE IF NOT EXISTS messages (
     PRIMARY KEY (chat, id)
 );
 CREATE INDEX IF NOT EXISTS messages_by_time ON messages (chat, timestamp);
+CREATE INDEX IF NOT EXISTS messages_stickers ON messages (from_me, timestamp)
+    WHERE json_extract(content, '$.kind') = 'sticker';
 CREATE TABLE IF NOT EXISTS contacts (
     id TEXT PRIMARY KEY,
     full_name TEXT,
@@ -126,7 +128,8 @@ const CHAT_COLUMNS: &str =
                     m.from_me, m.sender_name, m.content, m.status, m.sender, c.participants, c.read_only,
                     c.pinned_at, c.ephemeral_expiration, c.locked, c.group_subject_known,
                     c.notification_sound, c.marked_unread,
-                    (SELECT f.position FROM favorites f WHERE f.chat = c.id), c.left";
+                    (SELECT f.position FROM favorites f WHERE f.chat = c.id), c.left,
+                    c.info_locked, c.group_admin";
 
 /// Adds columns introduced after the initial schema when missing.
 const MIGRATIONS: &[(&str, &str, &str)] = &[
@@ -152,6 +155,9 @@ const MIGRATIONS: &[(&str, &str, &str)] = &[
     ("chats", "group_subject_known", "INTEGER NOT NULL DEFAULT 0"),
     ("chats", "marked_unread", "INTEGER NOT NULL DEFAULT 0"),
     ("chats", "pending_unread", "INTEGER"),
+    // NULL until the group's metadata says whether only admins edit its info.
+    ("chats", "info_locked", "INTEGER"),
+    ("chats", "group_admin", "INTEGER NOT NULL DEFAULT 0"),
 ];
 const CHAT_JOIN: &str = "FROM chats c
              LEFT JOIN messages m ON m.chat = c.id AND m.rowid = (
@@ -206,6 +212,8 @@ fn chat_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Chat> {
             .get::<_, Option<i64>>(21)?
             .map_or(0, |position| u32::try_from(position).unwrap_or(u32::MAX)),
         left: row.get(22)?,
+        info_locked: row.get(23)?,
+        admin: row.get(24)?,
     })
 }
 
@@ -416,6 +424,26 @@ impl Archive {
                 serde_json::to_string(participants).unwrap_or_else(|_| "[]".into()),
                 read_only
             ],
+        )?;
+        Ok(())
+    }
+
+    /// Records who may edit the group's name and photo, from its metadata:
+    /// whether only admins may, and whether we are one.
+    pub fn set_group_rights(&self, id: &str, info_locked: bool, admin: bool) -> Result<()> {
+        self.connection.execute(
+            "UPDATE chats SET info_locked = ?2, group_admin = ?3 WHERE id = ?1",
+            params![id, info_locked, admin],
+        )?;
+        Ok(())
+    }
+
+    /// Records a lock or unlock of the group's info announced by WhatsApp,
+    /// which leaves our own role as it was.
+    pub fn set_info_locked(&self, id: &str, info_locked: bool) -> Result<()> {
+        self.connection.execute(
+            "UPDATE chats SET info_locked = ?2 WHERE id = ?1",
+            params![id, info_locked],
         )?;
         Ok(())
     }
@@ -1072,19 +1100,23 @@ impl Archive {
         rows.collect()
     }
 
-    /// Returns downloaded stickers we sent, newest first. Received stickers
-    /// stay out of Recent, as in WhatsApp's own apps.
-    pub fn recent_stickers(&self, limit: usize) -> Result<Vec<ArchivedSticker>> {
+    /// Returns downloaded stickers we sent (`from_me`) or received, newest
+    /// first. Received stickers stay out of Recent, as in WhatsApp's own apps,
+    /// and get their own shelf, which leaves out locked chats so a sticker
+    /// cannot hint at who is behind the lock.
+    pub fn recent_stickers(&self, limit: usize, from_me: bool) -> Result<Vec<ArchivedSticker>> {
         let mut statement = self.connection.prepare(
             "SELECT json_extract(content, '$.media.path') AS path, MAX(timestamp), raw
              FROM messages
              WHERE json_extract(content, '$.kind') = 'sticker' AND path IS NOT NULL
-               AND from_me = 1
+               AND from_me = ?2
+               AND (from_me OR NOT EXISTS (
+                   SELECT 1 FROM chats WHERE chats.id = messages.chat AND chats.locked))
              GROUP BY path
              ORDER BY 2 DESC
              LIMIT ?1",
         )?;
-        let rows = statement.query_map(params![limit as i64], |row| {
+        let rows = statement.query_map(params![limit as i64, from_me], |row| {
             Ok(ArchivedSticker {
                 last_used: row.get(1)?,
                 path: std::path::PathBuf::from(row.get::<_, String>(0)?),
@@ -2089,6 +2121,46 @@ pub(crate) mod tests {
             archive.ephemeral_expiration(chat).expect("expiration"),
             Some(0)
         );
+    }
+
+    /// An archive from before group editing learns who may edit a group's
+    /// info: its rows start as unknown, not as open to everyone, and the
+    /// metadata's answer and later lock notices are kept.
+    #[test]
+    fn group_edit_rights_migrate_as_unknown_and_persist() {
+        let connection = Connection::open_in_memory().expect("opens");
+        connection.execute_batch(SCHEMA).expect("the older schema");
+        connection
+            .execute_batch(
+                "INSERT INTO chats (id, name, kind) VALUES ('1-2@g.us', 'Rust', 'group');",
+            )
+            .expect("row");
+        let archive = Archive::prepare(connection).expect("the migration adds the columns");
+        let id = "1-2@g.us";
+        let row = archive.chat(id).unwrap().unwrap();
+        assert_eq!(row.info_locked, None, "unknown until the metadata says");
+        assert!(!row.admin);
+        assert!(!row.can_edit_info());
+
+        archive.set_group_rights(id, true, true).unwrap();
+        let row = archive.chat(id).unwrap().unwrap();
+        assert_eq!(row.info_locked, Some(true));
+        assert!(row.admin);
+        assert!(row.can_edit_info());
+
+        // A lock notice leaves our role alone; a metadata refresh replaces both.
+        archive.set_info_locked(id, false).unwrap();
+        let row = archive.chat(id).unwrap().unwrap();
+        assert_eq!(row.info_locked, Some(false));
+        assert!(row.admin);
+        archive.set_group_rights(id, true, false).unwrap();
+        let row = archive.chat(id).unwrap().unwrap();
+        assert!(!row.can_edit_info(), "demoted in a locked group");
+        // A metadata refresh of members and subject does not touch them.
+        archive
+            .set_group_info(id, Some("Rust"), &["1@s.whatsapp.net".into()], false)
+            .unwrap();
+        assert_eq!(archive.chat(id).unwrap().unwrap().info_locked, Some(true));
     }
 
     #[test]
@@ -3150,7 +3222,7 @@ mod sticker_tests {
             vec![("a@s.whatsapp.net".to_owned(), "s1".to_owned())]
         );
         // Exclude missing local files.
-        assert!(archive.recent_stickers(10).expect("lists").is_empty());
+        assert!(archive.recent_stickers(10, true).expect("lists").is_empty());
     }
 
     #[test]
@@ -3176,7 +3248,7 @@ mod sticker_tests {
             .insert_message(&unfetched, Some(b"raw"))
             .expect("inserted");
         let recent: Vec<_> = archive
-            .recent_stickers(10)
+            .recent_stickers(10, true)
             .expect("lists")
             .into_iter()
             .map(|sticker| sticker.path.display().to_string())
@@ -3186,6 +3258,61 @@ mod sticker_tests {
             archive.stickers_without_file(10).expect("lists").is_empty(),
             "a received sticker is not fetched for Recent"
         );
+    }
+
+    #[test]
+    fn received_stickers_have_their_own_list() {
+        let dir = tempfile::tempdir().expect("temp");
+        let file = |name: &str| {
+            let path = dir.path().join(name);
+            std::fs::write(&path, b"webp").expect("writes");
+            path.display().to_string()
+        };
+        let (sent, received) = (file("sent.webp"), file("received.webp"));
+        let archive = Archive::in_memory().expect("opens");
+        archive.ensure_chat("a@s.whatsapp.net", "A").expect("chat");
+        archive
+            .insert_message(&sticker("a@s.whatsapp.net", "s1", 10, Some(&sent)), None)
+            .expect("inserted");
+        let mut theirs = sticker("a@s.whatsapp.net", "s2", 20, Some(&received));
+        theirs.from_me = false;
+        archive.insert_message(&theirs, None).expect("inserted");
+        let listed: Vec<_> = archive
+            .recent_stickers(10, false)
+            .expect("lists")
+            .into_iter()
+            .map(|sticker| sticker.path.display().to_string())
+            .collect();
+        assert_eq!(listed, vec![received]);
+    }
+
+    #[test]
+    fn a_sticker_received_in_a_locked_chat_is_not_listed() {
+        let dir = tempfile::tempdir().expect("temp");
+        let file = |name: &str| {
+            let path = dir.path().join(name);
+            std::fs::write(&path, b"webp").expect("writes");
+            path.display().to_string()
+        };
+        let (open, hidden) = (file("open.webp"), file("hidden.webp"));
+        let archive = Archive::in_memory().expect("opens");
+        for (chat, id, path) in [
+            ("a@s.whatsapp.net", "s1", &open),
+            ("b@s.whatsapp.net", "s2", &hidden),
+        ] {
+            archive.ensure_chat(chat, "A").expect("chat");
+            let mut theirs = sticker(chat, id, 10, Some(path));
+            theirs.from_me = false;
+            archive.insert_message(&theirs, None).expect("inserted");
+        }
+        archive.set_locked("b@s.whatsapp.net", true).expect("locks");
+        let listed: Vec<_> = archive
+            .recent_stickers(10, false)
+            .expect("lists")
+            .into_iter()
+            .map(|sticker| sticker.path.display().to_string())
+            .collect();
+        assert_eq!(listed, vec![open]);
     }
 }
 

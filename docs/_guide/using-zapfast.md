@@ -28,10 +28,15 @@ on its text still selects the word.
 
 The sticker tab works like WhatsApp's: a row of tabs holds **Recent**
 (the clock), **Favorites** (the star), each of your packs, and **+** for
-adding more. Click a sticker to send it. Animated stickers play on hover.
+adding more. ZapFast adds **Received** (the speech bubble) after Favorites.
+Click a sticker to send it. Animated stickers play on hover.
 
 **Recent** holds the stickers you sent, not the ones you received.
 Right-click one to take it out of Recent here and on your phone.
+
+**Received** holds the stickers people sent you that are already
+downloaded, newest first, each once. Stickers already in Recent or
+Favorites, and stickers from locked chats, stay out of it.
 
 Right-click a sticker in a chat or the picker to add it to your
 **Favorites**. Favorites stay in sync with your phone: a sticker you favorite
@@ -195,7 +200,9 @@ The search bar finds chats by name, number, or latest message; searches all
 messages stored on this computer; and finds contacts without an existing chat.
 Click a message result to jump to it, or a contact to start a chat. Use
 `Alt+↑/↓`, or `Ctrl+Shift+[` and `Ctrl+Shift+]` as in WhatsApp, to switch chats
-without leaving the composer (Command instead of Ctrl on macOS).
+without leaving the composer (Command instead of Ctrl on macOS). Within an open
+chat, `PgUp`/`PgDn` scroll by about a page, and `Home`/`End` jump to the top or
+the newest message (when the input is empty).
 
 A shared contact message shows the name from its vCard. When the card names a
 WhatsApp account, **Chat** opens a private conversation with it and, if the
@@ -243,10 +250,13 @@ Closing the window keeps ZapFast linked in the tray. Click the tray icon or
 launch the app again to reopen it. Launchers that support the Unity Launcher API
 show the unread count as a badge on the app icon: KDE Plasma's taskbar, with
 **Show badges** enabled in the Task Manager settings, and GNOME's Dash to Dock
-or Dash to Panel. On Linux and Windows, notifications show the chat picture
-and open the chat at the message they announced when clicked. Muted chats do not
-send notifications, and archived chats stay quiet until you unarchive them. You
-can change both settings.
+or Dash to Panel. Windows overlays a compact unread-message count on ZapFast's
+taskbar button while the window is open, using `99+` above 99. Windows must use
+its regular taskbar icon size for overlays to appear. The count
+does not count toasts remaining in Windows notification history. On Linux and
+Windows, notifications show the chat picture and open the chat at the message
+they announced when clicked. Muted chats do not send notifications, and
+archived chats stay quiet until you unarchive them. You can change both settings.
 
 Press `Ctrl+/` or click the keyboard button under the composer to list all
 shortcuts.

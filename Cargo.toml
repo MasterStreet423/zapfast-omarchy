@@ -1,6 +1,6 @@
 [package]
 name = "zapfast"
-version = "0.16.4"
+version = "0.17.0"
 edition = "2024"
 rust-version = "1.98"
 license = "MIT"
@@ -121,26 +121,26 @@ libwebp-sys2 = { version = "0.2", features = ["1_2"] }
 # Shared foundation of Carmine's egui apps (github.com/crmne/fastframe). Every
 # crate comes from the same revision.
 # Bundled gettext catalogs: lookups and system language detection.
-fastframe-i18n = { git = "https://github.com/crmne/fastframe", rev = "81e7d2d310052c360f0827957461da7e4ca80f7c" }
+fastframe-i18n = { git = "https://github.com/crmne/fastframe", tag = "v0.1.7" }
 # The icons! table, a loader that survives reduce_texture_memory, and the Lucide
 # icons shared with Spotifast.
-fastframe-icons = { git = "https://github.com/crmne/fastframe", rev = "81e7d2d310052c360f0827957461da7e4ca80f7c" }
+fastframe-icons = { git = "https://github.com/crmne/fastframe", tag = "v0.1.7" }
 # Bundled Inter with tabular figures, and installed fonts for other scripts.
-fastframe-fonts = { git = "https://github.com/crmne/fastframe", rev = "81e7d2d310052c360f0827957461da7e4ca80f7c" }
+fastframe-fonts = { git = "https://github.com/crmne/fastframe", tag = "v0.1.7" }
 # Follows the desktop's hinting and glyph coverage, live through the portal.
-fastframe-text = { git = "https://github.com/crmne/fastframe", rev = "81e7d2d310052c360f0827957461da7e4ca80f7c", features = ["watch"] }
+fastframe-text = { git = "https://github.com/crmne/fastframe", tag = "v0.1.7", features = ["watch"] }
 # Palette files, the shared presets, and following Omarchy's theme live.
-fastframe-theme = { git = "https://github.com/crmne/fastframe", rev = "81e7d2d310052c360f0827957461da7e4ca80f7c" }
+fastframe-theme = { git = "https://github.com/crmne/fastframe", tag = "v0.1.7" }
 # Logs to stderr and a per-run file, and records panics without their payload.
-fastframe-log = { git = "https://github.com/crmne/fastframe", rev = "81e7d2d310052c360f0827957461da7e4ca80f7c" }
+fastframe-log = { git = "https://github.com/crmne/fastframe", tag = "v0.1.7" }
 # The tray item: StatusNotifier on Linux, tray-icon on Windows and macOS.
-fastframe-tray = { git = "https://github.com/crmne/fastframe", rev = "81e7d2d310052c360f0827957461da7e4ca80f7c" }
+fastframe-tray = { git = "https://github.com/crmne/fastframe", tag = "v0.1.7" }
 # Keeps ZapFast running without a window and recovers off-screen windows.
-fastframe-shell = { git = "https://github.com/crmne/fastframe", rev = "81e7d2d310052c360f0827957461da7e4ca80f7c" }
+fastframe-shell = { git = "https://github.com/crmne/fastframe", tag = "v0.1.7" }
 # Centres the macOS traffic lights on ZapFast's own header.
-fastframe-macos = { git = "https://github.com/crmne/fastframe", rev = "81e7d2d310052c360f0827957461da7e4ca80f7c" }
+fastframe-macos = { git = "https://github.com/crmne/fastframe", tag = "v0.1.7" }
 # Self-update from GitHub releases with signed checksums, a helper and rollback.
-fastframe-update = { git = "https://github.com/crmne/fastframe", rev = "81e7d2d310052c360f0827957461da7e4ca80f7c", features = ["reqwest"] }
+fastframe-update = { git = "https://github.com/crmne/fastframe", tag = "v0.1.7", features = ["reqwest"] }
 
 [patch.crates-io]
 # crmne/egui apps-0.36, shared with Spotifast, RekordFlash and TonePush: egui
@@ -166,8 +166,9 @@ epaint_default_fonts = { git = "https://github.com/crmne/egui", rev = "0b431145c
 # while it isn't presenting (rust-windowing/winit#4709, #4710), macOS Quit
 # through close requests (winit#4692), and file drag and drop on Wayland
 # through the data device (#178), which upstream only has in 0.31's new API
-# (winit#4571). eframe from the fork above calls the Occluded API.
-winit = { git = "https://github.com/crmne/winit", rev = "fc4f39ff0993dd235952b749dd16b856c0194e1f" }
+# (winit#4571), and Windows drags between monitors of different scale
+# (winit#4694). eframe from the fork above calls the Occluded API.
+winit = { git = "https://github.com/crmne/winit", rev = "f4fed12c0b1426ee00ba56cd60898b309d9d917b" }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 zbus-secret-service-keyring-store = { version = "1.0.1", features = ["rt-tokio-crypto-rust"] }
@@ -195,9 +196,11 @@ windows-native-keyring-store = { version = "1.1", default-features = false }
 winrt-notification = { package = "tauri-winrt-notification", version = "0.7.3" }
 # Registry and locale calls.
 windows-sys = { version = "0.60", features = ["Win32_Foundation", "Win32_Globalization", "Win32_System_Registry"] }
+# Accesses the native window handle for the taskbar overlay.
+raw-window-handle = "0.6"
 # Pauses other apps' media through the system media transport controls while
 # recording or playing voice messages. The same version cpal already uses.
-windows = { version = "0.62", features = ["Media_Control", "Foundation_Collections"] }
+windows = { version = "0.62", features = ["Media_Control", "Foundation_Collections", "Win32_Foundation", "Win32_Graphics_Gdi", "Win32_System_Com", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging"] }
 
 # The icon and version information Windows shows for the executable.
 [target.'cfg(windows)'.build-dependencies]
@@ -210,6 +213,15 @@ tempfile = "3"
 env_logger = { version = "0.11", default-features = false }
 # Creates small APNGs in sticker-import tests. Already included through image.
 png = "0.18"
+
+[target.'cfg(target_os = "macos")'.dev-dependencies]
+# Finds and triggers application menu items in the menu test.
+objc2-app-kit = { version = "0.3", default-features = false, features = ["NSMenu", "NSMenuItem"] }
+
+# AppKit menus run on the main thread, which libtest does not test on.
+[[test]]
+name = "macos_menu"
+harness = false
 
 [features]
 # Sample data, layout tests, and screenshots. Not used in release builds.
@@ -229,4 +241,4 @@ opt-level = 2
 [build-dependencies]
 # Compiles the PO catalogs to Rust, leaving out unfinished entries. Ordinary
 # builds do not need gettext tools.
-fastframe-i18n = { git = "https://github.com/crmne/fastframe", rev = "81e7d2d310052c360f0827957461da7e4ca80f7c", features = ["build"] }
+fastframe-i18n = { git = "https://github.com/crmne/fastframe", tag = "v0.1.7", features = ["build"] }

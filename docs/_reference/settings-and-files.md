@@ -47,7 +47,7 @@ name or description, in the interface language or in English.
 **Appearance**
 
 - **Theme**: dark, light, follow the system, or a local JSON palette from the
-  themes folder.
+  themes folder. See [Making a theme]({{ '/themes/' | relative_url }}).
 - **Wallpaper**: WhatsApp's light and dark chat wallpaper colours, with or
   without doodles.
 - **Zoom**: interface scale, also `Ctrl+Plus`, `Ctrl+Minus` and `Ctrl+0`.

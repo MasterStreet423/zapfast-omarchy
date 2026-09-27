@@ -46,11 +46,14 @@ impl ThemeChoice {
     }
 }
 
-/// Background colours offered by WhatsApp's wallpaper picker.
+/// Background colours offered by WhatsApp's wallpaper picker, after the
+/// active theme's own chat colour.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum WallpaperColor {
+    /// The active palette's `chat` colour, so a custom theme sets the wallpaper.
     #[default]
+    Theme,
     Beige,
     Cruise,
     Scandal,
@@ -103,7 +106,8 @@ pub enum WallpaperColor {
 }
 
 impl WallpaperColor {
-    pub const LIGHT: [Self; 28] = [
+    pub const LIGHT: [Self; 29] = [
+        Self::Theme,
         Self::Beige,
         Self::Cruise,
         Self::Scandal,
@@ -134,7 +138,8 @@ impl WallpaperColor {
         Self::WillowBrook,
     ];
 
-    pub const DARK: [Self; 21] = [
+    pub const DARK: [Self; 22] = [
+        Self::Theme,
         Self::Black,
         Self::Nordic,
         Self::CardinGreen,
@@ -162,8 +167,10 @@ impl WallpaperColor {
         if dark { &Self::DARK } else { &Self::LIGHT }
     }
 
+    /// The colour's English name. The interface translates [`Self::Theme`]'s.
     pub fn label(self) -> &'static str {
         match self {
+            Self::Theme => "Theme",
             Self::Beige => "Beige",
             Self::Cruise => "Cruise",
             Self::Scandal => "Scandal",
@@ -216,8 +223,11 @@ impl WallpaperColor {
         }
     }
 
-    pub fn rgb(self) -> [u8; 3] {
-        match self {
+    /// A fixed colour's value; `None` for [`Self::Theme`], which follows the
+    /// palette.
+    pub fn rgb(self) -> Option<[u8; 3]> {
+        Some(match self {
+            Self::Theme => return None,
             Self::Beige => [245, 241, 235],
             Self::Cruise => [187, 228, 229],
             Self::Scandal => [174, 216, 199],
@@ -267,11 +277,16 @@ impl WallpaperColor {
             Self::DarkTolopea => [17, 11, 18],
             Self::Woodsmoke => [30, 31, 31],
             Self::MaireTwo => [35, 35, 31],
-        }
+        })
     }
 
-    pub fn color32(self) -> egui::Color32 {
-        egui::Color32::from_rgb(self.rgb()[0], self.rgb()[1], self.rgb()[2])
+    /// The colour drawn under `palette`: [`Self::Theme`] is its chat colour,
+    /// read at draw time so a theme switch or Omarchy reload shows at once.
+    pub fn color32(self, palette: &crate::theme::Palette) -> egui::Color32 {
+        match self.rgb() {
+            Some([r, g, b]) => egui::Color32::from_rgb(r, g, b),
+            None => palette.chat,
+        }
     }
 }
 
@@ -297,6 +312,9 @@ pub enum NotificationSound {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Settings {
+    /// [`SETTINGS_VERSION`] when written; missing, and so 0, in older files.
+    #[serde(default)]
+    pub version: u32,
     pub theme: ThemeChoice,
     /// Interface language. `None` follows the operating system's locale.
     pub interface_language: Option<crate::i18n::Locale>,
@@ -338,6 +356,9 @@ pub struct Settings {
     /// Paint Omarchy's desktop background behind the open chat while
     /// following the system theme.
     pub chat_wallpaper: bool,
+    /// ZapFast's own copy of the chosen wallpaper image, drawn in place of the
+    /// colour and doodles in light and dark mode alike.
+    pub wallpaper_image: Option<std::path::PathBuf>,
     /// Last open chat, restored at startup.
     pub last_chat: Option<String>,
     /// The hint bar under the composer, hidden with its × and shown again
@@ -397,6 +418,7 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
+            version: SETTINGS_VERSION,
             theme: ThemeChoice::Dark,
             interface_language: None,
             custom_theme: None,
@@ -410,8 +432,9 @@ impl Default for Settings {
             send_typing: true,
             auto_download: true,
             show_wallpaper: true,
-            wallpaper_color: WallpaperColor::default(),
-            dark_wallpaper_color: WallpaperColor::Black,
+            wallpaper_color: WallpaperColor::Theme,
+            dark_wallpaper_color: WallpaperColor::Theme,
+            wallpaper_image: None,
             chat_wallpaper: true,
             last_chat: None,
             show_shortcut_hints: true,
@@ -439,6 +462,13 @@ impl Default for Settings {
     }
 }
 
+/// The settings file's format. Files without a version predate it and are
+/// migrated once by [`Settings::load`]:
+///
+/// 1. The wallpaper colours that were the defaults (Beige, and Black in dark
+///    mode) become [`WallpaperColor::Theme`], the new default.
+pub const SETTINGS_VERSION: u32 = 1;
+
 /// Optional build-time GIPHY key from `ZAPFAST_GIPHY_KEY`.
 /// The previous name remains accepted for existing build setups.
 pub const BUILT_IN_GIPHY_KEY: Option<&str> = match option_env!("ZAPFAST_GIPHY_KEY") {
@@ -453,6 +483,11 @@ impl Settings {
         } else {
             self.wallpaper_color
         }
+    }
+
+    /// The wallpaper colour for `palette`, with Theme resolved against it.
+    pub fn wallpaper_background(&self, palette: &crate::theme::Palette) -> egui::Color32 {
+        self.wallpaper_color_for(palette.dark).color32(palette)
     }
 
     pub(crate) fn cached_palette(&self) -> Option<crate::theme::Palette> {
@@ -482,6 +517,7 @@ impl Settings {
         match std::fs::read_to_string(path) {
             Ok(contents) => match serde_json::from_str::<Self>(&contents) {
                 Ok(mut settings) => {
+                    settings.migrate();
                     settings.fold_legacy_media_pause();
                     if let Some(code) = settings.chat_lock_code.take() {
                         settings.set_chat_lock_code(Some(&code));
@@ -513,6 +549,23 @@ impl Settings {
         let temp = path.with_extension("json.tmp");
         std::fs::write(&temp, contents)?;
         std::fs::rename(&temp, path)
+    }
+
+    /// Brings a file written before [`SETTINGS_VERSION`] up to date. Each
+    /// step runs once: the next save records the version, so a colour chosen
+    /// again afterwards is kept.
+    fn migrate(&mut self) {
+        if self.version < 1 {
+            // Old files store every field, so a default colour cannot be told
+            // from a chosen one; the old defaults move to the new one.
+            if self.wallpaper_color == WallpaperColor::Beige {
+                self.wallpaper_color = WallpaperColor::Theme;
+            }
+            if self.dark_wallpaper_color == WallpaperColor::Black {
+                self.dark_wallpaper_color = WallpaperColor::Theme;
+            }
+        }
+        self.version = self.version.max(SETTINGS_VERSION);
     }
 
     /// Folds the former recording and playback switches into
@@ -608,7 +661,7 @@ mod tests {
         assert!(parsed.check_for_updates);
         assert!(!parsed.download_updates_automatically);
         assert!(parsed.show_wallpaper);
-        assert_eq!(parsed.wallpaper_color, WallpaperColor::Beige);
+        assert_eq!(parsed.wallpaper_color, WallpaperColor::Theme);
         assert!(parsed.pause_other_media);
     }
 
@@ -739,11 +792,82 @@ mod tests {
 
     #[test]
     fn wallpaper_palette_contains_the_official_colours() {
-        assert_eq!(WallpaperColor::LIGHT.len(), 28);
-        assert_eq!(WallpaperColor::DARK.len(), 21);
-        assert_eq!(WallpaperColor::Beige.rgb(), [245, 241, 235]);
-        assert_eq!(WallpaperColor::Black.rgb(), [22, 23, 23]);
+        // WhatsApp's 28 light and 21 dark colours, after the theme's own.
+        assert_eq!(WallpaperColor::LIGHT.len(), 29);
+        assert_eq!(WallpaperColor::DARK.len(), 22);
+        assert_eq!(WallpaperColor::LIGHT[0], WallpaperColor::Theme);
+        assert_eq!(WallpaperColor::DARK[0], WallpaperColor::Theme);
+        assert_eq!(WallpaperColor::Beige.rgb(), Some([245, 241, 235]));
+        assert_eq!(WallpaperColor::Black.rgb(), Some([22, 23, 23]));
         assert_eq!(WallpaperColor::WillowBrook.label(), "Willow Brook");
+    }
+
+    #[test]
+    fn the_theme_wallpaper_is_the_palettes_chat_colour() {
+        use crate::theme::Palette;
+        let settings = Settings::default();
+        assert_eq!(settings.wallpaper_color, WallpaperColor::Theme);
+        assert_eq!(settings.dark_wallpaper_color, WallpaperColor::Theme);
+        let light = Palette::light();
+        let dark = Palette::dark();
+        assert_eq!(settings.wallpaper_background(&light), light.chat);
+        assert_eq!(settings.wallpaper_background(&dark), dark.chat);
+        let mut custom = Palette::dark();
+        custom.chat = egui::Color32::from_rgb(30, 30, 46);
+        assert_eq!(settings.wallpaper_background(&custom), custom.chat);
+        // A fixed colour ignores the palette.
+        let chosen = Settings {
+            dark_wallpaper_color: WallpaperColor::Nordic,
+            ..Settings::default()
+        };
+        assert_eq!(
+            chosen.wallpaper_background(&custom),
+            egui::Color32::from_rgb(15, 36, 36)
+        );
+        assert_eq!(chosen.wallpaper_background(&light), light.chat);
+    }
+
+    #[test]
+    fn the_old_default_wallpaper_colours_become_the_theme_once() {
+        let (settings, stored) =
+            load_from(r#"{"wallpaper_color":"beige","dark_wallpaper_color":"black"}"#);
+        assert_eq!(settings.wallpaper_color, WallpaperColor::Theme);
+        assert_eq!(settings.dark_wallpaper_color, WallpaperColor::Theme);
+        assert_eq!(stored["version"], SETTINGS_VERSION);
+        assert_eq!(stored["wallpaper_color"], "theme");
+
+        // Chosen colours survive the migration.
+        let (settings, _) =
+            load_from(r#"{"wallpaper_color":"cruise","dark_wallpaper_color":"nordic"}"#);
+        assert_eq!(settings.wallpaper_color, WallpaperColor::Cruise);
+        assert_eq!(settings.dark_wallpaper_color, WallpaperColor::Nordic);
+        let (settings, _) =
+            load_from(r#"{"wallpaper_color":"beige","dark_wallpaper_color":"tiber"}"#);
+        assert_eq!(settings.wallpaper_color, WallpaperColor::Theme);
+        assert_eq!(settings.dark_wallpaper_color, WallpaperColor::Tiber);
+
+        // Once migrated, choosing Beige or Black again sticks.
+        let (settings, _) =
+            load_from(r#"{"version":1,"wallpaper_color":"beige","dark_wallpaper_color":"black"}"#);
+        assert_eq!(settings.wallpaper_color, WallpaperColor::Beige);
+        assert_eq!(settings.dark_wallpaper_color, WallpaperColor::Black);
+
+        // A current file round-trips unchanged, image path included.
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("settings.json");
+        let chosen = Settings {
+            wallpaper_color: WallpaperColor::Beige,
+            dark_wallpaper_color: WallpaperColor::Black,
+            wallpaper_image: Some(dir.path().join("wallpaper.png")),
+            ..Settings::default()
+        };
+        chosen.save(&path).unwrap();
+        assert_eq!(Settings::load(&path), chosen);
+        assert_eq!(
+            Settings::load(&path),
+            chosen,
+            "loading again changes nothing"
+        );
     }
 }
 

@@ -56,6 +56,12 @@ pub fn tr(english: &str) -> Cow<'static, str> {
             "Dismiss the current action, return from search, or close the chat",
         ),
         "New chat or message yourself" => gettext(locale, "New chat or message yourself"),
+        "Collapse or expand the chat list" => gettext(locale, "Collapse or expand the chat list"),
+        "Scroll the open chat by a page" => gettext(locale, "Scroll the open chat by a page"),
+        "Top / bottom of the open chat (when the input is empty)" => gettext(
+            locale,
+            "Top / bottom of the open chat (when the input is empty)",
+        ),
         "Paste text, or stage a picture from the clipboard" => {
             gettext(locale, "Paste text, or stage a picture from the clipboard")
         }

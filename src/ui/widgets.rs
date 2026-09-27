@@ -51,6 +51,10 @@ pub fn line(
     width: f32,
     max_rows: usize,
 ) -> Line {
+    let single = text.lines().next().unwrap_or_default();
+    if max_rows == 1 && single.chars().any(bidi::is_strong_rtl) {
+        return rtl_line(ui, text, single, font, color, width);
+    }
     let mut job = egui::text::LayoutJob::default();
     job.wrap.max_width = width;
     job.wrap.max_rows = max_rows;
@@ -59,7 +63,6 @@ pub fn line(
     job.wrap.overflow_character = Some('…');
     let mut placements = Vec::new();
     let format = egui::TextFormat::simple(font, color);
-    let single = text.lines().next().unwrap_or_default();
     emoji::append(
         ui,
         &mut job,
@@ -68,6 +71,60 @@ pub fn line(
         &format,
     );
     let galley = bidi::layout_job(ui, job);
+    Line {
+        galley,
+        placements,
+        accessible_text: text.to_owned(),
+    }
+}
+
+/// One line of text holding right-to-left script, cut to `width` by its
+/// logical end. egui cuts a line in the order it lays glyphs out, which for
+/// Arabic and Hebrew is already the visual one, so its ellipsis replaced a
+/// letter mid-line and the reordered line overflowed its width (#72). The
+/// longest start of the text that fits beside an ellipsis is laid out
+/// whole instead, so the ellipsis ends the text as a reader expects.
+fn rtl_line(
+    ui: &Ui,
+    text: &str,
+    single: &str,
+    font: egui::FontId,
+    color: Color32,
+    width: f32,
+) -> Line {
+    let format = egui::TextFormat::simple(font, color);
+    let layout = |shown: &str| {
+        let mut job = egui::text::LayoutJob::default();
+        job.wrap.max_width = f32::INFINITY;
+        job.wrap.max_rows = 1;
+        let mut placements = Vec::new();
+        emoji::append(ui, &mut job, &mut placements, shown, &format);
+        (bidi::layout_job(ui, job), placements)
+    };
+    let (mut galley, mut placements) = layout(single);
+    if galley.size().x > width {
+        let ends: Vec<usize> = single
+            .char_indices()
+            .map(|(at, _)| at)
+            .skip(1)
+            .chain(std::iter::once(single.len()))
+            .collect();
+        // Longest prefix, in characters, that fits with the ellipsis.
+        let (mut low, mut high) = (0, ends.len());
+        let mut best = layout("…");
+        while low < high {
+            let middle = (low + high).div_ceil(2);
+            let shown = format!("{}…", single[..ends[middle - 1]].trim_end());
+            let candidate = layout(&shown);
+            if candidate.0.size().x <= width {
+                best = candidate;
+                low = middle;
+            } else {
+                high = middle - 1;
+            }
+        }
+        (galley, placements) = best;
+    }
     Line {
         galley,
         placements,
@@ -454,6 +511,33 @@ pub fn menu_separator(ui: &mut Ui, palette: &Palette) {
     );
 }
 
+/// Shows `frame` raised like a message bubble: the same soft lift shadow
+/// below it and the faint raised edge along its top, for surfaces that sit
+/// on the chat (the composer, and the strips above it).
+pub fn raised<R>(
+    ui: &mut Ui,
+    palette: &Palette,
+    frame: egui::Frame,
+    add: impl FnOnce(&mut Ui) -> R,
+) -> egui::InnerResponse<R> {
+    // Reserved before the frame paints, so the edge lies under its fill.
+    let edge_at = ui.painter().add(egui::Shape::Noop);
+    let (fill, radius) = (frame.fill, frame.corner_radius);
+    let shown = frame.shadow(palette.bubble_shadow()).show(ui, add);
+    ui.painter().set(
+        edge_at,
+        egui::Shape::rect_filled(
+            shown
+                .response
+                .rect
+                .translate(vec2(0.0, -theme::RAISED_EDGE)),
+            radius,
+            palette.raised_edge(fill),
+        ),
+    );
+    shown
+}
+
 /// Shared popup-menu frame.
 pub fn menu_frame(palette: &Palette) -> egui::Frame {
     egui::Frame::new()
@@ -690,6 +774,156 @@ pub fn paint_vertical_gradient(ui: &Ui, rect: Rect, top: Color32, bottom: Color3
     ui.painter().add(egui::Shape::mesh(mesh));
 }
 
+/// The hover or selection behind a chat-list row: a rounded card inset from
+/// the list's edges rather than a full-width band.
+pub fn row_highlight(ui: &Ui, palette: &Palette, rect: Rect, color: Color32) {
+    let card = rect.shrink2(vec2(8.0, 2.0));
+    let radius = CornerRadius::same(theme::RADIUS + 2);
+    // Raised like a message bubble, only more gently: the list sits on a
+    // flat panel, and a hovered row should not jump out.
+    let mut shadow = palette.bubble_shadow();
+    shadow.color = shadow.color.gamma_multiply(0.6);
+    ui.painter().add(shadow.as_shape(card, radius));
+    ui.painter().rect_filled(
+        card.translate(vec2(0.0, -theme::RAISED_EDGE)),
+        radius,
+        palette.raised_edge(color),
+    );
+    ui.painter().rect_filled(card, radius, color);
+}
+
+/// A soft shadow cast downward from `edge`, for a bar that content scrolls
+/// under, beneath a hairline of the bar's raised edge. One gradient quad.
+pub fn paint_shadow_below(ui: &Ui, palette: &Palette, left: f32, right: f32, edge: f32) {
+    let height = 9.0;
+    let dark = palette.lift_shadow().gamma_multiply(0.64);
+    ui.painter().rect_filled(
+        Rect::from_min_max(pos2(left, edge - theme::RAISED_EDGE), pos2(right, edge)),
+        0.0,
+        palette.raised_edge(palette.panel),
+    );
+    let mut mesh = egui::Mesh::default();
+    let rect = Rect::from_min_max(pos2(left, edge), pos2(right, edge + height));
+    mesh.colored_vertex(rect.left_top(), dark);
+    mesh.colored_vertex(rect.right_top(), dark);
+    mesh.colored_vertex(rect.right_bottom(), Color32::TRANSPARENT);
+    mesh.colored_vertex(rect.left_bottom(), Color32::TRANSPARENT);
+    mesh.add_triangle(0, 1, 2);
+    mesh.add_triangle(0, 2, 3);
+    ui.painter().add(egui::Shape::mesh(mesh));
+}
+
+/// The side a message bubble's tail points to.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Side {
+    Left,
+    Right,
+}
+
+/// Corner radius of a message bubble.
+pub const BUBBLE_RADIUS: u8 = 10;
+/// How far a bubble's tail reaches out from its side, and down from its top.
+const TAIL_WIDTH: f32 = 8.0;
+const TAIL_HEIGHT: f32 = 11.0;
+
+/// The corners of a message bubble: the one its tail leaves is square.
+pub fn bubble_corners(tail: Option<Side>) -> CornerRadius {
+    let mut corners = CornerRadius::same(BUBBLE_RADIUS);
+    match tail {
+        Some(Side::Left) => corners.nw = 0,
+        Some(Side::Right) => corners.ne = 0,
+        None => {}
+    }
+    corners
+}
+
+/// A message bubble's backdrop: its soft shadow, its fill, and on the first
+/// message of a run a small tail at the top corner toward the sender, as the
+/// phone draws it. A handful of vertices; bubbles off screen are culled
+/// before tessellation.
+pub fn bubble_shape(
+    palette: &Palette,
+    rect: Rect,
+    fill: Color32,
+    tail: Option<Side>,
+) -> egui::Shape {
+    let corners = bubble_corners(tail);
+    let shadow = palette.bubble_shadow();
+    let mut shapes = vec![egui::Shape::Rect(shadow.as_shape(rect, corners))];
+    // The tail overlaps the bubble by a few points so no seam shows where
+    // the two anti-aliased edges meet.
+    let tail_points = tail.map(|side| {
+        let (edge, out, into): (f32, f32, f32) = match side {
+            Side::Left => (rect.left(), -TAIL_WIDTH, 3.0),
+            Side::Right => (rect.right(), TAIL_WIDTH, -3.0),
+        };
+        let top = rect.top();
+        let reach = TAIL_HEIGHT * (TAIL_WIDTH + into.abs()) / TAIL_WIDTH;
+        let mut points = vec![
+            pos2(edge + into, top),
+            pos2(edge + into, top + reach),
+            pos2(edge + out, top),
+        ];
+        // Clockwise winding either way.
+        if side == Side::Right {
+            points.reverse();
+        }
+        points
+    });
+    if let Some(points) = &tail_points {
+        let offset = vec2(shadow.offset[0].into(), shadow.offset[1].into());
+        let points: Vec<_> = points.iter().map(|point| *point + offset).collect();
+        shapes.push(soft_triangle(&points, shadow.color, shadow.blur.into()));
+    }
+    // The raised edge: the same outline a hair higher, under the fill, so
+    // only its top shows, thinning out down the rounded corners.
+    let edge = palette.raised_edge(fill);
+    let lift = vec2(0.0, -theme::RAISED_EDGE);
+    shapes.push(egui::Shape::rect_filled(
+        rect.translate(lift),
+        corners,
+        edge,
+    ));
+    if let Some(points) = &tail_points {
+        shapes.push(egui::Shape::convex_polygon(
+            points.iter().map(|point| *point + lift).collect(),
+            edge,
+            Stroke::NONE,
+        ));
+    }
+    shapes.push(egui::Shape::rect_filled(rect, corners, fill));
+    if let Some(points) = tail_points {
+        shapes.push(egui::Shape::convex_polygon(points, fill, Stroke::NONE));
+    }
+    egui::Shape::Vec(shapes)
+}
+
+/// A triangle in `color` that fades out over `blur` points around its
+/// edges, like the blurred shadow of the bubble it belongs to: a sharp one
+/// showed as a grey wedge beneath the tail's tip. Six vertices.
+fn soft_triangle(points: &[egui::Pos2], color: Color32, blur: f32) -> egui::Shape {
+    let centre = (points
+        .iter()
+        .fold(Vec2::ZERO, |sum, point| sum + point.to_vec2())
+        / points.len() as f32)
+        .to_pos2();
+    let mut mesh = egui::Mesh::default();
+    for point in points {
+        let out = (*point - centre).normalized();
+        mesh.colored_vertex(*point - out * blur / 4.0, color);
+        mesh.colored_vertex(*point + out * blur / 2.0, Color32::TRANSPARENT);
+    }
+    let count = points.len() as u32;
+    // Inner vertices are even, their faded partners odd.
+    mesh.add_triangle(0, 2, 4);
+    for index in 0..count {
+        let next = (index + 1) % count;
+        mesh.add_triangle(2 * index, 2 * index + 1, 2 * next + 1);
+        mesh.add_triangle(2 * index, 2 * next + 1, 2 * next);
+    }
+    egui::Shape::mesh(mesh)
+}
+
 /// Small pill label used for date separators and pinned markers.
 pub fn chip(ui: &mut Ui, palette: &Palette, label: &str) -> egui::Response {
     let galley =
@@ -698,8 +932,15 @@ pub fn chip(ui: &mut Ui, palette: &Palette, label: &str) -> egui::Response {
     let size = galley.size() + vec2(20.0, 10.0);
     let (rect, response) = ui.allocate_exact_size(size, Sense::hover());
     if ui.is_rect_visible(rect) {
+        let radius = CornerRadius::from(rect.height() / 2.0);
         ui.painter()
-            .rect_filled(rect, rect.height() / 2.0, palette.panel);
+            .add(palette.bubble_shadow().as_shape(rect, radius));
+        ui.painter().rect_filled(
+            rect.translate(vec2(0.0, -theme::RAISED_EDGE)),
+            radius,
+            palette.raised_edge(palette.panel),
+        );
+        ui.painter().rect_filled(rect, radius, palette.panel);
         ui.painter().galley(
             rect.center() - galley.size() / 2.0,
             galley,
@@ -799,6 +1040,147 @@ pub fn dotted_chip(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A raised frame lies on its edge: one point higher, under its fill, in
+    /// the palette's raised-edge colour, with the bubble's lift shadow.
+    /// A line of Arabic cut to its width ends with the ellipsis where the
+    /// text ends (its left, in a right-to-left line), inside the width, with
+    /// whole words before it (#72).
+    #[test]
+    fn a_cut_right_to_left_line_stays_in_its_width_and_ends_in_an_ellipsis() {
+        let ctx = egui::Context::default();
+        let mut output = ctx.run_ui(egui::RawInput::default(), |ui| {
+            for text in [
+                "المنصب بتاعك مش هو اللي بيحدد قيمتك في الحياة يا صاحبي",
+                "39: المنصب بتاعك مش هو اللي بيحدد قيمتك في الحياة",
+            ] {
+                let line = line(
+                    ui,
+                    text,
+                    egui::FontId::proportional(13.0),
+                    Color32::WHITE,
+                    150.0,
+                    1,
+                );
+                let galley = &line.galley;
+                assert_eq!(galley.rows.len(), 1, "{text}");
+                assert!(galley.size().x <= 150.0, "{text}: {}", galley.size().x);
+                let shown = galley.text();
+                assert!(shown.ends_with('…'), "{shown}");
+                let kept = shown.trim_end_matches('…');
+                assert!(text.starts_with(kept), "the start is kept: {shown}");
+                // The ellipsis is drawn leftmost: the text ends on the left.
+                let row = &galley.rows[0];
+                let mark = row.glyphs.iter().find(|glyph| glyph.chr == '…').unwrap();
+                assert!(
+                    row.glyphs
+                        .iter()
+                        .filter(|glyph| bidi::is_strong_rtl(glyph.chr))
+                        .all(|glyph| glyph.pos.x > mark.pos.x),
+                    "{shown}"
+                );
+                assert_eq!(line.accessible_text, text);
+            }
+            // A line that fits is left alone.
+            let short = line(
+                ui,
+                "مرحبا",
+                egui::FontId::proportional(13.0),
+                Color32::WHITE,
+                150.0,
+                1,
+            );
+            assert_eq!(short.galley.text(), "مرحبا");
+        });
+        output.textures_delta.clear();
+    }
+
+    #[test]
+    fn a_raised_frame_draws_its_edge_under_its_fill() {
+        let palette = Palette::dark();
+        let ctx = egui::Context::default();
+        let mut rect = Rect::NOTHING;
+        let mut output = ctx.run_ui(egui::RawInput::default(), |ui| {
+            rect = raised(
+                ui,
+                &palette,
+                egui::Frame::new().fill(palette.surface).inner_margin(8),
+                |ui| ui.label("x"),
+            )
+            .response
+            .rect;
+        });
+        output.textures_delta.clear();
+        // In paint order, looking inside grouped shapes (a frame groups its
+        // shadow with its fill).
+        let mut fills: Vec<(Rect, Color32)> = Vec::new();
+        let mut pending: Vec<&egui::Shape> = output
+            .shapes
+            .iter()
+            .rev()
+            .map(|clipped| &clipped.shape)
+            .collect();
+        while let Some(shape) = pending.pop() {
+            match shape {
+                egui::Shape::Vec(shapes) => pending.extend(shapes.iter().rev()),
+                egui::Shape::Rect(shape) => fills.push((shape.rect, shape.fill)),
+                _ => {}
+            }
+        }
+        let edge = fills
+            .iter()
+            .position(|(at, fill)| {
+                *at == rect.translate(vec2(0.0, -theme::RAISED_EDGE))
+                    && *fill == palette.raised_edge(palette.surface)
+            })
+            .expect("the edge is drawn");
+        let body = fills
+            .iter()
+            .position(|(at, fill)| *at == rect && *fill == palette.surface)
+            .expect("the frame is drawn");
+        assert!(edge < body, "the edge lies under the fill");
+    }
+
+    #[test]
+    fn a_tail_squares_its_corner_and_points_toward_the_sender() {
+        assert_eq!(bubble_corners(None), CornerRadius::same(BUBBLE_RADIUS));
+        let left = bubble_corners(Some(Side::Left));
+        assert_eq!((left.nw, left.ne), (0, BUBBLE_RADIUS));
+        let right = bubble_corners(Some(Side::Right));
+        assert_eq!((right.nw, right.ne), (BUBBLE_RADIUS, 0));
+
+        let rect = Rect::from_min_size(pos2(100.0, 50.0), vec2(200.0, 40.0));
+        let palette = Palette::light();
+        for (side, outside) in [(Side::Left, 92.0), (Side::Right, 308.0)] {
+            let egui::Shape::Vec(shapes) =
+                bubble_shape(&palette, rect, palette.bubble_out, Some(side))
+            else {
+                panic!("a bubble is a list of shapes");
+            };
+            // The tail's tip reaches out of the bubble at its top edge. The
+            // tail is the last filled triangle, over its shadow and edge.
+            let tip = shapes
+                .iter()
+                .rev()
+                .find_map(|shape| match shape {
+                    egui::Shape::Path(path) if path.fill == palette.bubble_out => Some(path),
+                    _ => None,
+                })
+                .into_iter()
+                .flat_map(|path| path.points.iter())
+                .find(|point| !rect.contains(**point));
+            assert_eq!(tip.copied(), Some(pos2(outside, rect.top())));
+        }
+        // Later messages of a run draw no tail.
+        let egui::Shape::Vec(shapes) = bubble_shape(&palette, rect, palette.bubble_in, None) else {
+            panic!("a bubble is a list of shapes");
+        };
+        assert!(
+            !shapes
+                .iter()
+                .any(|shape| matches!(shape, egui::Shape::Path(_)))
+        );
+    }
 
     /// The knob radius and the track outline a switch paints in one state.
     fn switch_shapes(on: bool) -> (f32, f32) {

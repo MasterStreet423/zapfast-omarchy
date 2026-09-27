@@ -38,8 +38,8 @@ RAM, compared with 1.13 GB for WhatsApp Web and its Chromium processes.
 - **Runs in the background.** Closing the window keeps ZapFast in the system
   tray. Notifications can show the chat picture and open the chat at the
   message they announced. Supported desktops show the unread count on the app
-  icon in the taskbar or dock. Muting
-  a chat also mutes it on your phone.
+  icon in the taskbar or dock; on Windows, the count appears while the window
+  has a taskbar button. Muting a chat also mutes it on your phone.
 - **Copies message text.** Select part of a message or copy across messages
   with the time, date, and sender included.
 
@@ -77,7 +77,9 @@ ZapFast connects through
 [whatsapp-rust](https://github.com/oxidezap/whatsapp-rust), which grew out
 of the [whatsmeow](https://github.com/tulir/whatsmeow) lineage. WhatsApp
 Web defines the companion-device model. ZapFast is a sibling of
-[Spotifast](https://spotifast.rocks), a native client for Spotify.
+[Spotifast](https://spotifast.rocks), a native client for Spotify. Both are
+built on [fastframe](https://github.com/crmne/fastframe), the shared foundation
+for native Rust apps built with egui.
 
 ZapFast is an independent project, not affiliated with or endorsed by
 WhatsApp LLC or Meta. WhatsApp is a trademark of WhatsApp LLC.

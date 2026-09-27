@@ -13,3 +13,4 @@ src/i18n_extra.rs
 src/ui/pane.rs
 src/privacy.rs
 src/ui/image_preview.rs
+src/notify/badge_windows.rs

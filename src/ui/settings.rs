@@ -291,15 +291,12 @@ fn sections(app: &App) -> Vec<Section> {
         translated(locale, "Wallpaper"),
         Text::default(),
         move |ui, app| {
-            if theme::soft_button(
-                ui,
-                &palette,
-                Some(Icon::ChevronRight),
-                app.settings.wallpaper_color_for(palette.dark).label(),
-                false,
-            )
-            .clicked()
-            {
+            let label = if app.settings.wallpaper_image.is_some() {
+                crate::i18n::gettext(app.locale, "Image").into_owned()
+            } else {
+                wallpaper_label(app.locale, app.settings.wallpaper_color_for(palette.dark))
+            };
+            if theme::soft_button(ui, &palette, Some(Icon::ChevronRight), &label, false).clicked() {
                 app.actions.push(Action::Open(Page::Wallpaper));
             }
         },
@@ -778,6 +775,7 @@ fn theme_picker(ui: &mut egui::Ui, app: &mut App) {
                     }
                 }
             });
+        theme::reveal_focus(&response.response);
         let rect = response.response.rect;
         let text = widgets::line(
             ui,
@@ -809,8 +807,22 @@ fn theme_picker(ui: &mut egui::Ui, app: &mut App) {
         {
             app.actions.push(Action::OpenThemesFolder);
         }
+        if theme::soft_button(
+            ui,
+            &palette,
+            Some(Icon::ExternalLink),
+            &crate::i18n::gettext(app.locale, "How to make a theme"),
+            false,
+        )
+        .clicked()
+        {
+            app.actions.push(Action::OpenUrl(THEMES_GUIDE.to_owned()));
+        }
     });
 }
+
+/// The website's page on writing a theme.
+const THEMES_GUIDE: &str = "https://zapfast.rocks/themes/";
 
 /// The interface language menu.
 fn language_picker(ui: &mut egui::Ui, app: &mut App) {
@@ -820,7 +832,7 @@ fn language_picker(ui: &mut egui::Ui, app: &mut App) {
         Some(locale) => locale.label().to_owned(),
         None => crate::i18n::gettext(app.locale, "Auto").into_owned(),
     };
-    egui::ComboBox::from_id_salt("interface_language")
+    let response = egui::ComboBox::from_id_salt("interface_language")
         .selected_text(label)
         .width(200.0_f32.min(ui.available_width()))
         .show_ui(ui, |ui| {
@@ -838,6 +850,7 @@ fn language_picker(ui: &mut egui::Ui, app: &mut App) {
                 }
             }
         });
+    theme::reveal_focus(&response.response);
 }
 
 /// Wallpaper colour picker and live preview.
@@ -924,6 +937,8 @@ pub fn wallpaper_show(app: &mut App, ui: &mut egui::Ui) {
                                             }
                                         },
                                     );
+                                    ui.add_space(12.0);
+                                    image_buttons(app, ui, palette_width);
                                     ui.add_space(18.0);
                                     let button_width = 80.0;
                                     let item_spacing = ui.spacing().item_spacing.x;
@@ -940,7 +955,13 @@ pub fn wallpaper_show(app: &mut App, ui: &mut egui::Ui) {
                                             let selected =
                                                 app.settings.wallpaper_color_for(palette.dark);
                                             for color in WallpaperColor::choices(palette.dark) {
-                                                if wallpaper_color_button(ui, *color, selected) {
+                                                if wallpaper_color_button(
+                                                    ui,
+                                                    &palette,
+                                                    app.locale,
+                                                    *color,
+                                                    selected,
+                                                ) {
                                                     app.actions.push(Action::SetWallpaperColor(*color));
                                                 }
                                             }
@@ -974,12 +995,8 @@ pub fn wallpaper_show(app: &mut App, ui: &mut egui::Ui) {
                         header.left_bottom(),
                         vec2(preview_width, (body_height - HEADER_HEIGHT).max(0.0)),
                     );
-                    wallpaper::paint_rect(
-                        ui,
-                        preview,
-                        app.settings.wallpaper_color_for(palette.dark),
-                        app.settings.show_wallpaper,
-                    );
+                    // The same look the chat draws, image and theme colour included.
+                    wallpaper::paint_rect(ui, preview, &app.wallpaper());
                 },
             );
             ui.painter().line_segment(
@@ -993,27 +1010,81 @@ pub fn wallpaper_show(app: &mut App, ui: &mut egui::Ui) {
     );
 }
 
+/// "Choose image…", and "Remove image" while one is set, centred over the
+/// colours. An image replaces the colour and doodles in the chat.
+fn image_buttons(app: &mut App, ui: &mut egui::Ui, width: f32) {
+    let palette = app.palette;
+    let choose = crate::i18n::gettext(app.locale, "Choose image…");
+    let remove = crate::i18n::gettext(app.locale, "Remove image");
+    let has_image = app.settings.wallpaper_image.is_some();
+    let spacing = ui.spacing().item_spacing.x;
+    let mut row_width = theme::soft_button_width(ui, &choose, true);
+    if has_image {
+        row_width += spacing + theme::soft_button_width(ui, &remove, true);
+    }
+    ui.allocate_ui_with_layout(
+        vec2(width, 32.0),
+        Layout::left_to_right(Align::Center),
+        |ui| {
+            ui.add_space(((width - row_width) / 2.0).max(0.0));
+            if theme::soft_button(ui, &palette, Some(Icon::Image), &choose, false).clicked() {
+                app.actions.push(Action::PickWallpaperImage);
+            }
+            if has_image
+                && theme::soft_button(ui, &palette, Some(Icon::Trash), &remove, false).clicked()
+            {
+                app.actions.push(Action::RemoveWallpaperImage);
+            }
+        },
+    );
+}
+
+/// A wallpaper colour's name in the interface language.
+fn wallpaper_label(locale: Locale, color: WallpaperColor) -> String {
+    match color {
+        WallpaperColor::Theme => {
+            crate::i18n::pgettext(locale, "wallpaper colour", "Theme").into_owned()
+        }
+        color => color.label().to_owned(),
+    }
+}
+
 fn wallpaper_color_button(
     ui: &mut egui::Ui,
+    palette: &Palette,
+    locale: Locale,
     color: WallpaperColor,
     selected: WallpaperColor,
 ) -> bool {
-    let button = egui::Button::new(egui::RichText::new(" "))
+    let fill = color.color32(palette);
+    let label = wallpaper_label(locale, color);
+    // Theme follows the palette, so its swatch names itself.
+    let text = if color == WallpaperColor::Theme {
+        egui::RichText::new(label.as_str())
+            .font(theme::medium(13.0))
+            .color(palette.text)
+    } else {
+        egui::RichText::new(" ")
+    };
+    let button = egui::Button::new(text)
         .min_size(Vec2::splat(80.0))
-        .fill(color.color32())
+        .fill(fill)
         .stroke(if color == selected {
-            Stroke::new(4.0, color.color32().gamma_multiply(0.5))
+            Stroke::new(4.0, fill.gamma_multiply(0.5))
+        } else if color == WallpaperColor::Theme {
+            // Otherwise the swatch vanishes into a panel of the same colour.
+            Stroke::new(1.0, palette.outline)
         } else {
             Stroke::NONE
         })
         .corner_radius(CornerRadius::ZERO);
-    let response = ui.add(button).on_hover_text(color.label());
+    let response = ui.add(button).on_hover_text(label.as_str());
     response.widget_info(|| {
         egui::WidgetInfo::selected(
             egui::WidgetType::Button,
             ui.is_enabled(),
             color == selected,
-            color.label(),
+            label.as_str(),
         )
     });
     response.clicked()
@@ -1362,7 +1433,7 @@ fn sound_control(ui: &mut egui::Ui, app: &mut App, mention: bool) {
     {
         app.actions.push(Action::PreviewSound(current.clone()));
     }
-    egui::ComboBox::from_id_salt(("notification-sound", mention))
+    let response = egui::ComboBox::from_id_salt(("notification-sound", mention))
         .selected_text(selected)
         .width(170.0_f32.min(ui.available_width()))
         .show_ui(ui, |ui| {
@@ -1379,6 +1450,7 @@ fn sound_control(ui: &mut egui::Ui, app: &mut App, mention: bool) {
                 app.actions.push(Action::PickNotificationSound { mention });
             }
         });
+    theme::reveal_focus(&response.response);
 }
 
 /// One account privacy category's picker: what the phone holds, and the
@@ -1411,6 +1483,7 @@ fn privacy_control(ui: &mut egui::Ui, app: &mut App, kind: PrivacyKind) {
                         }
                     }
                 });
+            theme::reveal_focus(&response.response);
             let rect = response.response.rect;
             let text = widgets::line(
                 ui,

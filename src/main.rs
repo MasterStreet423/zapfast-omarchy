@@ -110,6 +110,10 @@ enum Control {
 
 /// Default log filter, used when `RUST_LOG` is unset.
 ///
+/// `fastframe_fonts` logs, once at startup, which installed face draws each
+/// script Inter lacks, which is what a report of odd Arabic or CJK text
+/// needs first.
+///
 /// `arboard` warns on every clipboard open when a Wayland compositor has no
 /// data-control protocol (GNOME, mutter) and it falls back to X11, which works
 /// there. Quiet that one target so it does not fill the log file, without
@@ -118,7 +122,7 @@ fn default_log_filter(verbose: bool) -> &'static str {
     if verbose {
         "info,zapfast=debug,whatsapp_rust=debug,wacore=debug"
     } else {
-        "warn,zapfast=info,arboard=error"
+        "warn,zapfast=info,fastframe_fonts=info,arboard=error"
     }
 }
 
@@ -287,6 +291,8 @@ fn main() -> eframe::Result<()> {
                         app,
                         window_recovery_checked: false,
                         update_receipt: receipt,
+                        #[cfg(target_os = "windows")]
+                        taskbar: Default::default(),
                         #[cfg(feature = "demo")]
                         shot,
                         #[cfg(feature = "demo")]
@@ -364,6 +370,9 @@ struct Shell {
     window_recovery_checked: bool,
     update_receipt: Option<fastframe_update::Receipt>,
     app: fastframe_shell::Held<app::App>,
+    /// This window's unread overlay on its taskbar button.
+    #[cfg(target_os = "windows")]
+    taskbar: zapfast::notify::Taskbar,
     #[cfg(feature = "demo")]
     shot: Option<Shot>,
     #[cfg(feature = "demo")]
@@ -451,6 +460,12 @@ impl eframe::App for Shell {
             tour.drive(app, ctx);
         }
         app.background_frame(ctx);
+        #[cfg(target_os = "windows")]
+        if let (Some(window), Some(count)) = (frame.winit_window(), app.taskbar_badge_count())
+            && let Some(at) = self.taskbar.show(window, count, app.locale)
+        {
+            ctx.request_repaint_after(at.saturating_duration_since(std::time::Instant::now()));
+        }
         // The chat header is 60 points and zooms; the linking screen keeps
         // AppKit's own 28-point strip.
         let title_bar = if app.is_linked() {
@@ -624,6 +639,22 @@ mod log_filter_tests {
             filter,
             log::Level::Warn,
             "zapfast::backend::worker"
+        ));
+    }
+
+    /// Every log names the face chosen for each fallback script, without
+    /// asking a reporter to start with `--verbose`.
+    #[test]
+    fn the_default_log_records_the_fallback_fonts() {
+        assert!(matches(
+            default_log_filter(false),
+            log::Level::Info,
+            "fastframe_fonts::system"
+        ));
+        assert!(!matches(
+            default_log_filter(false),
+            log::Level::Debug,
+            "fastframe_fonts::system"
         ));
     }
 

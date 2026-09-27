@@ -1235,19 +1235,19 @@ mod tests {
             frame(&mut app, &mut tour, &ctx, Vec::new());
         }
         click(&mut app, &mut tour, &ctx, "Dark");
-        let menu_pos = tour.labels["Nord.json"];
+        let menu_pos = tour.labels["Nord"];
         for name in [
             "Follow system",
             "Light",
             "Dark",
-            "Catppuccin Latte.json",
-            "Catppuccin.json",
-            "Nord.json",
-            "Ristretto.json",
-            "Tokyo Night.json",
-            "Rose Pine.json",
-            "Rose Pine Moon.json",
-            "Rose Pine Dawn.json",
+            "Catppuccin Latte",
+            "Catppuccin",
+            "Nord",
+            "Ristretto",
+            "Tokyo Night",
+            "Rose Pine",
+            "Rose Pine Moon",
+            "Rose Pine Dawn",
         ] {
             // The bundled choices now exceed the popup's visible height.
             // Scroll over the menu, as a user would, to reveal later entries.
@@ -1294,13 +1294,13 @@ mod tests {
                 ],
             );
         }
-        click(&mut app, &mut tour, &ctx, "Nord.json");
+        click(&mut app, &mut tour, &ctx, "Nord");
         assert_eq!(app.settings.custom_theme.as_deref(), Some("Nord.json"));
         assert_eq!(
             app.palette.window,
             egui::Color32::from_rgb(0x2e, 0x34, 0x40)
         );
-        click(&mut app, &mut tour, &ctx, "Nord.json");
+        click(&mut app, &mut tour, &ctx, "Nord");
         click(&mut app, &mut tour, &ctx, "Follow system");
         assert!(app.settings.custom_theme.is_none());
         assert_eq!(app.settings.theme, ThemeChoice::System);

@@ -2276,6 +2276,63 @@ msgstr "ZapFast no pudo mostrar esta imagen."
 msgid "Open externally"
 msgstr "Abrir en otra app"
 
+#: src/ui/dialogs.rs:1492
+msgid "Edit group name"
+msgstr "Editar el nombre del grupo"
+
+#: src/ui/dialogs.rs:1622
+msgid "Saving…"
+msgstr "Guardando…"
+
+#: src/ui/dialogs.rs:1895
+msgid "Change group photo"
+msgstr "Cambiar la foto del grupo"
+
+#: src/ui/dialogs.rs:1901
+msgid "Change photo"
+msgstr "Cambiar foto"
+
+#: src/ui/dialogs.rs:1902
+msgid "Remove photo"
+msgstr "Quitar foto"
+
+#: src/ui/dialogs.rs:1942
+msgid "Group name"
+msgstr "Nombre del grupo"
+
+#: src/ui/dialogs.rs:1997
+msgid "Cancel (Escape)"
+msgstr "Cancelar (Escape)"
+
+#: src/ui/settings.rs:804
+msgid "How to make a theme"
+msgstr "Cómo crear un tema"
+
+#: src/ui/settings.rs:1007
+msgid "Choose image…"
+msgstr "Elegir imagen…"
+
+#: src/ui/settings.rs:1008
+msgid "Remove image"
+msgstr "Quitar imagen"
+
+#: src/ui/settings.rs:1036
+msgctxt "wallpaper colour"
+msgid "Theme"
+msgstr "Tema"
+
+#: src/app.rs:2182
+msgid "Could not use this image"
+msgstr "No se pudo usar esta imagen"
+
+#: src/ui/picker.rs:1155
+msgid "Received"
+msgstr "Recibidos"
+
+#: src/ui/picker.rs:1261
+msgid "Stickers people send you appear here."
+msgstr "Aquí aparecen los stickers que recibes."
+
 #~ msgid "Show the chat list (Ctrl+B)"
 #~ msgstr "Mostrar la lista de chats (Ctrl+B)"
 
