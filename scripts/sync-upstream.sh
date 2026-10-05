@@ -11,7 +11,9 @@ set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 
 i18n=assets/i18n
-otros=("$i18n"/de.po "$i18n"/fr.po "$i18n"/it.po "$i18n"/pt-BR.po "$i18n"/ru.po)
+# Todos los catálogos menos es.po, leídos de upstream: una lista fija dejaba
+# afuera los idiomas nuevos y su conflicto se commiteaba con marcadores.
+mapfile -t otros < <(git ls-tree --name-only upstream/main "$i18n/" | grep '\.po$' | grep -vx "$i18n/es.po")
 
 resolver_catalogos() {
     local conflictos
