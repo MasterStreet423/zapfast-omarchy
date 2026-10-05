@@ -34,6 +34,13 @@ enum Row {
 }
 
 pub fn show(app: &mut App, ctx: &egui::Context) {
+    if app.picker == Some(PickerTab::Emoji) && app.reaction_target.is_none() {
+        if app.picker_recent.is_none() {
+            app.picker_recent = Some(app.settings.recent_emoji.clone());
+        }
+    } else {
+        app.picker_recent = None;
+    }
     if app.reaction_target.is_some() {
         reaction_picker(app, ctx);
         return;
@@ -59,12 +66,7 @@ pub fn show(app: &mut App, ctx: &egui::Context) {
                 .stroke(Stroke::new(1.0, palette.outline))
                 .corner_radius(CornerRadius::same(theme::RADIUS + 4))
                 .inner_margin(Margin::same(10))
-                .shadow(egui::epaint::Shadow {
-                    offset: [0, 8],
-                    blur: 28,
-                    spread: 0,
-                    color: palette.shadow,
-                })
+                .shadow(palette.float_shadow())
                 .show(ui, |ui| {
                     ui.set_width(WIDTH);
                     ui.set_height(HEIGHT);
@@ -162,6 +164,26 @@ fn usable_recent(recent: &[String]) -> Vec<&'static str> {
     recent
         .iter()
         .filter_map(|emoji| emojis::get(emoji).map(|emoji| emoji.as_str()))
+        .collect()
+}
+
+/// About as many emoji as an opening picker shows: ten columns of eight
+/// rows, with a row to spare.
+const FIRST_PAGE: usize = 90;
+
+/// What an emoji picker shows as it opens: its category tabs, the recent
+/// emoji, then the first group, up to a page. Their pictures are queued
+/// before the first frame asks for them.
+pub fn first_page(recent: &[String]) -> Vec<&'static str> {
+    CATEGORIES
+        .iter()
+        .map(|(_, icon, _)| *icon)
+        .chain(
+            usable_recent(recent)
+                .into_iter()
+                .chain(emojis::iter().map(|emoji| emoji.as_str()))
+                .take(FIRST_PAGE),
+        )
         .collect()
 }
 
@@ -356,8 +378,9 @@ fn emoji_tab(app: &mut App, ui: &mut egui::Ui, palette: &Palette) {
         },
     );
     let has_recent = app
-        .settings
-        .recent_emoji
+        .picker_recent
+        .as_ref()
+        .unwrap_or(&app.settings.recent_emoji)
         .iter()
         .any(|emoji| emojis::get(emoji).is_some());
     category_tabs(app, ui, palette, "emoji-grid", "Recent", has_recent);
@@ -412,12 +435,7 @@ fn reaction_picker(app: &mut App, ctx: &egui::Context) {
                         .stroke(Stroke::new(1.0, palette.outline))
                         .corner_radius(CornerRadius::same(theme::RADIUS + 4))
                         .inner_margin(Margin::same(FRAME_MARGIN))
-                        .shadow(egui::epaint::Shadow {
-                            offset: [0, 8],
-                            blur: 28,
-                            spread: 0,
-                            color: palette.shadow,
-                        })
+                        .shadow(palette.float_shadow())
                         .show(ui, |ui| {
                             ui.set_width(width);
                             ui.set_height(HEIGHT);
@@ -644,7 +662,9 @@ fn emoji_grid(
     let recent = if app.reaction_target.is_some() {
         &frequent
     } else {
-        &app.settings.recent_emoji
+        app.picker_recent
+            .as_ref()
+            .unwrap_or(&app.settings.recent_emoji)
     };
     let rows = rows_for(
         &app.picker_search,
@@ -801,6 +821,20 @@ fn emoji_grid(
 #[cfg(test)]
 mod emoji_tests {
     use super::*;
+
+    /// The pictures queued as a picker opens are what its first frame shows:
+    /// the category tabs, then the recent emoji, then the first group.
+    #[test]
+    fn the_first_page_is_the_tabs_the_recent_emoji_then_the_first_group() {
+        let recent = vec!["🎉".to_owned(), "not an emoji".to_owned()];
+        let page = first_page(&recent);
+        let tabs = CATEGORIES.len();
+        let icons: Vec<&str> = CATEGORIES.iter().map(|(_, icon, _)| *icon).collect();
+        assert_eq!(page[..tabs], icons[..]);
+        assert_eq!(page[tabs], "🎉");
+        assert_eq!(page[tabs + 1], "😀");
+        assert_eq!(page.len(), tabs + FIRST_PAGE);
+    }
 
     #[test]
     fn arrows_move_through_the_emoji_grid() {

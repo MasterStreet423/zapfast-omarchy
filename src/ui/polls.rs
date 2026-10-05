@@ -7,12 +7,13 @@ use crate::theme::{self, Icon, Palette};
 use egui::{Align, Layout, Sense, Stroke, pos2, vec2};
 
 pub fn create(app: &mut App, ui: &mut egui::Ui, chat: &str) {
+    let locale = app.locale;
     let palette = app.palette;
     ui.horizontal(|ui| {
         theme::icon(ui, Icon::ListChecks, 20.0, palette.accent);
         theme::text(
             ui,
-            &*crate::i18n::gettext(app.locale, "Create poll"),
+            &*crate::i18n::gettext(locale, "Create poll"),
             theme::bold(18.0),
             palette.text,
         );
@@ -23,7 +24,7 @@ pub fn create(app: &mut App, ui: &mut egui::Ui, chat: &str) {
                 16.0,
                 palette.secondary,
                 palette.text,
-                &crate::i18n::gettext(app.locale, "Close"),
+                &crate::i18n::gettext(locale, "Close"),
             )
             .clicked()
             {
@@ -35,7 +36,7 @@ pub fn create(app: &mut App, ui: &mut egui::Ui, chat: &str) {
     ui.add_enabled_ui(!app.poll_creating, |ui| {
         theme::text(
             ui,
-            &*crate::i18n::gettext(app.locale, "Question"),
+            &*crate::i18n::gettext(locale, "Question"),
             theme::medium(13.5),
             palette.secondary,
         );
@@ -51,7 +52,7 @@ pub fn create(app: &mut App, ui: &mut egui::Ui, chat: &str) {
         ui.add(
             egui::TextEdit::singleline(&mut app.poll_draft.question)
                 .id_salt("poll-question")
-                .hint_text(&*crate::i18n::gettext(app.locale, "Ask a question"))
+                .hint_text(&*crate::i18n::gettext(locale, "Ask a question"))
                 .char_limit(255)
                 .font(theme::regular(14.0))
                 .desired_width(f32::INFINITY)
@@ -61,7 +62,7 @@ pub fn create(app: &mut App, ui: &mut egui::Ui, chat: &str) {
         ui.add_space(8.0);
         theme::text(
             ui,
-            &*crate::i18n::gettext(app.locale, "Answers"),
+            &*crate::i18n::gettext(locale, "Answers"),
             theme::medium(13.5),
             palette.secondary,
         );
@@ -105,7 +106,7 @@ pub fn create(app: &mut App, ui: &mut egui::Ui, chat: &str) {
                                 14.0,
                                 palette.dim,
                                 palette.text,
-                                &crate::i18n::gettext(app.locale, "Remove answer"),
+                                &crate::i18n::gettext(locale, "Remove answer"),
                             )
                             .clicked()
                         {
@@ -122,7 +123,7 @@ pub fn create(app: &mut App, ui: &mut egui::Ui, chat: &str) {
                 ui,
                 &palette,
                 Some(Icon::Plus),
-                &crate::i18n::gettext(app.locale, "Add answer"),
+                &crate::i18n::gettext(locale, "Add answer"),
                 false,
             )
             .clicked()
@@ -134,7 +135,7 @@ pub fn create(app: &mut App, ui: &mut egui::Ui, chat: &str) {
             widgets::switch(ui, &palette, &mut app.poll_draft.multiple);
             theme::text(
                 ui,
-                &*crate::i18n::gettext(app.locale, "Allow multiple answers"),
+                &*crate::i18n::gettext(locale, "Allow multiple answers"),
                 theme::regular(13.5),
                 palette.text,
             );
@@ -155,7 +156,7 @@ pub fn create(app: &mut App, ui: &mut egui::Ui, chat: &str) {
             ui,
             &palette,
             None,
-            &crate::i18n::gettext(app.locale, "Cancel"),
+            &crate::i18n::gettext(locale, "Cancel"),
             false,
         )
         .clicked()
@@ -169,9 +170,9 @@ pub fn create(app: &mut App, ui: &mut egui::Ui, chat: &str) {
                     ui,
                     &palette,
                     &if app.poll_creating {
-                        crate::i18n::gettext(app.locale, "Sending…")
+                        crate::i18n::gettext(locale, "Sending…")
                     } else {
-                        crate::i18n::gettext(app.locale, "Send poll")
+                        crate::i18n::gettext(locale, "Send poll")
                     },
                     true,
                 )

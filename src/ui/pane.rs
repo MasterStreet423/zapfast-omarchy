@@ -560,8 +560,10 @@ fn hit_row(
     // The preview comes from the line the query matched: the archive searches
     // the whole text, so a hit on a later line would otherwise preview a first
     // line the query is nowhere in.
-    let line = hit.text_matching(query).unwrap_or_else(|| hit.summary());
-    let line = crate::markup::plain(&app.resolve_mention_tokens(&line), &[]);
+    let line = hit
+        .text_matching(query)
+        .unwrap_or_else(|| crate::i18n_extra::summary(&hit.summary()).into_owned());
+    let line = app.preview_line(&line, hit);
     let (snippet, found) = snippet(&line, query);
     let who = if hit.from_me {
         None
@@ -585,10 +587,12 @@ fn hit_row(
         egui::WidgetInfo::selected(egui::WidgetType::Button, true, selected, text)
     });
     if ui.is_rect_visible(rect) {
+        // Highlighted like a chat-list row; the cards keep hits apart, so
+        // no rule runs between them.
         if selected {
-            ui.painter().rect_filled(rect, 0.0, palette.surface_active);
+            super::widgets::row_highlight(ui, &palette, rect, palette.surface_active);
         } else if response.hovered() {
-            ui.painter().rect_filled(rect, 0.0, palette.surface_hover);
+            super::widgets::row_highlight(ui, &palette, rect, palette.surface_hover);
         }
         let left = rect.left() + 16.0;
         let right = rect.right() - 16.0;
@@ -624,11 +628,6 @@ fn hit_row(
             &snippet,
             found,
             &palette,
-        );
-        ui.painter().hline(
-            left..=rect.right(),
-            rect.bottom() - 0.5,
-            Stroke::new(1.0, palette.outline),
         );
     }
     let response = response.on_hover_cursor(egui::CursorIcon::PointingHand);

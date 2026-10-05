@@ -681,22 +681,18 @@ pub fn is_rtl(c: char) -> bool {
 pub(crate) fn assert_rows_follow_uba(galley: &Galley, atlas: &egui::ColorImage) {
     use unicode_bidi::BidiDataSource as _;
     let text = galley.text();
-    // Rows hold one glyph per character in logical order, so the row's text
-    // follows from glyph counts alone, independent of the cluster offsets.
-    let byte_at: Vec<usize> = text
-        .char_indices()
-        .map(|(byte, _)| byte)
-        .chain(std::iter::once(text.len()))
-        .collect();
-    let mut first_char = 0usize;
     for (index, placed) in galley.rows.iter().enumerate() {
         let glyphs = &placed.row.glyphs;
-        let row_chars = first_char..first_char + glyphs.len();
-        first_char = row_chars.end + usize::from(placed.ends_with_newline);
         if glyphs.is_empty() {
             continue;
         }
-        let (start, end) = (byte_at[row_chars.start], byte_at[row_chars.end]);
+        // Each glyph names the byte of the character it draws. A font may
+        // shape a character into several glyphs, or a ligature into fewer,
+        // so the row's text comes from those offsets, not from glyph counts.
+        let cluster = |glyph: &Glyph| glyph.cluster as usize;
+        let start = glyphs.iter().map(cluster).min().expect("row starts");
+        let last = glyphs.iter().map(cluster).max().expect("row ends");
+        let end = last + text[last..].chars().next().map_or(0, char::len_utf8);
         let paragraph_start = text[..start].rfind('\n').map_or(0, |at| at + 1);
         let paragraph_end = text[start..].find('\n').map_or(text.len(), |at| start + at);
         let paragraph = &text[paragraph_start..paragraph_end];
@@ -708,25 +704,39 @@ pub(crate) fn assert_rows_follow_uba(galley: &Galley, atlas: &egui::ColorImage) 
             .find(|candidate| candidate.range.contains(&line.start))
             .expect("bidi paragraph for the row");
         let levels = info.reordered_levels(resolved, line);
-        let row_text: Vec<char> = text[start..end].chars().collect();
-        let row_levels: Vec<unicode_bidi::Level> = (0..row_text.len())
-            .map(|offset| levels[byte_at[row_chars.start + offset] - paragraph_start])
+        let level_of = |glyph: &Glyph| levels[cluster(glyph) - paragraph_start];
+        let row_text: Vec<(usize, char)> = text[start..end]
+            .char_indices()
+            .map(|(offset, chr)| (start + offset, chr))
+            .collect();
+        let row_levels: Vec<unicode_bidi::Level> = row_text
+            .iter()
+            .map(|&(byte, _)| levels[byte - paragraph_start])
             .collect();
         // Marks, joiners, and the letters a ligature absorbs draw no glyph of
-        // their own, so only characters whose glyph advances are compared.
+        // their own, so only characters with an advancing glyph are compared.
+        let advances = |glyph: &&Glyph| glyph.advance_width > 0.01;
         let expected: String = BidiInfo::reorder_visual(&row_levels)
             .into_iter()
-            .filter(|&offset| glyphs[offset].advance_width > 0.01)
             .map(|offset| row_text[offset])
+            .filter(|&(byte, _)| {
+                glyphs
+                    .iter()
+                    .filter(advances)
+                    .any(|glyph| cluster(glyph) == byte)
+            })
+            .map(|(_, chr)| chr)
             .collect();
-        let mut drawn: Vec<&Glyph> = glyphs
-            .iter()
-            .filter(|glyph| glyph.advance_width > 0.01)
-            .collect();
+        let mut drawn: Vec<&Glyph> = glyphs.iter().filter(advances).collect();
         drawn.sort_by(|a, b| a.pos.x.total_cmp(&b.pos.x));
-        let visual: String = drawn.iter().map(|glyph| glyph.chr).collect();
+        // A character shaped into several advancing glyphs appears once.
+        drawn.dedup_by_key(|glyph| glyph.cluster);
+        let visual: String = drawn
+            .iter()
+            .map(|glyph| text[cluster(glyph)..].chars().next().unwrap_or(glyph.chr))
+            .collect();
         assert_eq!(visual, expected, "row {index} of {paragraph:?}");
-        for (offset, glyph) in glyphs.iter().enumerate() {
+        for glyph in glyphs {
             let Some(bracket) =
                 unicode_bidi::HardcodedBidiData.bidi_matched_opening_bracket(glyph.chr)
             else {
@@ -735,7 +745,7 @@ pub(crate) fn assert_rows_follow_uba(galley: &Galley, atlas: &egui::ColorImage) 
             if !glyph.chr.is_ascii() || glyph.uv_rect.is_nothing() {
                 continue;
             }
-            let rtl = levels[byte_at[row_chars.start + offset] - paragraph_start].is_rtl();
+            let rtl = level_of(glyph).is_rtl();
             // An opening bracket's ink sits left of centre; mirrored, it sits right.
             assert_eq!(
                 ink_leans_right(atlas, glyph),
@@ -771,6 +781,24 @@ fn ink_leans_right(atlas: &egui::ColorImage, glyph: &Glyph) -> bool {
     let tips = centre_of(&mut (top..top + quarter).chain(bottom - quarter..bottom));
     let middle = centre_of(&mut (top + quarter..bottom - quarter));
     middle > tips
+}
+
+/// Every row's ink ends at the same right edge.
+#[cfg(test)]
+pub(crate) fn assert_right_aligned(galley: &Galley) {
+    let edges: Vec<f32> = galley
+        .rows
+        .iter()
+        .filter(|placed| !placed.row.glyphs.is_empty())
+        .map(|placed| content_right(&placed.row.glyphs))
+        .collect();
+    let widest = edges.iter().copied().fold(0.0_f32, f32::max);
+    for (index, edge) in edges.iter().enumerate() {
+        assert!(
+            (widest - edge).abs() < 1.0,
+            "row {index} ends at {edge}, not the right edge {widest}"
+        );
+    }
 }
 
 #[cfg(test)]
@@ -1141,6 +1169,131 @@ mod tests {
             (deco_mid - dog_right).abs() < 40.0,
             "decorations should sit on the struck word, deco {deco_mid} word {dog_right}"
         );
+    }
+
+    #[test]
+    fn arabic_lam_ligatures_keep_their_place() {
+        let (galley, atlas) = bubble("إلى السطر التالي", 2000.0);
+        assert_rows_follow_uba(&galley, &atlas);
+    }
+
+    #[test]
+    fn ligatures_inside_right_to_left_words_keep_their_place() {
+        for text in [
+            "لا بأس",
+            "سلام عليكم",
+            "الاسم والعلامة",
+            "إلى التالي\nفي الليل",
+            "שלום עולם אב גד",
+        ] {
+            let (galley, atlas) = bubble(text, 2000.0);
+            assert_rows_follow_uba(&galley, &atlas);
+        }
+        let (galley, atlas) = bubble("إلى السطر التالي إلى السطر التالي", 90.0);
+        assert!(galley.rows.len() > 1, "the sample wraps");
+        assert_rows_follow_uba(&galley, &atlas);
+    }
+
+    #[test]
+    fn wrapped_right_to_left_paragraphs_keep_logical_row_order() {
+        for text in [
+            "הכלב הגדול קפץ מעל החתול והמשיך לרוץ לאורך הרחוב עד שהגיע אל הגינה השקטה",
+            "هذا نص عربي طويل يختبر ترتيب الأسطر عندما تلتف الكلمات داخل فقاعة رسالة ضيقة",
+        ] {
+            let (galley, atlas) = bubble(text, 110.0);
+            assert!(galley.rows.len() >= 3, "{text:?} should wrap narrowly");
+            assert_rows_follow_uba(&galley, &atlas);
+
+            let spans: Vec<(u32, u32)> = galley
+                .rows
+                .iter()
+                .filter(|placed| !placed.row.glyphs.is_empty())
+                .map(|placed| {
+                    let clusters = placed.row.glyphs.iter().map(|glyph| glyph.cluster);
+                    (
+                        clusters.clone().min().expect("row starts"),
+                        clusters.max().expect("row ends"),
+                    )
+                })
+                .collect();
+            assert_eq!(
+                spans[0].0, 0,
+                "the first visual row must contain the logical start of {text:?}: {spans:?}"
+            );
+            for rows in spans.windows(2) {
+                assert!(
+                    rows[0].1 < rows[1].0,
+                    "wrapped rows must stay in logical order for {text:?}: {spans:?}"
+                );
+            }
+        }
+    }
+
+    /// Lays `text` out as a message body with the app's own fonts.
+    fn bubble(text: &str, width: f32) -> (Arc<Galley>, egui::ColorImage) {
+        let ctx = egui::Context::default();
+        crate::theme::install(&ctx);
+        let galley = std::cell::RefCell::new(None);
+        // Fonts are installed at the start of the first pass.
+        for _ in 0..2 {
+            let mut output = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(Pos2::ZERO, vec2(800.0, 600.0))),
+                    ..Default::default()
+                },
+                |ui| {
+                    let style = crate::markup::Style {
+                        size: 14.5,
+                        color: Color32::WHITE,
+                        secondary: Color32::GRAY,
+                        link: Color32::LIGHT_BLUE,
+                        mention: Color32::GREEN,
+                    };
+                    let laid = crate::markup::layout(ui, text, &[], &style, width);
+                    *galley.borrow_mut() = Some(laid.galley);
+                },
+            );
+            output.textures_delta.clear();
+        }
+        let atlas = ctx.fonts(|fonts| fonts.image());
+        (galley.into_inner().expect("galley"), atlas)
+    }
+
+    #[test]
+    fn message_bubbles_follow_the_bidi_algorithm_on_every_row() {
+        let ctx = egui::Context::default();
+        crate::theme::install(&ctx);
+        let galleys = std::cell::RefCell::new(Vec::new());
+        // Fonts are installed at the start of the first pass.
+        for _ in 0..2 {
+            galleys.borrow_mut().clear();
+            let mut output = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(Pos2::ZERO, vec2(800.0, 600.0))),
+                    ..Default::default()
+                },
+                |ui| {
+                    let style = crate::markup::Style {
+                        size: 14.5,
+                        color: Color32::WHITE,
+                        secondary: Color32::GRAY,
+                        link: Color32::LIGHT_BLUE,
+                        mention: Color32::GREEN,
+                    };
+                    for text in crate::demo::RTL_SELF_CHAT {
+                        let laid = crate::markup::layout(ui, text, &[], &style, 400.0);
+                        galleys.borrow_mut().push(laid.galley);
+                    }
+                },
+            );
+            output.textures_delta.clear();
+        }
+        let atlas = ctx.fonts(|fonts| fonts.image());
+        for galley in galleys.into_inner() {
+            assert!(galley.rows.len() > 1, "each sample is a multi-line message");
+            assert_rows_follow_uba(&galley, &atlas);
+            assert_right_aligned(&galley);
+        }
     }
 
     #[test]

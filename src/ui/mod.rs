@@ -1,5 +1,6 @@
 //! Window layout: panels, overlays, keyboard shortcuts.
 
+pub mod accounts;
 pub mod chats;
 pub mod conversation;
 pub mod dialogs;
@@ -7,6 +8,7 @@ pub(crate) mod focus;
 pub mod image_preview;
 pub mod keys;
 pub mod labels;
+pub mod lock;
 pub mod login;
 pub mod message_info;
 pub mod pane;
@@ -14,6 +16,7 @@ pub mod picker;
 pub mod polls;
 pub mod settings;
 pub mod update;
+pub mod video_preview;
 pub mod widgets;
 
 use egui::{Align2, CornerRadius, Frame, Margin, Stroke, vec2};
@@ -27,6 +30,14 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
     let ctx = ui.ctx().clone();
     let ctx = &ctx;
     track_keyboard_focus(ctx);
+    // Locked, nothing else is drawn: no chat list, no messages, no dialogs,
+    // no toasts, and no shortcut reaches them.
+    if app.app_lock.is_locked() {
+        titlebar_strip(app, ui);
+        lock::show(app, ui);
+        focus_ring(app, ctx);
+        return;
+    }
     keys::handle(app, ctx);
     let main_navigation = app.is_linked()
         && app.page == Page::Chats
@@ -36,6 +47,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
         && app.reaction_target.is_none()
         && app.recording.is_none()
         && app.image_preview.is_none()
+        && !app.video_expanded
         && app.emoji_start.is_none()
         && app.mention_start.is_none()
         // The day filter keeps egui's own order among its days.
@@ -47,6 +59,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
     titlebar_strip(app, ui);
     if !app.is_linked() {
         login::show(app, ui);
+        accounts::corner(app, ctx);
         dialogs::show(app, ctx);
         update::show(app, ctx);
         toasts(app, ctx);
@@ -77,6 +90,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
     picker::show(app, ctx);
     dialogs::show(app, ctx);
     image_preview::show(app, ctx);
+    video_preview::show(app, ctx);
     drop_target(app, ctx);
     toasts(app, ctx);
     focus_ring(app, ctx);
@@ -418,12 +432,7 @@ fn toasts(app: &mut App, ctx: &egui::Context) {
                     .stroke(Stroke::new(1.0, palette.outline))
                     .corner_radius(CornerRadius::same(theme::RADIUS))
                     .inner_margin(Margin::symmetric(14, 10))
-                    .shadow(egui::epaint::Shadow {
-                        offset: [0, 4],
-                        blur: 16,
-                        spread: 0,
-                        color: palette.shadow,
-                    })
+                    .shadow(palette.float_shadow())
                     .show(ui, |ui| {
                         // Size to the message up to a readable maximum.
                         let font = theme::medium(13.5);
@@ -501,14 +510,15 @@ fn toasts(app: &mut App, ctx: &egui::Context) {
 
 /// Draggable space for the macOS traffic-light title bar.
 fn titlebar_strip(app: &App, ui: &mut egui::Ui) {
-    if app.is_linked() {
+    let linked = app.is_linked() && !app.app_lock.is_locked();
+    if linked {
         return;
     }
     let inset = theme::titlebar_inset(ui.ctx());
     if inset == 0.0 {
         return;
     }
-    let fill = if app.is_linked() {
+    let fill = if linked {
         app.palette.panel
     } else {
         app.palette.window
@@ -670,6 +680,7 @@ mod idle_tests {
             read_at: None,
             quoted: None,
             reactions: Vec::new(),
+            history_order: None,
             edited: false,
             mentions: Vec::new(),
             forwarded: false,
@@ -728,6 +739,7 @@ mod idle_tests {
                 read_at: None,
                 quoted: None,
                 reactions: Vec::new(),
+                history_order: None,
                 edited: false,
                 mentions: Vec::new(),
                 forwarded: false,

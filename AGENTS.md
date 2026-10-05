@@ -16,6 +16,10 @@ protocol. These notes are for coding agents and new contributors.
   for it exists.
 - Do not broaden a task into adjacent features or a general refactor.
   Preserve existing user behaviour unless the task changes it.
+- Current limitations are not product exclusions. Before marking a report
+  out of scope, identify the explicit boundary it conflicts with and check
+  the relevant implementation and reported version. A missing feature,
+  download limit, or stale guide does not establish a permanent boundary.
 
 ## Privacy
 
@@ -35,13 +39,37 @@ protocol. These notes are for coding agents and new contributors.
   them after the frame. Never mutate application state from inside a view
   beyond the view's own fields (composer text, search text, flags).
 - `src/backend.rs` is the interface's handle to a tokio runtime on its own
-  thread; `src/backend/worker.rs` runs there. It owns the whatsapp-rust
-  `Bot`, the message archive, downloads, and profile pictures. The two
-  sides talk only through `Command` (interface to runtime) and `Event`
-  (runtime to interface); every event wakes the window through `Waker`.
+  thread; `src/backend/worker.rs` runs there. Each account owns one
+  `Backend`. It owns the whatsapp-rust `Bot`, the message archive,
+  downloads, and profile pictures. The two sides talk only through
+  `Command` (interface to runtime) and `Event` (runtime to interface);
+  every event wakes the window through `Waker`.
+- Several WhatsApp accounts may be linked in one process. Each account has
+  its own folder under `state/accounts/<id>/` (`session.db`, `archive.db`,
+  stickers) and `cache/accounts/<id>/` (media, avatars). Never mix files,
+  caches, or SQLCipher keys across accounts. `ChatId` is unique only inside
+  one account. Notifications, tray clicks, and search hits always carry an
+  `AccountId`. `src/app.rs` is the process shell (theme, window, tray,
+  updates). Each `Account` in `src/account.rs` owns a `Backend`/`Worker`.
+  Views draw the active account through `App`'s `Deref` to `Account`.
+  Our own avatar at the top of the chat list opens the account switcher
+  (`src/ui/accounts.rs`) on every platform: only the accounts (picture, name
+  or number, unread chats, a check on the one on screen) and Add account; the
+  settings keep their own button. A dot on the avatar means another account
+  has unread chats. Events from an account that is not on screen are
+  applied with `App::events_hidden` set: they update that account only, never
+  the window's composer, dialogs, playback, or read state (a hidden account's
+  remembered chat is not being read, so it sends no receipts). Process-wide
+  settings (download folder, proxy) go to every backend. `paths.rs` moves a
+  single-account layout into `accounts/1/` at startup, after logging starts:
+  it refuses when anything is in the way, copies and reads back the archive's
+  keyring key before moving it, and moves SQLite side files before their
+  database. Removing an account deletes its folders after its backend has
+  stopped, then its keyring entry.
 - `src/archive.rs` is the SQLite store of chats, messages, contacts, and
-  privacy-id mappings. WhatsApp replays history once, at link time, so the
-  archive is the only copy. It keeps each message's raw protobuf because
+  privacy-id mappings. The phone sends recent history at link time and can
+  supply older history on request, but recovery is not guaranteed. Preserve
+  the local archive. It keeps each message's raw protobuf because
   the keys to fetch an attachment live in it. `src/archive/encryption.rs` opens
   the archive with SQLCipher and a random key stored in the OS keyring. Plaintext
   migration checkpoints the old WAL and verifies an encrypted staging file before
@@ -49,6 +77,15 @@ protocol. These notes are for coding agents and new contributors.
   a disposable archive. Tests use fixtures and mock credentials only.
 - `src/model.rs` holds the app's own types. Views never touch a protobuf;
   the worker translates in `classify()` and `parse_conversation()`.
+- Individual **Delete for me** uses `Command::DeleteLocal` to send through
+  `chat_actions().delete_message_for_me`, removing the local copy only after
+  WhatsApp accepts it. `DeleteMessageForMeUpdate` applies deletions from other
+  devices. The encrypted archive retains pending requests and deletion barriers
+  so reconnects retry uncertain requests and history cannot restore deleted
+  messages. Confirmed deletions with failed local cleanup are repaired without
+  another send. Recovery and callbacks remain bound to the originating account.
+  This sync landed after 0.19.0; that release's local-only behavior was a missing
+  integration, not a product exclusion. Whole-chat deletion and clearing sync too.
 - Favorite chats sync with the phone through the `favorites` app-state action
   (RegularHigh), which carries the whole ordered list: `Event::FavoritesUpdate`
   replaces ours and `send_app_state_action(&schemas::FAVORITES, ..)` writes it.
@@ -117,11 +154,20 @@ protocol. These notes are for coding agents and new contributors.
   and in the `fastframe_icons::icons!` table; an icon fastframe-icons already
   ships is named there as `lucide "name"` instead of copied.
 - `src/markup.rs` turns WhatsApp's text markup, links, and mentions into an
-  egui `LayoutJob`; `src/emoji.rs` swaps every emoji for a placeholder
-  glyph at layout time and paints the desktop's colour emoji bitmap over
-  it afterwards (resolving sequences through the font's GSUB ligatures).
-  Any text that can hold an emoji goes through `widgets::line` /
-  `widgets::rich_text` or `markup::layout`, never a bare `Label`.
+  egui `LayoutJob`; `src/emoji.rs` hands emoji to fastframe-emoji, which
+  swaps every emoji for a placeholder glyph at layout time and paints the
+  platform's picture over it afterwards (Apple Color Emoji, Segoe UI Emoji
+  through DirectWrite, or the desktop's bitmap emoji font, with the bundled
+  Noto behind them). New pictures are drawn on its worker thread; tests and
+  demo builds draw them inside the frame. The interface font is the
+  platform's own (`fastframe_fonts::Primary::System`), and Inter in tests.
+  fastframe-emoji's `EmojiPlugin` (added in `App::attach`) colours the
+  emoji in every other egui text: labels, menus, tooltips, text fields. It
+  leaves placeholders and `editor_job` glyphs alone, so the two never paint
+  one emoji twice. Message text and chat names still go through
+  `widgets::line` / `widgets::rich_text` or `markup::layout`: their
+  placeholders keep the emoji-only sizing and let `transcript::refine`
+  put copied emoji back.
 - `src/animation.rs` plays animated stickers and GIFs: WebP/GIF frames
   decode in-process, and so do MP4s (the `mp4` crate demuxes, `openh264`
   decodes the H.264 WhatsApp uses, samples converted from AVCC to Annex
@@ -137,8 +183,10 @@ protocol. These notes are for coding agents and new contributors.
   keyframe before the start (openh264 must not flush after each packet or
   B-frames stop it) and streams scaled frames with presentation times; the
   interface thread shows the due frame in one texture. rodio's symphonia
-  decodes the AAC track and its position steers the clock. Non-H.264 files go
-  to the system player. `Action::PlayVideo/SeekVideo/ToggleVideoSound` drive
+  decodes the AAC track and its position steers the clock. Unsupported formats
+  go to the system player. Playback reads a downloaded local file; the shared
+  64 MiB attachment download limit applies to automatic and manual downloads,
+  not to the video decoder. `Action::PlayVideo/SeekVideo/ToggleVideoSound` drive
   it; leaving the chat stops it and an unseen video pauses. Round video
   messages (PTV) are `Content::Video { note: true }` and draw as circles.
 - Message bodies paint through `markup::paint_selectable` and single lines
@@ -162,6 +210,13 @@ protocol. These notes are for coding agents and new contributors.
   Selection galleys share the message viewport's horizontal bounds while
   retaining their glyph positions: otherwise egui considers short incoming
   and outgoing messages separate columns and will not sweep across them.
+  Messages themselves are swept by a drag that starts on the strip beside
+  the bubbles (which senses drags beneath the text), or anywhere on a row
+  while selecting (the row's pick target sits above the text). `App::sweep`
+  keeps the anchor and the selection it started from; the view maps the
+  pointer's y to the last laid-out row above it each frame and the app
+  selects by message order, so rows the list skipped during edge scroll
+  count. Releasing the button ends the sweep, whichever widget held it.
 - Group names and members come from `groups().get_metadata`, asked one
   turn at a time (two per 5 s tick, `pump_group_info`): dozens of unnamed
   groups arrive with history sync and a burst of queries hits the
@@ -225,9 +280,10 @@ protocol. These notes are for coding agents and new contributors.
   `ZAPFAST_GIPHY_KEY` (`option_env!`); the repository carries none. The
   phone's recently used stickers arrive in `HistorySync.recent_stickers`
   when the device links and live in the archive's `stickers` table as raw
-  `StickerMetadata`, fetched when the picker opens; favourite stickers sync
-  through app state (`FavoriteSticker`), which whatsapp-rust does not
-  surface, so they are not shown.
+  `StickerMetadata`, fetched when the picker opens. Favourite stickers sync
+  both ways through `FavoriteStickerUpdate` and `schemas::FAVORITE_STICKER`;
+  `backend/worker/stickers.rs` and `archive/stickers.rs` retain pending local
+  changes and recover favourites synced before support was added.
 - `src/paths.rs` moves a setup left by the app's earlier name
   (`fastsapp`, then `fastwhatsapp`) over once, so the linked device survives
   the rename. Migration runs after the single-instance guard and outside demos;
@@ -242,9 +298,18 @@ protocol. These notes are for coding agents and new contributors.
   Linux, tray-icon on Windows and macOS; on macOS made with the first window
   and pumped by `fastframe_tray::idle` while none exists), and `src/macos.rs`
   hands its menu events to `fastframe_tray::claim_menu_event` first.
-  `src/single_instance.rs` holds a lock file in the runtime
-  directory, and a second launch asks the first to surface over a private
-  socket (a token-checked loopback port on Windows). `src/notify.rs` sends desktop notifications
+  Closing keeps ZapFast running, and a hidden start stays hidden, only while
+  `Tray::is_shown`: on Linux the item exists before a panel shows it (a
+  start at login beats the panel) and registers once one appears. A
+  hidden start makes the macOS item with `Tray::create_item`, which does not
+  bring ZapFast forward; a window's `attach` makes it otherwise.
+  `src/single_instance.rs` claims fastframe-instance's slot in the runtime
+  directory (`Slot::at(runtime, "fastsapp")`, so requests and replies stay
+  `fastsapp:show` and `fastsapp:ok` for older copies), and a second launch
+  asks the first to surface over a private socket (a token-checked loopback
+  port on Windows); the handler queues `ControlCommand`s and declines unknown
+  verbs. The fixed port 47119 that 0.15-era copies look for stays in ZapFast,
+  answered once the slot is claimed. `src/notify.rs` sends desktop notifications
   for `Event::Incoming` (live messages from others, not history) when the
   reader is away from that chat; a click carries the chat and the message
   id, so the reader lands on the announced message. macOS has no title bar:
@@ -257,6 +322,14 @@ protocol. These notes are for coding agents and new contributors.
   recipient. Never promote a group from one reader, apply a receipt to earlier
   messages, or infer a historical audience from current membership. History
   trusts the phone's aggregate status, not a partial `user_receipt` list.
+- The app lock (`src/app_lock.rs`, `ui/lock.rs`) is a local screen lock, not
+  encryption, and independent of the locked-chats code. Settings keep only a
+  salted PBKDF2 verifier, checked and made on a thread. While locked,
+  `ui::show` draws only the lock screen, `App::apply` drops every action
+  outside `allowed_while_locked` (a clicked notification's message waits for
+  the unlock), `window_focused` stays false so nothing is marked read, and
+  notifications say only "New message". Unlinking (`LoggedOut`) forgets the
+  password, which is how a forgotten one is recovered.
 - Private read-state writes all use the `regular_low` app-state collection.
   `backend::read_sync` permits one at a time and backs off the whole queue after
   failure; per-chat retry queues would repeatedly rebuild the same failed
@@ -269,7 +342,29 @@ protocol. These notes are for coding agents and new contributors.
 - Older history comes from the phone on demand (`Command::FetchOlder` →
   `Client::fetch_message_history` → a `HistorySync` chunk with
   `sync_type == ON_DEMAND`); the archive is paged first, the phone only
-  when it is exhausted.
+  when it is exhausted. Short and empty chats ask on their own, and a phone
+  with nothing to add often leaves that unanswered, so only an `explicit`
+  request (the reader scrolled to the top) reports a silent phone, once per
+  chat until it answers or the link reconnects. A chunk saying nothing more
+  remains on the phone sets `chats.history_start`, and that chat is not
+  asked again.
+  `ReloadHistory` requests before a selected archived message to repair gaps
+  inside existing history, even after reaching the chat's start. History keeps
+  edited snapshots under the protocol target id, even when the outer envelope
+  names a different edit id. It uses `HistorySyncMsg.msg_order_id` to break
+  timestamp ties in the archive, paging, and interface. A replay without order
+  metadata must not erase it, and an unedited replay must not undo an edit.
+  History `MESSAGE_EDIT` entries carry full snapshots, unlike live edit events:
+  keep their envelope timestamp/order and normalize the body and target id.
+  Do not require a separate original or create a bubble under the edit id.
+  Count-only diagnostics can distinguish malformed snapshots from storage failures.
+- Scrolling comes from fastframe-scroll: `App::scrolling.apply` runs first
+  in each unlocked frame and sets the wheel step (120 points a notch), and on
+  Linux scales touchpad gestures, glides after the lift, and holds a gesture
+  to its axis (Shift turns it sideways). `App::route_scroll` then keeps a
+  gesture, glide included, with the pane it began over (`ScrollRoute`, #274),
+  asking `Scrolling::gliding`; the image preview pans with a touchpad and
+  zooms with a wheel by `Scrolling::from_trackpad`.
 - Platform-specific code belongs behind `cfg` blocks; a change for one
   platform must keep the other two compiling.
 
@@ -284,7 +379,8 @@ egui pitfalls this code has already hit:
   `ui/keys.rs`. Layouts that put another character on the shifted key never
   produce either spelling; `Alt+↑/↓` is the layout-independent way to switch
   chats. A long label in `SHORTCUTS` widens the dialog's key column and
-  truncates the descriptions at the default window size.
+  leaves its descriptions less room to wrap in; the dialog takes two columns
+  in a wide window and scrolls in a short one.
 - `with_layout(..., Align::Center)` directly inside a vertical container
   claims the whole available height; wrap it in `ui.horizontal`.
 - `ui.horizontal` inside a right-aligned bubble lays out right to left;
@@ -294,9 +390,9 @@ egui pitfalls this code has already hit:
   double-click on either replies; the body keeps it for selecting the word.
 - `Popup::context_menu` opens on the *response's* right-click, which those
   inner widgets take for themselves; the bubble reads the right-click from
-  the input over the part of its rect inside the transcript viewport (the chat
-  header shares its layer) and opens `Popup::menu` itself, so the menu
-  comes up anywhere on the message.
+  the input over its row (the bubble and the strip beside it) inside the
+  transcript viewport (the chat header shares its layer) and opens
+  `Popup::menu` itself, so the menu comes up anywhere on the message.
 
 ## Branches
 
@@ -380,8 +476,8 @@ A release is not finished when the tag is pushed. Do these in order:
   data and a headless layout test of every screen (`src/demo.rs`); extend
   the sample when a new kind of content or state is added, and use
   `--demo-shot` to look at the result.
-- Update the README when user-visible behaviour, settings, files, or network
-  access changes.
+- Update the docs site (`docs/`) when user-visible behaviour, settings,
+  files, or network access changes. The README stays a short pointer to it.
 - Run the full checks before finishing:
 
   ```sh

@@ -77,6 +77,12 @@ pub fn tr(english: &str) -> Cow<'static, str> {
             gettext(locale, "Close the window (ZapFast remains in the tray)")
         }
         "Quit" => gettext(locale, "Quit"),
+        "Open a chat by its position in the chat list" => {
+            gettext(locale, "Open a chat by its position in the chat list")
+        }
+        "Lock ZapFast (with an app lock password)" => {
+            gettext(locale, "Lock ZapFast (with an app lock password)")
+        }
         // Poll validation
         "Enter a question of up to 255 characters." => {
             gettext(locale, "Enter a question of up to 255 characters.")
@@ -130,6 +136,11 @@ fn summary_label(locale: Locale, english: &str) -> Option<Cow<'static, str>> {
         "This message was deleted" => gettext(locale, "This message was deleted"),
         "Unsupported message" => gettext(locale, "Unsupported message"),
         "View once message" => gettext(locale, "View once message"),
+        "View once photo" => gettext(locale, "View once photo"),
+        "View once video" => gettext(locale, "View once video"),
+        "View once voice message" => gettext(locale, "View once voice message"),
+        "View once audio" => gettext(locale, "View once audio"),
+        "Meta AI reply" => gettext(locale, "Meta AI reply"),
         "Message on your phone" => gettext(locale, "Message on your phone"),
         _ => return None,
     })

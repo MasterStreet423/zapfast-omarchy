@@ -2406,6 +2406,290 @@ msgstr "ZapFast no pudo mostrar esta imagen."
 msgid "Open externally"
 msgstr "Abrir en otra app"
 
+#: src/util.rs:293
+#, rust-format
+msgid "last seen today at {time}"
+msgstr "últ. vez hoy a las {time}"
+
+#: src/util.rs:294
+#, rust-format
+msgid "last seen yesterday at {time}"
+msgstr "últ. vez ayer a las {time}"
+
+#: src/util.rs:302
+#, rust-format
+msgid "last seen {weekday} at {time}"
+msgstr "últ. vez el {weekday} a las {time}"
+
+#: src/util.rs:306
+#, rust-format
+msgid "last seen {date}"
+msgstr "últ. vez el {date}"
+
+#: src/ui/chats.rs:1068
+msgid "Draft:"
+msgstr "Borrador:"
+
+#: src/ui/conversation.rs:3323 src/ui/conversation.rs:4195
+msgid "Reload earlier messages"
+msgstr ""
+
+#: src/ui/conversation.rs:4805
+msgid "View once photo. For your privacy, it opens only on your phone."
+msgstr ""
+"Foto de visualización única. Por tu privacidad, solo se abre en tu teléfono."
+
+#: src/ui/conversation.rs:4809
+msgid "View once video. For your privacy, it opens only on your phone."
+msgstr ""
+"Video de visualización única. Por tu privacidad, solo se abre en tu teléfono."
+
+#: src/ui/conversation.rs:4813
+msgid "View once voice message. For your privacy, it opens only on your phone."
+msgstr ""
+"Mensaje de voz de reproducción única. Por tu privacidad, solo se abre en tu "
+"teléfono."
+
+#: src/ui/conversation.rs:4817
+msgid "View once audio. For your privacy, it opens only on your phone."
+msgstr ""
+"Audio de reproducción única. Por tu privacidad, solo se abre en tu teléfono."
+
+#: src/ui/conversation.rs:6312
+msgid "Back to the message (Esc)"
+msgstr "Volver al mensaje (Esc)"
+
+#: src/ui/conversation.rs:6314
+msgid "Fill the window"
+msgstr "Llenar la ventana"
+
+#: src/ui/dialogs.rs:1178
+msgid "Remove this account?"
+msgstr "¿Quitar esta cuenta?"
+
+#: src/ui/dialogs.rs:1184
+msgid ""
+"This unlinks the number on this computer and deletes its local chats. Other "
+"accounts stay."
+msgstr ""
+"Esto desvincula el número en este equipo y borra los chats locales. Las "
+"demás cuentas se quedan."
+
+#: src/ui/dialogs.rs:1193
+msgid "Remove"
+msgstr "Quitar"
+
+#: src/ui/settings.rs:336
+msgid "Font"
+msgstr "Fuente"
+
+#: src/ui/settings.rs:339
+msgid ""
+"System is your desktop's interface font. Inter looks the same on every "
+"computer."
+msgstr ""
+"«Sistema» es la fuente de la interfaz de tu escritorio. Inter se ve igual en "
+"todos los ordenadores."
+
+#: src/ui/settings.rs:421 src/ui/settings.rs:430
+msgid "Keep chats archived"
+msgstr "Mantener chats archivados"
+
+#: src/ui/settings.rs:424
+msgid "When off, a new message brings an archived chat back to the list."
+msgstr ""
+"Si está desactivado, un mensaje nuevo devuelve el chat archivado a la lista."
+
+#: src/ui/settings.rs:672 src/ui/settings.rs:1407
+msgctxt "profile"
+msgid "About"
+msgstr "Info."
+
+#: src/ui/settings.rs:677 src/ui/settings.rs:1470 src/ui/accounts.rs:123
+msgid "Add account"
+msgstr "Añadir cuenta"
+
+#: src/ui/settings.rs:678 src/ui/settings.rs:1446
+msgid "Remove this account"
+msgstr ""
+
+#: src/ui/settings.rs:789 src/ui/settings.rs:816
+msgid "App lock"
+msgstr ""
+
+#: src/ui/settings.rs:792
+msgid ""
+"Asks for a password at start and after a while unused. It keeps people using "
+"this computer out of your chats and encrypts nothing more. A forgotten "
+"password means unlinking."
+msgstr ""
+
+#: src/ui/settings.rs:799
+msgid "Turn off…"
+msgstr ""
+
+#: src/ui/settings.rs:800
+#, fuzzy
+msgid "Change password…"
+msgstr "Cambiar…"
+
+#: src/ui/settings.rs:803
+msgid "Set password…"
+msgstr ""
+
+#: src/ui/settings.rs:817 src/ui/settings.rs:824
+#, fuzzy
+msgid "Lock after"
+msgstr "Bloqueados"
+
+#: src/ui/settings.rs:827
+msgid ""
+"Time without using ZapFast, also counted while it is in the tray. "
+"Ctrl+Shift+L locks it at once."
+msgstr ""
+
+#: src/ui/settings.rs:869
+msgid "Set an app lock password"
+msgstr ""
+
+#: src/ui/settings.rs:870
+msgid "Change the app lock password"
+msgstr ""
+
+#: src/ui/settings.rs:871
+msgid "Turn off the app lock"
+msgstr ""
+
+#: src/ui/settings.rs:881
+msgid "Current password"
+msgstr ""
+
+#: src/ui/settings.rs:888
+#, rust-format
+msgid "New password, at least {count} characters"
+msgstr ""
+
+#: src/ui/settings.rs:893
+msgid "Type the new password again"
+msgstr ""
+
+#: src/ui/settings.rs:917
+#, rust-format
+msgid "The password needs at least {count} characters."
+msgstr ""
+
+#: src/ui/settings.rs:919
+msgid "The two new passwords are different."
+msgstr ""
+
+#: src/ui/settings.rs:920 src/ui/lock.rs:85
+msgid "Wrong password. Try again."
+msgstr ""
+
+#: src/ui/settings.rs:927
+msgid "Turn on"
+msgstr ""
+
+#: src/ui/settings.rs:928
+#, fuzzy
+msgid "Change password"
+msgstr "Cambiar foto"
+
+#: src/ui/settings.rs:929
+msgid "Turn off"
+msgstr ""
+
+#: src/app.rs:1368
+msgid "Could not delete the removed account's files"
+msgstr ""
+
+#: src/app.rs:5831
+msgid "App lock password saved"
+msgstr ""
+
+#: src/app.rs:5839
+msgid "App lock turned off"
+msgstr ""
+
+#: src/ui/lock.rs:17
+msgid "ZapFast is locked"
+msgstr ""
+
+#: src/ui/lock.rs:23
+#, fuzzy
+msgid "Unlinking this computer…"
+msgstr "Desvincular este ordenador"
+
+#: src/ui/lock.rs:52
+msgid "Enter your password to unlock."
+msgstr ""
+
+#: src/ui/lock.rs:66
+msgid "Password"
+msgstr ""
+
+#: src/ui/lock.rs:76
+#, rust-format
+msgid "Too many wrong passwords. Try again in {seconds} s."
+msgstr ""
+
+#: src/ui/lock.rs:97
+msgid "Unlock"
+msgstr ""
+
+#: src/ui/lock.rs:108
+#, fuzzy
+msgid "Forgot password? Unlink this computer"
+msgstr "Desvincular este ordenador"
+
+#: src/ui/lock.rs:131
+msgid ""
+"Without the password, the only way back in is to unlink. This removes the "
+"device from WhatsApp, deletes the chats stored here, and turns the app lock "
+"off. You can link again with a new code."
+msgstr ""
+
+#: src/notify.rs:280
+#, fuzzy
+msgid "New message"
+msgstr "Escribe un mensaje"
+
+#: src/settings.rs:340
+msgid "After 1 minute"
+msgstr ""
+
+#: src/settings.rs:341
+msgid "After 15 minutes"
+msgstr ""
+
+#: src/settings.rs:342
+msgid "After 1 hour"
+msgstr ""
+
+#: src/account.rs:214
+#, rust-format
+msgid "Account {id}"
+msgstr "Cuenta {id}"
+
+#: src/ui/accounts.rs:33
+msgid "Switch account"
+msgstr ""
+
+#: src/ui/accounts.rs:84
+msgid "Not linked"
+msgstr ""
+
+#: src/ui/accounts.rs:232
+#, rust-format
+msgid "{count} unread chats"
+msgstr ""
+
+#: src/ui/dialogs.rs:1124
+msgid ""
+"This removes the message from your phone and linked devices. Other people "
+"keep their copy. Connect to WhatsApp to delete it. This cannot be undone."
+msgstr ""
+
 #~ msgid "Show the chat list (Ctrl+B)"
 #~ msgstr "Mostrar la lista de chats (Ctrl+B)"
 

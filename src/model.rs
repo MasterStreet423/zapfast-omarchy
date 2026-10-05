@@ -11,6 +11,46 @@ use serde::{Deserialize, Serialize};
 /// Chat JID string: `<phone>@s.whatsapp.net`, `<id>@g.us`, or `<id>@lid`.
 pub type ChatId = String;
 
+/// Stable folder name for a linked WhatsApp account on this computer.
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct AccountId(pub String);
+
+impl AccountId {
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    pub fn first() -> Self {
+        Self("1".into())
+    }
+
+    /// Folder name allocated by the roster: one or more digits, no leading
+    /// zero, so it cannot be an absolute path or climb out of `accounts/`.
+    pub fn is_safe(value: &str) -> bool {
+        let mut chars = value.chars();
+        let Some(first) = chars.next() else {
+            return false;
+        };
+        first.is_ascii_digit() && first != '0' && chars.all(|character| character.is_ascii_digit())
+    }
+
+    pub fn parse(value: &str) -> Option<Self> {
+        Self::is_safe(value).then(|| Self(value.to_owned()))
+    }
+}
+
+impl std::fmt::Display for AccountId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl From<&str> for AccountId {
+    fn from(value: &str) -> Self {
+        Self(value.to_owned())
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ChatKind {
@@ -282,6 +322,10 @@ pub struct Message {
     pub from_me: bool,
     /// Unix seconds.
     pub timestamp: i64,
+    /// The phone's order within a history conversation, used to break timestamp
+    /// ties. Live messages and older archives may not have one.
+    #[serde(default)]
+    pub history_order: Option<i64>,
     pub content: Content,
     pub status: Delivery,
     /// First delivered-receipt Unix timestamp for outgoing messages.
@@ -460,7 +504,37 @@ pub enum Content {
         /// A live location, which WhatsApp shows only on the phone.
         #[serde(default)]
         live_location: bool,
+        /// What a view-once message holds, when it arrived as media this
+        /// device may not open rather than as a bare placeholder.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        once: Option<OnceMedia>,
     },
+}
+
+/// The kind of media a view-once message holds.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum OnceMedia {
+    Photo,
+    Video,
+    Voice,
+    Audio,
+}
+
+impl OnceMedia {
+    /// The kind of view-once media `content` would be, if it is media that
+    /// can be sent to be viewed once.
+    pub fn of(content: &Content) -> Option<Self> {
+        match content {
+            Content::Image { .. } => Some(Self::Photo),
+            Content::Video { .. } => Some(Self::Video),
+            Content::Audio {
+                voice_note: true, ..
+            } => Some(Self::Voice),
+            Content::Audio { .. } => Some(Self::Audio),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -707,6 +781,15 @@ impl Content {
                 ..
             } => "Live location".to_owned(),
             Self::PhoneOnly {
+                once: Some(kind), ..
+            } => match kind {
+                OnceMedia::Photo => "View once photo",
+                OnceMedia::Video => "View once video",
+                OnceMedia::Voice => "View once voice message",
+                OnceMedia::Audio => "View once audio",
+            }
+            .to_owned(),
+            Self::PhoneOnly {
                 view_once: true, ..
             } => "View once message".to_owned(),
             Self::PhoneOnly { .. } => "Message on your phone".to_owned(),
@@ -853,6 +936,10 @@ pub struct DecodedImage {
 pub struct Contact {
     pub id: String,
     pub full_name: Option<String>,
+    /// The first name saved with `full_name`, which WhatsApp shows where
+    /// space is short, as in a group's member line. It may hold several
+    /// words; only a contact saved with a separate first name has one.
+    pub first_name: Option<String>,
     pub push_name: Option<String>,
 }
 
@@ -862,6 +949,15 @@ impl Contact {
             .as_deref()
             .filter(|name| !name.is_empty())
             .or(self.push_name.as_deref().filter(|name| !name.is_empty()))
+    }
+
+    /// The saved first name, when the address-book entry has one.
+    pub fn first_name(&self) -> Option<&str> {
+        self.full_name.as_deref().filter(|name| !name.is_empty())?;
+        self.first_name
+            .as_deref()
+            .map(str::trim)
+            .filter(|name| !name.is_empty())
     }
 
     /// WhatsApp display name: address-book name or `~`-prefixed push name.
@@ -1018,6 +1114,7 @@ pub enum Dialog {
     Shortcuts,
     About,
     ConfirmUnlink,
+    ConfirmRemoveAccount(AccountId),
     /// Phone number used for pairing-code linking.
     PairWithPhone,
     /// Contacts and the self-chat shortcut.
@@ -1259,9 +1356,19 @@ pub enum Action {
     /// Marks a read chat unread, here and on the phone; does not invent a
     /// pending count.
     MarkUnread(ChatId),
-    LoadOlder(ChatId),
-    /// Requests messages older than the local archive.
+    /// Pages older messages from the archive, then the phone. `explicit` when
+    /// the reader scrolled to the top, rather than a short chat filling its
+    /// view: only the reader's own requests report a phone that is silent.
+    LoadOlder {
+        chat: ChatId,
+        explicit: bool,
+    },
+    /// Requests messages older than the local archive, for the reader.
     FetchOlder(ChatId),
+    ReloadHistory {
+        chat: ChatId,
+        message: String,
+    },
     Download {
         card: Option<usize>,
         chat: ChatId,
@@ -1294,6 +1401,14 @@ pub enum Action {
     },
     /// Mutes or unmutes video playback.
     ToggleVideoSound,
+    /// Shows a downloaded video over the whole window, starting it if it is
+    /// not the one loaded.
+    ExpandVideo {
+        message: String,
+        path: PathBuf,
+    },
+    /// Puts the video covering the window back in its message.
+    CollapseVideo,
     /// Starts, cancels, or sends a voice recording.
     StartRecording,
     CancelRecording,
@@ -1314,6 +1429,9 @@ pub enum Action {
     FitImage,
     CloseImagePreview,
     OpenFile(PathBuf),
+    /// Opens ZapFast's log, or shows it in its folder when no application
+    /// takes it, and says so when neither works.
+    OpenLog(PathBuf),
     OpenFolder(PathBuf),
     /// Saves a copy of a downloaded attachment where the person chooses.
     SaveAttachmentAs {
@@ -1340,15 +1458,30 @@ pub enum Action {
     ToggleSelected(String),
     /// Selects every message from the last one clicked to this one.
     SelectRange(String),
+    /// Selects the messages a mouse drag has swept, from the row it began on
+    /// to the row under the pointer, starting a selection if none was open.
+    SweepMessages {
+        anchor: String,
+        to: String,
+    },
+    /// The mouse button that swept messages was released.
+    EndSweep,
     /// Leaves selection mode.
     CancelSelection,
     /// Loads an outgoing message into the composer for editing.
     Edit(String),
     CancelEdit,
-    /// Revokes an outgoing message for everyone.
-    DeleteForEveryone(String),
-    /// Deletes a message locally.
-    DeleteForMe(String),
+    /// Revokes an outgoing message for everyone. The chat travels with the
+    /// message because the reader may switch chats before confirming.
+    DeleteForEveryone {
+        chat: ChatId,
+        id: String,
+    },
+    /// Deletes a message locally, in the chat it belongs to.
+    DeleteForMe {
+        chat: ChatId,
+        id: String,
+    },
     /// Opens the attachment picker for the current chat.
     Attach,
     /// Opens or closes the composer tools menu.
@@ -1424,8 +1557,12 @@ pub enum Action {
         sticker: PathBuf,
         member: bool,
     },
-    /// Opens the prefilled contact-name editor.
-    EditContact(String),
+    /// Opens the contact-name editor for `id`, prefilled with `name` and
+    /// split as the contact's saved first name says.
+    EditContact {
+        id: String,
+        name: String,
+    },
     /// Saves a contact through WhatsApp contact sync. `first` is the short
     /// display name and `last` completes the full name.
     SaveContact {
@@ -1523,6 +1660,8 @@ pub enum Action {
     DownloadUpdate,
     InstallUpdate,
     SetTheme(crate::settings::ThemeChoice),
+    /// Draws the interface in the platform's font or in the bundled Inter.
+    SetFont(crate::settings::FontChoice),
     SetInterfaceLanguage(Option<crate::i18n::Locale>),
     SetCustomTheme(String),
     SetWallpaperColor(crate::settings::WallpaperColor),
@@ -1583,6 +1722,8 @@ pub enum Action {
     RemoveGroupPicture(ChatId),
     /// Sets or resets (`None`) the folder for new downloads.
     SetDownloadFolder(Option<PathBuf>),
+    /// Keeps archived chats archived when a new message comes, or not.
+    SetKeepChatsArchived(bool),
     /// Saves the proxy setting and reconnects. Empty follows the environment.
     SetProxy(String),
     /// Plays a notification sound once, as a preview.
@@ -1593,6 +1734,21 @@ pub enum Action {
     PairWithPhone(String),
     /// Unlinks the device remotely and locally.
     Unlink,
+    /// Hides everything behind the app lock, when a password is set.
+    LockApp,
+    /// Tries the password typed on the lock screen.
+    UnlockApp,
+    /// Opens (`true`) or closes the lock screen's question about unlinking.
+    ForgotAppPassword(bool),
+    /// Unlinks this computer from the lock screen. The lock lifts, and its
+    /// password is forgotten, once WhatsApp has unlinked it.
+    UnlinkLockedApp,
+    /// Opens a password form in Settings, or closes it with `None`.
+    AppLockForm(Option<crate::app_lock::FormMode>),
+    /// Submits the Settings password form.
+    SubmitAppLockForm,
+    /// How long ZapFast may go unused before it locks.
+    SetAutoLock(crate::settings::AutoLock),
     Reconnect,
     /// Sets aside an archive whose key is gone and links again.
     StartOverArchive,
@@ -1603,6 +1759,14 @@ pub enum Action {
     HideWindow,
     /// Applies the configured close-button behavior.
     CloseWindow,
+    /// Shows another linked account in the window.
+    SwitchAccount(AccountId),
+    /// Starts linking another number beside the ones already here.
+    AddAccount,
+    /// Leaves an account being added before it was linked.
+    CancelAddAccount,
+    /// Unlinks an account and deletes what is stored here for it.
+    RemoveAccount(AccountId),
     /// Mutes until Unix time, indefinitely with `Some(0)`, or unmutes with `None`.
     SetMuted(ChatId, Option<i64>),
     /// Moves a chat into or out of the locked folder.
@@ -1975,12 +2139,14 @@ mod tests {
         let saved = Contact {
             id: "1".into(),
             full_name: Some("Ada".into()),
+            first_name: None,
             push_name: Some("ada l".into()),
         };
         assert_eq!(saved.label().as_deref(), Some("Ada"));
         let stranger = Contact {
             id: "2".into(),
             full_name: None,
+            first_name: None,
             push_name: Some("Bob".into()),
         };
         assert_eq!(stranger.label().as_deref(), Some("~Bob"));

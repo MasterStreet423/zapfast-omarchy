@@ -178,6 +178,28 @@ impl Palette {
         }
     }
 
+    /// The shadow under a surface that floats over the window for a moment:
+    /// menus, toasts, the emoji picker, and egui's own popups.
+    pub fn float_shadow(&self) -> egui::epaint::Shadow {
+        egui::epaint::Shadow {
+            offset: [0, 6],
+            blur: 20,
+            spread: 0,
+            color: self.shadow,
+        }
+    }
+
+    /// The deeper shadow under a modal surface that holds the window until
+    /// it closes: dialogs, the update dialog, and the image preview.
+    pub fn modal_shadow(&self) -> egui::epaint::Shadow {
+        egui::epaint::Shadow {
+            offset: [0, 12],
+            blur: 40,
+            spread: 0,
+            color: self.shadow,
+        }
+    }
+
     /// The palette's shadow colour, no heavier than the light theme's: a
     /// dark palette's own shadow is meant for popups and menus, and under
     /// every bubble it weighed on an otherwise flat theme.
@@ -347,6 +369,17 @@ pub fn bold(size: f32) -> egui::FontId {
     fastframe_fonts::Weight::Bold.font_id(size)
 }
 
+/// The face for counting timers (recording, playback positions): Inter at
+/// `weight`, whose figures are all one width, so a timer does not shift as
+/// it counts. San Francisco and Segoe UI draw proportional figures.
+pub fn tabular(weight: fastframe_fonts::Weight, size: f32) -> egui::FontId {
+    egui::FontId::new(size, tabular_family(weight))
+}
+
+fn tabular_family(weight: fastframe_fonts::Weight) -> egui::FontFamily {
+    egui::FontFamily::Name(format!("zapfast-tabular-{}", weight.name()).into())
+}
+
 /// Installs fonts, icons, and base style.
 pub fn install(ctx: &egui::Context) {
     install_fonts(ctx);
@@ -387,18 +420,8 @@ pub fn apply(ctx: &egui::Context, palette: &Palette) {
     visuals.window_stroke = Stroke::new(1.0, palette.outline);
     visuals.window_corner_radius = CornerRadius::same(RADIUS + 2);
     visuals.menu_corner_radius = CornerRadius::same(RADIUS);
-    visuals.window_shadow = egui::epaint::Shadow {
-        offset: [0, 6],
-        blur: 24,
-        spread: 0,
-        color: palette.shadow,
-    };
-    visuals.popup_shadow = egui::epaint::Shadow {
-        offset: [0, 4],
-        blur: 16,
-        spread: 0,
-        color: palette.shadow,
-    };
+    visuals.window_shadow = palette.modal_shadow();
+    visuals.popup_shadow = palette.float_shadow();
     let corner = CornerRadius::same(RADIUS_SMALL + 2);
     for widget in [
         &mut visuals.widgets.inactive,
@@ -465,12 +488,66 @@ pub fn apply(ctx: &egui::Context, palette: &Palette) {
     ctx.set_global_style(style);
 }
 
-/// Inter at four weights, egui's own fonts behind it, and installed fonts
-/// for the scripts Inter lacks, hinted as the desktop asks.
+/// Whether the interface is drawn in the bundled Inter instead of the
+/// platform's font (Settings, Appearance, Font).
+static INTER: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Chooses the interface's typeface and installs it. Call it before
+/// [`install`] with the saved choice, and again when the choice changes.
+pub fn set_font(ctx: &egui::Context, font: crate::settings::FontChoice) {
+    let inter = font == crate::settings::FontChoice::Inter;
+    if INTER.swap(inter, std::sync::atomic::Ordering::AcqRel) != inter {
+        install_fonts(ctx);
+    }
+}
+
+/// Whether Inter is the chosen typeface.
+#[cfg(test)]
+pub fn inter_chosen() -> bool {
+    INTER.load(std::sync::atomic::Ordering::Acquire)
+}
+
+/// The typeface the interface is asked to draw with: the setting's, and
+/// always Inter in tests, so layouts do not depend on the machine.
+fn primary_font() -> fastframe_fonts::Primary {
+    if cfg!(test) || INTER.load(std::sync::atomic::Ordering::Acquire) {
+        fastframe_fonts::Primary::Inter
+    } else {
+        fastframe_fonts::Primary::System
+    }
+}
+
+/// The chosen interface font at four weights (the platform's, or Inter
+/// where there is none), egui's own fonts behind it, and installed fonts
+/// for the scripts it lacks, hinted as the desktop asks. Inter also draws
+/// the [`tabular`] timers.
 fn install_fonts(ctx: &egui::Context) {
-    let mut fonts = fastframe_fonts::FontSetup::default().definitions();
+    let primary = primary_font();
+    let mut fonts = fastframe_fonts::FontSetup::default()
+        .primary(primary)
+        .definitions();
+    add_tabular(&mut fonts);
     text_rendering().apply_to(&mut fonts);
     ctx.set_fonts(fonts);
+}
+
+/// Registers Inter at each weight as the [`tabular`] families, each falling
+/// back like the interface family of the same weight.
+fn add_tabular(fonts: &mut egui::FontDefinitions) {
+    use fastframe_fonts::Weight;
+    for weight in Weight::ALL {
+        let name = format!("zapfast-tabular-{}", weight.name());
+        let mut data = egui::FontData::from_static(fastframe_fonts::INTER);
+        data.tweak.coords = egui::epaint::text::VariationCoords::new([(b"wght", weight.value())]);
+        fonts
+            .font_data
+            .insert(name.clone(), std::sync::Arc::new(data));
+        let mut family = vec![name];
+        if let Some(behind) = fonts.families.get(&weight.family()) {
+            family.extend(behind.iter().cloned());
+        }
+        fonts.families.insert(tabular_family(weight), family);
+    }
 }
 
 /// The desktop's text rendering: read once, on the first window, and kept
@@ -552,6 +629,8 @@ fastframe_icons::icons! {
         CircleX => lucide "circle-x",
         Clock => lucide "clock",
         Contact => "contact",
+        DeliveryTick => "delivery-tick",
+        DeliveryTicks => "delivery-ticks",
         Copy => lucide "copy",
         Download => "download",
         Timer => "timer",
@@ -693,13 +772,40 @@ pub fn circle_button(
     }
 }
 
-/// Draws the app logo.
+/// Draws the app's mark as it ships: the lit disc and the ink bubble of
+/// `packaging/icons/zapfast.svg`, rendered once per pixel size.
+pub fn mark(ui: &egui::Ui, center: egui::Pos2, diameter: f32) {
+    let ctx = ui.ctx();
+    let pixels = (diameter * ctx.pixels_per_point()).round().max(1.0) as usize;
+    let id = egui::Id::new(("zapfast-mark", pixels));
+    let texture = match ctx.data_mut(|data| data.get_temp::<egui::TextureHandle>(id)) {
+        Some(texture) => texture,
+        None => {
+            let rgba = crate::util::app_icon_rgba(pixels);
+            let image = egui::ColorImage::from_rgba_unmultiplied([pixels, pixels], &rgba);
+            let texture = ctx.load_texture(
+                format!("zapfast-mark-{pixels}"),
+                image,
+                egui::TextureOptions::LINEAR,
+            );
+            ctx.data_mut(|data| data.insert_temp(id, texture.clone()));
+            texture
+        }
+    };
+    let rect = egui::Rect::from_center_size(center, Vec2::splat(diameter));
+    let uv = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));
+    ui.painter().image(texture.id(), rect, uv, Color32::WHITE);
+}
+
+/// Draws the logo's shape in two flat colours, for the empty conversation's
+/// faint watermark.
 pub fn logo(ui: &egui::Ui, center: egui::Pos2, diameter: f32, disc: Color32, glyph: Color32) {
     ui.painter().circle_filled(center, diameter / 2.0, disc);
-    // Match `packaging/icons/zapfast.svg`.
-    let icon_size = diameter * 0.56;
+    // Match `packaging/icons/zapfast-small.svg`: the bubble sits a little
+    // right of and above the centre, where its tail balances it.
+    let icon_size = diameter * 0.674;
     let icon_rect = egui::Rect::from_center_size(
-        center - Vec2::new(0.0, diameter * 0.02),
+        center + Vec2::new(diameter * 0.009, -diameter * 0.009),
         Vec2::splat(icon_size),
     );
     Icon::MessageCircle
@@ -774,7 +880,7 @@ pub fn soft_button(
     active: bool,
 ) -> Response {
     let font = medium(13.0);
-    let color = if active { palette.window } else { palette.text };
+    let color = if active { palette.accent } else { palette.text };
     let galley = ui.painter().layout_no_wrap(label.to_string(), font, color);
     let icon_size = 15.0;
     let icon_width = if icon.is_some() { icon_size + 6.0 } else { 0.0 };
@@ -788,8 +894,9 @@ pub fn soft_button(
     focus_outline(ui, response.id, rect, rect.height() / 2.0);
     if ui.is_rect_visible(rect) {
         let hovered = response.hovered();
+        // Active as a selected filter chip is: a tint of the accent.
         let fill = if active {
-            palette.text
+            palette.accent.gamma_multiply(0.18)
         } else if hovered {
             palette.surface_hover
         } else {
@@ -1058,6 +1165,44 @@ pub fn titlebar_inset(ctx: &egui::Context) -> f32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Timers count in Inter's tabular figures whatever face draws the
+    /// rest, and fall back like the interface text of their weight.
+    #[test]
+    fn timers_count_in_figures_of_one_width() {
+        use fastframe_fonts::Weight;
+        let mut fonts = fastframe_fonts::FontSetup::default().definitions();
+        add_tabular(&mut fonts);
+        for weight in Weight::ALL {
+            let family = &fonts.families[&tabular_family(weight)];
+            assert_eq!(family[0], format!("zapfast-tabular-{}", weight.name()));
+            assert_eq!(family[1..], fonts.families[&weight.family()][..]);
+        }
+        let ctx = egui::Context::default();
+        ctx.set_fonts(fonts);
+        let mut output = ctx.run_ui(egui::RawInput::default(), |_| {});
+        output.textures_delta.clear();
+        let widths: Vec<f32> = ["0:00", "1:11", "8:48"]
+            .into_iter()
+            .map(|time| {
+                ctx.fonts_mut(|fonts| {
+                    fonts
+                        .layout_no_wrap(
+                            time.into(),
+                            tabular(Weight::Medium, 14.0),
+                            egui::Color32::WHITE,
+                        )
+                        .size()
+                        .x
+                })
+            })
+            .collect();
+        ctx.tex_manager().write().take_delta().clear();
+        assert!(
+            widths.iter().all(|width| (width - widths[0]).abs() < 0.01),
+            "{widths:?}"
+        );
+    }
 
     #[test]
     fn raised_surfaces_get_a_lit_edge_and_a_denser_shadow() {

@@ -284,15 +284,33 @@ pub fn paint_disappearing_badge(ui: &Ui, palette: &Palette, avatar: Rect) {
 
 /// Outgoing-message status ticks.
 pub fn ticks(ui: &Ui, palette: &Palette, rect: Rect, status: Delivery) {
-    let (icon, color) = match status {
-        Delivery::None => return,
-        Delivery::Pending => (Icon::Clock, palette.secondary),
-        Delivery::Sent => (Icon::Check, palette.secondary),
-        Delivery::Delivered => (Icon::CheckCheck, palette.secondary),
-        Delivery::Read | Delivery::Played => (Icon::CheckCheck, palette.read),
-        Delivery::Failed => (Icon::CircleAlert, palette.danger),
+    ticks_in(ui, palette, rect, status, palette.secondary);
+}
+
+/// Status ticks with `plain` for the states that are not read or failed,
+/// for ticks drawn over a picture.
+pub fn ticks_in(ui: &Ui, palette: &Palette, rect: Rect, status: Delivery, plain: Color32) {
+    let Some(icon) = tick_icon(status) else {
+        return;
+    };
+    let color = match status {
+        Delivery::Read | Delivery::Played => palette.read,
+        Delivery::Failed => palette.danger,
+        _ => plain,
     };
     theme::paint_icon(ui, icon, rect, rect.height(), color);
+}
+
+/// The glyph for a delivery state: our own ticks, both as tall as each
+/// other, as people know them from their phone.
+pub fn tick_icon(status: Delivery) -> Option<Icon> {
+    Some(match status {
+        Delivery::None => return None,
+        Delivery::Pending => Icon::Clock,
+        Delivery::Sent => Icon::DeliveryTick,
+        Delivery::Delivered | Delivery::Read | Delivery::Played => Icon::DeliveryTicks,
+        Delivery::Failed => Icon::CircleAlert,
+    })
 }
 
 /// Chat-row unread badge.
@@ -545,12 +563,7 @@ pub fn menu_frame(palette: &Palette) -> egui::Frame {
         .stroke(Stroke::new(1.0, palette.outline))
         .corner_radius(CornerRadius::same(theme::RADIUS))
         .inner_margin(egui::Margin::same(6))
-        .shadow(egui::epaint::Shadow {
-            offset: [0, 6],
-            blur: 20,
-            spread: 0,
-            color: palette.shadow,
-        })
+        .shadow(palette.float_shadow())
 }
 
 pub fn empty_state(ui: &mut Ui, palette: &Palette, icon: Icon, title: &str, body: &str) {
@@ -792,25 +805,90 @@ pub fn row_highlight(ui: &Ui, palette: &Palette, rect: Rect, color: Color32) {
     ui.painter().rect_filled(card, radius, color);
 }
 
-/// A soft shadow cast downward from `edge`, for a bar that content scrolls
-/// under, beneath a hairline of the bar's raised edge. One gradient quad.
-pub fn paint_shadow_below(ui: &Ui, palette: &Palette, left: f32, right: f32, edge: f32) {
-    let height = 9.0;
-    let dark = palette.lift_shadow().gamma_multiply(0.64);
+/// The hover behind a row in a dialog's list: flat, since the dialog itself
+/// already floats, with a bubble's corners. It stops two points short of the
+/// row above and below, leaving four between neighbours; at the sides it
+/// keeps the row's width, so the avatars sit four points inside it.
+pub fn dialog_row_highlight(ui: &Ui, rect: Rect, color: Color32) {
     ui.painter().rect_filled(
-        Rect::from_min_max(pos2(left, edge - theme::RAISED_EDGE), pos2(right, edge)),
-        0.0,
-        palette.raised_edge(palette.panel),
+        rect.shrink2(vec2(0.0, 2.0)),
+        CornerRadius::same(BUBBLE_RADIUS),
+        color,
     );
+}
+
+/// Fades the rightmost `width` points of `rect` into `color`, over content
+/// that scrolls on past the edge. One gradient quad.
+pub fn fade_right(ui: &Ui, rect: Rect, width: f32, color: Color32) {
+    let fade = Rect::from_min_max(pos2(rect.right() - width, rect.top()), rect.max);
     let mut mesh = egui::Mesh::default();
-    let rect = Rect::from_min_max(pos2(left, edge), pos2(right, edge + height));
-    mesh.colored_vertex(rect.left_top(), dark);
-    mesh.colored_vertex(rect.right_top(), dark);
-    mesh.colored_vertex(rect.right_bottom(), Color32::TRANSPARENT);
-    mesh.colored_vertex(rect.left_bottom(), Color32::TRANSPARENT);
+    mesh.colored_vertex(fade.left_top(), Color32::TRANSPARENT);
+    mesh.colored_vertex(fade.right_top(), color);
+    mesh.colored_vertex(fade.right_bottom(), color);
+    mesh.colored_vertex(fade.left_bottom(), Color32::TRANSPARENT);
     mesh.add_triangle(0, 1, 2);
     mesh.add_triangle(0, 2, 3);
     ui.painter().add(egui::Shape::mesh(mesh));
+}
+
+/// How far the shadow of a bar or panel reaches over the content beside it.
+const SHADOW_REACH: f32 = 9.0;
+
+/// A soft shadow cast downward from `edge`, for a bar that content scrolls
+/// under, beneath a hairline in the palette's outline colour. One gradient
+/// quad.
+pub fn paint_shadow_below(ui: &Ui, palette: &Palette, left: f32, right: f32, edge: f32) {
+    ui.painter().rect_filled(
+        Rect::from_min_max(pos2(left, edge - 1.0), pos2(right, edge)),
+        0.0,
+        palette.outline,
+    );
+    let rect = Rect::from_min_max(pos2(left, edge), pos2(right, edge + SHADOW_REACH));
+    ui.painter()
+        .add(shadow_mesh(palette, rect, [true, true, false, false]));
+}
+
+/// The hairline down the right edge of a panel beside content, in the
+/// palette's outline colour and inside the panel, as the one along a bar's
+/// bottom is. A stroke centred on the edge would lose the half the content
+/// beside it paints over, and all but vanish at some display scales.
+pub fn paint_edge_beside(ui: &Ui, palette: &Palette, panel: Rect) {
+    ui.painter().rect_filled(
+        Rect::from_min_max(
+            pos2(panel.right() - 1.0, panel.top()),
+            pos2(panel.right(), panel.bottom()),
+        ),
+        0.0,
+        palette.outline,
+    );
+}
+
+/// The same shadow cast to the right of `edge`, from `top` to `bottom`: for
+/// a panel beside content on a lower level, as the chat list is beside the
+/// conversation. The panel draws its own hairline.
+pub fn paint_shadow_beside(ui: &Ui, palette: &Palette, edge: f32, top: f32, bottom: f32) {
+    let rect = Rect::from_min_max(pos2(edge, top), pos2(edge + SHADOW_REACH, bottom));
+    ui.painter()
+        .add(shadow_mesh(palette, rect, [true, false, false, true]));
+}
+
+/// One gradient quad over `rect`, dark at the corners marked in `dark`
+/// (left top, right top, right bottom, left bottom) and clear at the others.
+fn shadow_mesh(palette: &Palette, rect: Rect, dark: [bool; 4]) -> egui::Shape {
+    let shade = palette.lift_shadow().gamma_multiply(0.64);
+    let mut mesh = egui::Mesh::default();
+    let corners = [
+        rect.left_top(),
+        rect.right_top(),
+        rect.right_bottom(),
+        rect.left_bottom(),
+    ];
+    for (corner, dark) in corners.into_iter().zip(dark) {
+        mesh.colored_vertex(corner, if dark { shade } else { Color32::TRANSPARENT });
+    }
+    mesh.add_triangle(0, 1, 2);
+    mesh.add_triangle(0, 2, 3);
+    egui::Shape::mesh(mesh)
 }
 
 /// The side a message bubble's tail points to.
@@ -823,7 +901,7 @@ pub enum Side {
 /// Corner radius of a message bubble.
 pub const BUBBLE_RADIUS: u8 = 10;
 /// How far a bubble's tail reaches out from its side, and down from its top.
-const TAIL_WIDTH: f32 = 8.0;
+pub const TAIL_WIDTH: f32 = 8.0;
 const TAIL_HEIGHT: f32 = 11.0;
 
 /// The corners of a message bubble: the one its tail leaves is square.
@@ -933,14 +1011,21 @@ pub fn chip(ui: &mut Ui, palette: &Palette, label: &str) -> egui::Response {
     let (rect, response) = ui.allocate_exact_size(size, Sense::hover());
     if ui.is_rect_visible(rect) {
         let radius = CornerRadius::from(rect.height() / 2.0);
+        // A dark panel all but vanished on a dark chat; halfway to the
+        // incoming bubble's colour it reads as a chip without shouting.
+        let fill = if palette.dark {
+            palette.panel.lerp_to_gamma(palette.bubble_in, 0.5)
+        } else {
+            palette.panel
+        };
         ui.painter()
             .add(palette.bubble_shadow().as_shape(rect, radius));
         ui.painter().rect_filled(
             rect.translate(vec2(0.0, -theme::RAISED_EDGE)),
             radius,
-            palette.raised_edge(palette.panel),
+            palette.raised_edge(fill),
         );
-        ui.painter().rect_filled(rect, radius, palette.panel);
+        ui.painter().rect_filled(rect, radius, fill);
         ui.painter().galley(
             rect.center() - galley.size() / 2.0,
             galley,
@@ -1040,6 +1125,74 @@ pub fn dotted_chip(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The header's shadow and the chat list's are one shadow turned a
+    /// quarter: as dark at the edge casting it, clear as far into the content.
+    #[test]
+    fn a_panel_casts_beside_it_the_shadow_a_bar_casts_below() {
+        let palette = Palette::dark();
+        let mesh = |shape: egui::Shape| match shape {
+            egui::Shape::Mesh(mesh) => mesh,
+            other => panic!("not a mesh: {other:?}"),
+        };
+        let below = mesh(shadow_mesh(
+            &palette,
+            Rect::from_min_max(pos2(100.0, 50.0), pos2(400.0, 50.0 + SHADOW_REACH)),
+            [true, true, false, false],
+        ));
+        let beside = mesh(shadow_mesh(
+            &palette,
+            Rect::from_min_max(pos2(100.0, 50.0), pos2(100.0 + SHADOW_REACH, 300.0)),
+            [true, false, false, true],
+        ));
+        let shade = palette.lift_shadow().gamma_multiply(0.64);
+        assert_ne!(shade, Color32::TRANSPARENT);
+        for vertex in &below.vertices {
+            let at_edge = vertex.pos.y == 50.0;
+            assert_eq!(vertex.color == shade, at_edge, "{:?}", vertex.pos);
+            assert!(at_edge || vertex.color == Color32::TRANSPARENT);
+        }
+        for vertex in &beside.vertices {
+            let at_edge = vertex.pos.x == 100.0;
+            assert_eq!(vertex.color == shade, at_edge, "{:?}", vertex.pos);
+            assert!(at_edge || vertex.color == Color32::TRANSPARENT);
+        }
+        // Both reach equally far from their edge.
+        let reach = |mesh: &egui::Mesh, along: fn(&egui::epaint::Vertex) -> f32| {
+            let values: Vec<f32> = mesh.vertices.iter().map(along).collect();
+            values.iter().cloned().fold(f32::MIN, f32::max)
+                - values.iter().cloned().fold(f32::MAX, f32::min)
+        };
+        assert_eq!(reach(&below, |v| v.pos.y), reach(&beside, |v| v.pos.x));
+    }
+
+    /// Sent shows one tick and delivered or read two, drawn from our own
+    /// glyphs, where the second tick reaches as high as the first (#249).
+    #[test]
+    fn delivery_ticks_are_our_own_equal_height_glyphs() {
+        assert_eq!(tick_icon(Delivery::Sent), Some(Icon::DeliveryTick));
+        for status in [Delivery::Delivered, Delivery::Read, Delivery::Played] {
+            assert_eq!(tick_icon(status), Some(Icon::DeliveryTicks));
+        }
+        assert_eq!(tick_icon(Delivery::None), None);
+        let svg = include_str!("../../assets/icons/delivery-ticks.svg");
+        let tops: Vec<(f32, f32)> = svg
+            .lines()
+            .filter_map(|line| line.trim().strip_prefix("<path d=\"M"))
+            .map(|path| {
+                let numbers: Vec<f32> = path
+                    .split(['"', ' '])
+                    .take(6)
+                    .map(|number| number.parse().expect("a coordinate"))
+                    .collect();
+                // The long arm ends at the path's last point, its top.
+                (numbers[4], numbers[5])
+            })
+            .collect();
+        assert_eq!(tops.len(), 2, "two ticks");
+        assert_eq!(tops[0].1, tops[1].1, "both ticks are as tall: {tops:?}");
+        assert!(tops[1].0 > tops[0].0, "the second tick sits to the right");
+    }
 
     /// A raised frame lies on its edge: one point higher, under its fill, in
     /// the palette's raised-edge colour, with the bubble's lift shadow.
