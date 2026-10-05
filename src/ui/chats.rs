@@ -167,7 +167,7 @@ fn header(app: &mut App, ui: &mut egui::Ui) {
                             palette.text,
                             // Same as the avatar: the label says what the click
                             // does now, not what it opened.
-                            &*if app.page == Page::Settings {
+                            &if app.page == Page::Settings {
                                 crate::i18n::gettext(app.locale, "Close settings (Ctrl+,)")
                             } else {
                                 crate::i18n::gettext(app.locale, "Settings (Ctrl+,)")
