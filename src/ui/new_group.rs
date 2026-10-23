@@ -56,7 +56,7 @@ fn header(app: &mut App, ui: &mut egui::Ui, label: &str) {
                 palette.text,
                 &crate::i18n::gettext(app.locale, "Close"),
             )
-                .clicked()
+            .clicked()
             {
                 app.actions.push(Action::CloseDialog);
             }

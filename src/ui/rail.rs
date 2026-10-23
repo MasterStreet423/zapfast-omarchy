@@ -331,7 +331,6 @@ fn destination_button(
             } else {
                 gettext(app.locale, "Settings (Ctrl+,)")
             }),
-
         ),
     };
     let (cell, _) = ui.allocate_exact_size(vec2(ui.available_width(), height), Sense::hover());

@@ -9683,16 +9683,14 @@ fn voice_player(
                         .unwrap_or_else(|| crate::util::bytes(media.size)),
                 };
                 let (text, font) = match &media.state {
-                    MediaState::Failed(error) => {
-                        (
-                            crate::i18n::gettext(
-                                crate::i18n_extra::locale(),
-                                "{error}. Click to retry.",
-                            )
-                            .replace("{error}", &crate::i18n_extra::tr(error)),
-                            theme::regular(11.5),
+                    MediaState::Failed(error) => (
+                        crate::i18n::gettext(
+                            crate::i18n_extra::locale(),
+                            "{error}. Click to retry.",
                         )
-                    }
+                        .replace("{error}", &crate::i18n_extra::tr(error)),
+                        theme::regular(11.5),
+                    ),
                     _ => (
                         shown,
                         theme::tabular(fastframe_fonts::Weight::Regular, 11.5),
@@ -9940,7 +9938,6 @@ fn selection_bar(app: &mut App, ui: &mut egui::Ui, chat: &str, selected: &[Strin
                         &crate::i18n::gettext(app.locale, "Delete…"),
                         false,
                     )
-
                 })
                 .inner;
             // Demo/test: hold this menu open for a screenshot.

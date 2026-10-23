@@ -1216,7 +1216,6 @@ fn navigation_overlay(
                     palette.surface_hover,
                     palette.text,
                     hint.as_ref(),
-
                 )
                 .clicked()
                 {

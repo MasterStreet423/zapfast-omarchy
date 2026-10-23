@@ -28,8 +28,6 @@ use crate::theme::{self, Palette};
 fn download_notice(error: String) -> String {
     if error.contains("403") || error.contains("404") {
         "No longer available on WhatsApp's servers".to_owned()
-
-
     } else {
         error
     }
@@ -1743,9 +1741,9 @@ impl App {
                 Ok((account, _)) => account,
                 Err(error) => {
                     self.toast_error(
-                    crate::i18n::gettext(self.locale, "Could not add an account: {error}")
-                        .replace("{error}", &error.to_string()),
-                );
+                        crate::i18n::gettext(self.locale, "Could not add an account: {error}")
+                            .replace("{error}", &error.to_string()),
+                    );
                     return;
                 }
             }
@@ -1754,9 +1752,9 @@ impl App {
                 Ok(account) => account,
                 Err(error) => {
                     self.toast_error(
-                    crate::i18n::gettext(self.locale, "Could not add an account: {error}")
-                        .replace("{error}", &error.to_string()),
-                );
+                        crate::i18n::gettext(self.locale, "Could not add an account: {error}")
+                            .replace("{error}", &error.to_string()),
+                    );
                     return;
                 }
             }
@@ -4349,7 +4347,10 @@ impl App {
                 if !self.any_linked() {
                     self.forget_app_lock();
                 }
-                self.toast_error(crate::i18n::gettext(self.locale, "This device was unlinked from your phone"));
+                self.toast_error(crate::i18n::gettext(
+                    self.locale,
+                    "This device was unlinked from your phone",
+                ));
                 return;
             }
             LinkStatus::Failed(message) => self.toast_error(message.clone()),
@@ -6555,7 +6556,10 @@ impl App {
                     return;
                 };
                 if conversation.fetching_phone {
-                    self.toast(crate::i18n::gettext(self.locale, "History is already being requested for this chat"));
+                    self.toast(crate::i18n::gettext(
+                        self.locale,
+                        "History is already being requested for this chat",
+                    ));
                     return;
                 }
                 if conversation.message(&message).is_none() {
@@ -6564,7 +6568,10 @@ impl App {
                 conversation.fetching_phone = true;
                 conversation.phone_explicit = true;
                 self.backend.send(Command::ReloadHistory { chat, message });
-                self.toast(crate::i18n::gettext(self.locale, "Requesting earlier messages from your phone"));
+                self.toast(crate::i18n::gettext(
+                    self.locale,
+                    "Requesting earlier messages from your phone",
+                ));
             }
             Action::ToggleMotion { chat, message } => {
                 let playing = (chat, message);
@@ -6785,12 +6792,18 @@ impl App {
                 if crate::safety::can_open_attachment(&path) && path.is_file() {
                     if let Err(error) = open::that_detached(&path) {
                         self.toast_error(
-                    crate::i18n::gettext(self.locale, "Could not open the attachment: {error}")
-                        .replace("{error}", &error.to_string()),
-                );
+                            crate::i18n::gettext(
+                                self.locale,
+                                "Could not open the attachment: {error}",
+                            )
+                            .replace("{error}", &error.to_string()),
+                        );
                     }
                 } else {
-                    self.toast(crate::i18n::gettext(self.locale, "For safety, open this file yourself from its folder"));
+                    self.toast(crate::i18n::gettext(
+                        self.locale,
+                        "For safety, open this file yourself from its folder",
+                    ));
                     if let Some(folder) = path.parent() {
                         self.actions.push(Action::OpenFolder(folder.to_owned()));
                     }
@@ -6808,12 +6821,15 @@ impl App {
                 if path.is_dir() {
                     if let Err(error) = open::that_detached(&path) {
                         self.toast_error(
-                    crate::i18n::gettext(self.locale, "Could not open the folder: {error}")
-                        .replace("{error}", &error.to_string()),
-                );
+                            crate::i18n::gettext(self.locale, "Could not open the folder: {error}")
+                                .replace("{error}", &error.to_string()),
+                        );
                     }
                 } else {
-                    self.toast_error(crate::i18n::gettext(self.locale, "The folder is unavailable"));
+                    self.toast_error(crate::i18n::gettext(
+                        self.locale,
+                        "The folder is unavailable",
+                    ));
                 }
             }
             Action::OpenUrl(url) => {
@@ -6836,7 +6852,10 @@ impl App {
                 } else if let Some(url) = crate::safety::external_url(&url) {
                     ctx.open_url(egui::OpenUrl::new_tab(url));
                 } else {
-                    self.toast_error(crate::i18n::gettext(self.locale, "This link type cannot be opened from ZapFast"));
+                    self.toast_error(crate::i18n::gettext(
+                        self.locale,
+                        "This link type cannot be opened from ZapFast",
+                    ));
                 }
             }
             Action::CopyText(text) => {
@@ -9088,8 +9107,11 @@ impl App {
             Err(error) => {
                 if outcome.changed {
                     self.toast_error(
-                        crate::i18n::gettext(self.locale, "Could not change the login item: {error}")
-                            .replace("{error}", &error.to_string()),
+                        crate::i18n::gettext(
+                            self.locale,
+                            "Could not change the login item: {error}",
+                        )
+                        .replace("{error}", &error.to_string()),
                     );
                 }
             }
@@ -9685,7 +9707,8 @@ impl App {
         // was said, so the log keeps them for bug reports (#382).
         log::warn!("recording failed: {error}");
         self.toast_error(
-            crate::i18n::gettext(self.locale, "Could not record: {error}").replace("{error}", error),
+            crate::i18n::gettext(self.locale, "Could not record: {error}")
+                .replace("{error}", error),
         );
     }
 
@@ -12889,7 +12912,11 @@ mod tests {
             let mut output = ctx.run_ui(egui::RawInput::default(), |_| app.apply_theme(&ctx));
             output.textures_delta.clear();
             let id = app.wallpaper.1.as_ref().expect("uploaded").id();
-            let name = ctx.tex_manager().read().meta(id).map(|meta| meta.name.clone());
+            let name = ctx
+                .tex_manager()
+                .read()
+                .meta(id)
+                .map(|meta| meta.name.clone());
             assert_eq!(name.as_deref(), Some("omarchy-wallpaper"));
         }
     }

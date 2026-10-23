@@ -1969,7 +1969,6 @@ fn sound_control(ui: &mut egui::Ui, app: &mut App, mention: bool) {
     let selected = match &current {
         NotificationSound::Custom(path) => path.file_name().map_or_else(
             || crate::i18n::gettext(locale, "Custom").into_owned(),
-
             |name| name.to_string_lossy().into_owned(),
         ),
         sound => choices

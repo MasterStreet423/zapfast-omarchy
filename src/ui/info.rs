@@ -385,45 +385,47 @@ fn identity(app: &mut App, ui: &mut egui::Ui, shown: &Shown, overlay: bool) {
             let mut submit = false;
             ui.horizontal(|ui| {
                 ui.add_space((ui.available_width() - 288.0).max(0.0) / 2.0);
-                let name_field = |ui: &mut egui::Ui, buffer: &mut String, salt: &str, hint| {
-                    let format = egui::TextFormat::simple(theme::semibold(15.0), palette.text);
-                    let mut layouter = |ui: &egui::Ui, text: &dyn egui::TextBuffer, wrap: f32| {
-                        crate::bidi::layout_field(ui, text.as_str(), &format, wrap)
+                let name_field =
+                    |ui: &mut egui::Ui, buffer: &mut String, salt: &str, hint: &str| {
+                        let format = egui::TextFormat::simple(theme::semibold(15.0), palette.text);
+                        let mut layouter =
+                            |ui: &egui::Ui, text: &dyn egui::TextBuffer, wrap: f32| {
+                                crate::bidi::layout_field(ui, text.as_str(), &format, wrap)
+                            };
+                        let align = if crate::bidi::base_rtl(buffer) {
+                            Align::RIGHT
+                        } else {
+                            Align::LEFT
+                        };
+                        let field = Frame::new()
+                            .fill(palette.surface)
+                            .corner_radius(CornerRadius::same(theme::RADIUS))
+                            .inner_margin(Margin::symmetric(10, 5))
+                            .show(ui, |ui| {
+                                ui.add(
+                                    egui::TextEdit::singleline(buffer)
+                                        .id(egui::Id::new(salt))
+                                        .hint_text(
+                                            egui::RichText::new(hint)
+                                                .color(palette.dim)
+                                                .font(theme::semibold(15.0)),
+                                        )
+                                        .font(theme::semibold(15.0))
+                                        .text_color(palette.text)
+                                        .frame(Frame::NONE)
+                                        .desired_width(108.0)
+                                        .horizontal_align(align)
+                                        .layouter(&mut layouter),
+                                )
+                            });
+                        theme::focus_outline(
+                            ui,
+                            field.inner.id,
+                            field.response.rect,
+                            f32::from(theme::RADIUS),
+                        );
+                        field.inner
                     };
-                    let align = if crate::bidi::base_rtl(buffer) {
-                        Align::RIGHT
-                    } else {
-                        Align::LEFT
-                    };
-                    let field = Frame::new()
-                        .fill(palette.surface)
-                        .corner_radius(CornerRadius::same(theme::RADIUS))
-                        .inner_margin(Margin::symmetric(10, 5))
-                        .show(ui, |ui| {
-                            ui.add(
-                                egui::TextEdit::singleline(buffer)
-                                    .id(egui::Id::new(salt))
-                                    .hint_text(
-                                        egui::RichText::new(hint)
-                                            .color(palette.dim)
-                                            .font(theme::semibold(15.0)),
-                                    )
-                                    .font(theme::semibold(15.0))
-                                    .text_color(palette.text)
-                                    .frame(Frame::NONE)
-                                    .desired_width(108.0)
-                                    .horizontal_align(align)
-                                    .layouter(&mut layouter),
-                            )
-                        });
-                    theme::focus_outline(
-                        ui,
-                        field.inner.id,
-                        field.response.rect,
-                        f32::from(theme::RADIUS),
-                    );
-                    field.inner
-                };
                 let first_field = name_field(
                     ui,
                     first,
@@ -753,7 +755,6 @@ fn members(app: &mut App, ui: &mut egui::Ui, shown: &Shown, window: f32, photo: 
     theme::text(
         ui,
         crate::i18n::gettext(app.locale, "Members ({})").replace("{}", &members.len().to_string()),
-
         theme::medium(12.5),
         palette.secondary,
     );

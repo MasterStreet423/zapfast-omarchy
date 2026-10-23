@@ -26,7 +26,7 @@ pub fn send(app: &mut App, ui: &mut egui::Ui, chat: &str) {
                 palette.text,
                 &crate::i18n::gettext(app.locale, "Close"),
             )
-                .clicked()
+            .clicked()
             {
                 app.actions.push(Action::CloseDialog);
             }

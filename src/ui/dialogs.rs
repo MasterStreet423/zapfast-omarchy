@@ -1067,8 +1067,11 @@ fn join_group(app: &mut App, ui: &mut egui::Ui) {
             ui.horizontal(|ui| {
                 crate::motion::egui_spinner(ui);
                 ui.label(
-                    egui::RichText::new(&*crate::i18n::gettext(app.locale, "Looking up the group…"))
-                        .color(palette.secondary),
+                    egui::RichText::new(&*crate::i18n::gettext(
+                        app.locale,
+                        "Looking up the group…",
+                    ))
+                    .color(palette.secondary),
                 );
             });
             cancel_row(app, ui);
@@ -1972,13 +1975,8 @@ fn new_contact(app: &mut App, ui: &mut egui::Ui) {
                     (save, message)
                 })
                 .inner;
-            if theme::pill_button(
-                ui,
-                &palette,
-                &crate::i18n::gettext(locale, "Cancel"),
-                false,
-            )
-            .clicked()
+            if theme::pill_button(ui, &palette, &crate::i18n::gettext(locale, "Cancel"), false)
+                .clicked()
             {
                 app.actions.push(Action::CloseDialog);
             }

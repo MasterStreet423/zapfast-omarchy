@@ -41,16 +41,32 @@ pub fn tr(english: &str) -> Cow<'static, str> {
         "Stickers" => gettext(locale, "Stickers"),
         // Keyboard shortcuts
         "Search chats" => gettext(locale, "Search chats"),
-        "Search the open chat or the settings" => gettext(locale, "Search the open chat or the settings"),
-        "Walk the open chat's search results and jump to one" => gettext(locale, "Walk the open chat's search results and jump to one"),
-        "Previous / next chat, as in WhatsApp" => gettext(locale, "Previous / next chat, as in WhatsApp"),
+        "Search the open chat or the settings" => {
+            gettext(locale, "Search the open chat or the settings")
+        }
+        "Walk the open chat's search results and jump to one" => gettext(
+            locale,
+            "Walk the open chat's search results and jump to one",
+        ),
+        "Previous / next chat, as in WhatsApp" => {
+            gettext(locale, "Previous / next chat, as in WhatsApp")
+        }
         "Chats" => gettext(locale, "Chats"),
         "Calls" => gettext(locale, "Calls"),
-        "Dismiss the current action, return from search, Calls or Starred, or close the chat" => gettext(locale, "Dismiss the current action, return from search, Calls or Starred, or close the chat"),
-        "Archive or unarchive the open chat" => gettext(locale, "Archive or unarchive the open chat"),
+        "Dismiss the current action, return from search, Calls or Starred, or close the chat" => {
+            gettext(
+                locale,
+                "Dismiss the current action, return from search, Calls or Starred, or close the chat",
+            )
+        }
+        "Archive or unarchive the open chat" => {
+            gettext(locale, "Archive or unarchive the open chat")
+        }
         "Switch to the next linked number" => gettext(locale, "Switch to the next linked number"),
         "Copy the selected messages" => gettext(locale, "Copy the selected messages"),
-        "Previous / next item in the media viewer" => gettext(locale, "Previous / next item in the media viewer"),
+        "Previous / next item in the media viewer" => {
+            gettext(locale, "Previous / next item in the media viewer")
+        }
         "Search the open chat (Enter for the next match)" => {
             gettext(locale, "Search the open chat (Enter for the next match)")
         }
@@ -113,10 +129,12 @@ pub fn tr(english: &str) -> Cow<'static, str> {
             locale,
             "Enter the whole number, starting with the country code",
         ),
-        "Enter a phone number with its country code, using only digits, spaces, hyphens and brackets" => gettext(
-            locale,
-            "Enter a phone number with its country code, using only digits, spaces, hyphens and brackets",
-        ),
+        "Enter a phone number with its country code, using only digits, spaces, hyphens and brackets" => {
+            gettext(
+                locale,
+                "Enter a phone number with its country code, using only digits, spaces, hyphens and brackets",
+            )
+        }
         // Download failures kept on the attachment
         "No longer available on WhatsApp's servers" => {
             gettext(locale, "No longer available on WhatsApp's servers")
@@ -131,8 +149,6 @@ pub fn tr(english: &str) -> Cow<'static, str> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     #[test]
     fn every_spanish_message_is_translated() {
         let po = include_str!("../assets/i18n/es.po");

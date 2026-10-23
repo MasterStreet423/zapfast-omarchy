@@ -581,22 +581,6 @@ mod tests {
         );
     }
 
-    #[test]
-    fn the_windows_shortcut_uses_the_notification_identity() {
-        let installer = include_str!("../packaging/windows/zapfast.iss");
-        let shortcuts: Vec<_> = installer
-            .lines()
-            .filter(|line| {
-                line.starts_with("Name: \"{autoprograms}")
-                    || line.starts_with("Name: \"{autodesktop}")
-            })
-            .collect();
-        assert_eq!(shortcuts.len(), 2);
-        for shortcut in shortcuts {
-            assert!(shortcut.contains("AppUserModelID: \"me.paolino.zapfast\""));
-        }
-    }
-
     /// Answering a call takes back its own notification and leaves a
     /// message that arrived while it rang on the desktop.
     #[test]

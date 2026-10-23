@@ -206,7 +206,7 @@ fn header(app: &mut App, ui: &mut egui::Ui) {
                         }
                         header_title(
                             ui,
-                            &*if app.locked_folder {
+                            &if app.locked_folder {
                                 crate::i18n::gettext(app.locale, "Locked chats")
                             } else {
                                 crate::i18n::gettext(app.locale, "Archived")
@@ -542,7 +542,7 @@ fn macos_header(app: &mut App, ui: &mut egui::Ui) {
                     }
                     header_title(
                         ui,
-                        &*if app.locked_folder {
+                        &if app.locked_folder {
                             crate::i18n::gettext(app.locale, "Locked chats")
                         } else {
                             crate::i18n::gettext(app.locale, "Archived")
@@ -1587,10 +1587,8 @@ fn row(app: &mut App, ui: &mut egui::Ui, chat: &Chat) -> egui::Response {
             let who = if chat.is_group() {
                 crate::i18n::gettext(app.locale, "{one} is typing…")
                     .replace("{one}", typing[0].1.trim_start_matches('~'))
-
             } else {
                 crate::i18n::gettext(app.locale, "typing…").into_owned()
-
             };
             widgets::line(
                 ui,
@@ -2310,7 +2308,6 @@ fn voice_speed_menu(app: &mut App, ui: &mut egui::Ui, palette: &Palette, chat: &
         palette,
         Icon::Play,
         &crate::i18n::gettext(app.locale, "Voice message speed"),
-
         &items,
         |ui| {
             for (speed, label) in &options {
