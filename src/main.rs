@@ -451,6 +451,8 @@ fn run() -> eframe::Result<()> {
                 zapfast::backdrop::transparent_window(lease.peek(|app: &app::App| {
                     app.settings.theme == zapfast::settings::ThemeChoice::Messages
                 }));
+            // A clicked notification's answer gets the small floating window.
+            let quick = lease.peek(|app: &app::App| app.quick_window_pending());
             let geometry = if demo_persistence.is_some() {
                 fastframe_shell::window::Geometry::default()
             } else {
@@ -474,7 +476,11 @@ fn run() -> eframe::Result<()> {
             });
             eframe::run_native(
                 "ZapFast",
-                native_options(demo_persistence.clone(), geometry, transparent),
+                if quick {
+                    quick_options()
+                } else {
+                    native_options(demo_persistence.clone(), geometry, transparent)
+                },
                 Box::new(move |cc| {
                     let mut app = lease.take(&cc.egui_ctx);
                     app.attach(&cc.egui_ctx);
@@ -603,6 +609,24 @@ fn demo_size_arg() -> Option<[f32; 2]> {
 #[cfg(feature = "demo")]
 fn tour_script(name: &str) -> zapfast::demo::tour::Script {
     zapfast::demo::tour::Script::from_name(name).unwrap_or_default()
+}
+
+/// The floating window that answers a notification: small, opaque, with no
+/// frame of its own, under the app id the compositor floats. It remembers
+/// nothing: the full window's size and place stay the full window's.
+fn quick_options() -> eframe::NativeOptions {
+    let viewport = egui::ViewportBuilder::default()
+        .with_title("ZapFast")
+        .with_app_id(zapfast::app::quick_reply::APP_ID)
+        .with_inner_size(zapfast::app::quick_reply::SIZE)
+        .with_min_inner_size([320.0, 240.0])
+        .with_icon(app_icon())
+        .with_decorations(false);
+    eframe::NativeOptions {
+        viewport,
+        persist_window: false,
+        ..Default::default()
+    }
 }
 
 fn native_options(
@@ -829,7 +853,11 @@ impl Shell {
         if std::mem::take(&mut self.open_phone_menu) {
             egui::Popup::open_id(ui.ctx(), zapfast::demo::phone_menu_popup_id());
         }
-        app.frame_ui(ui);
+        if app.is_quick_window() {
+            app.quick_frame_ui(ui);
+        } else {
+            app.frame_ui(ui);
+        }
         let startups: Vec<_> = app
             .accounts
             .iter_mut()

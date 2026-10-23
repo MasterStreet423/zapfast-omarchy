@@ -486,6 +486,9 @@ pub struct Settings {
     /// Notifications name the chat and sender and show the message. Off,
     /// every one says only "New message", as behind the app lock.
     pub notification_content: bool,
+    /// A message notification's click opens a small window to answer it,
+    /// not the full window.
+    pub quick_reply: bool,
     /// Sound for new messages, in one-to-one chats and groups alike.
     pub message_sound: NotificationSound,
     /// Sound for group messages that mention us or reply to one of ours, as
@@ -584,6 +587,7 @@ impl Default for Settings {
             keep_running_in_background: true,
             notifications: true,
             notification_content: true,
+            quick_reply: true,
             message_sound: NotificationSound::Receive,
             mention_sound: NotificationSound::Alert,
             group_sounds: true,

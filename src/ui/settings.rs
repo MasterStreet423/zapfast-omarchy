@@ -542,6 +542,14 @@ fn sections(app: &App) -> Vec<Section> {
             translated(locale, "When off, they say only “New message”."),
             |settings| &mut settings.notification_content,
         );
+        notifications.toggle(
+            translated(locale, "Reply from the notification"),
+            translated(
+                locale,
+                "Clicking a message’s notification opens a small window to answer it. Ctrl+O there opens the chat.",
+            ),
+            |settings| &mut settings.quick_reply,
+        );
         notifications.row(title, description, |ui, app| sound_control(ui, app, false));
         notifications.row(
             translated(locale, "Limit repeat notifications"),

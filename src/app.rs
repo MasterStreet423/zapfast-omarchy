@@ -815,6 +815,13 @@ pub struct App {
     /// Whether the current window close should reopen a fresh one at once
     /// (`Closed::Reopen`) rather than stop drawing.
     reopen: bool,
+    /// The answer under way in the floating window, from a clicked
+    /// notification; see [`quick_reply`].
+    quick_reply: Option<quick_reply::QuickReply>,
+    /// Whether the next window the shell makes is the floating one.
+    quick_pending: bool,
+    /// Whether the window on screen is the floating one alone.
+    quick_window: bool,
     /// Requests received from later launches.
     control_commands: Option<std::sync::Arc<std::sync::Mutex<Vec<ControlCommand>>>>,
     /// Chats and messages from clicked notifications.
@@ -1515,6 +1522,9 @@ impl App {
             tray_wait: None,
             wayland: wayland_session(),
             reopen: false,
+            quick_reply: None,
+            quick_pending: false,
+            quick_window: false,
             control_commands: None,
             notification_opens: Default::default(),
             notifications: Default::default(),
@@ -1861,6 +1871,10 @@ impl App {
         self.window_focused = false;
         self.hide_intent = false;
         self.wants_show = false;
+        // The floating window goes with whichever window it was in.
+        self.quick_reply = None;
+        self.quick_pending = false;
+        self.quick_window = false;
         // The window is gone with the full screen it was in; a new one starts
         // at its normal size.
         self.call_fullscreen = false;
@@ -2028,6 +2042,11 @@ impl App {
                 continue;
             }
             self.switch_account(&target.account);
+            if let Some(message) = &target.message
+                && self.open_quick_reply(&target.chat, message)
+            {
+                continue;
+            }
             match target.message {
                 Some(message) => self.actions.push(Action::OpenMessage {
                     chat: target.chat,
@@ -2236,6 +2255,7 @@ impl App {
         self.hide_intent = false;
         self.wants_show = false;
         self.reopen = false;
+        self.quick_window = std::mem::take(&mut self.quick_pending) && self.quick_reply.is_some();
         self.refocus_composer(ctx);
         // Before the tray: muda keeps the first menu handler it is given, and
         // the tray installs one when it makes its item on the first window.
@@ -5951,6 +5971,14 @@ impl App {
     /// passes eframe runs without `ui` for a minimized or covered one. Call it
     /// from `eframe::App::logic`, after [`Self::background_frame`].
     pub fn window_logic(&mut self, ctx: &egui::Context) {
+        if self.quick_window {
+            // The floating window is not the one to remember, and closing
+            // it always goes back to the tray.
+            if ctx.input(|input| input.viewport().close_requested()) && !self.quit_requested {
+                self.hide_intent = true;
+            }
+            return;
+        }
         self.sync_window_state(ctx);
         // Close the window and continue headless when background mode is
         // enabled. Decided here rather than in `frame_ui`, which eframe skips
@@ -8627,7 +8655,13 @@ impl App {
                 ctx.send_viewport_cmd(egui::ViewportCommand::Close);
             }
             Action::ShowWindow => {
-                if self.window_hidden {
+                // The full window takes over from the floating one.
+                self.quick_pending = false;
+                if self.quick_window {
+                    self.quick_reply = None;
+                    self.reopen = true;
+                    ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                } else if self.window_hidden {
                     // The headless loop in `main` will create the window.
                     self.wants_show = true;
                 } else if self.wayland && self.raise_on_compositor() {
@@ -9756,6 +9790,7 @@ impl App {
             self.take_drops_and_pastes(ctx);
         }
         crate::ui::show(self, ui);
+        self.show_quick_viewport(ctx);
         self.apply_actions(ctx);
         // The old colours, if a change is being revealed, go over everything.
         self.theme_transition.paint(ctx);
@@ -10449,6 +10484,7 @@ fn notification_eligible(chat: &Chat, now: i64, message_at: i64) -> bool {
 
 mod calls;
 pub use calls::CallPerson;
+pub mod quick_reply;
 
 #[cfg(test)]
 mod tests {
@@ -16831,6 +16867,8 @@ mod tests {
     #[test]
     fn a_clicked_notification_opens_the_message_it_announced() {
         let mut app = app();
+        // The full window's click; the floating answer has its own tests.
+        app.settings.quick_reply = false;
         let ctx = egui::Context::default();
         let chat = "1@s.whatsapp.net";
         app.chats = vec![Chat::new(chat.into(), "Ada".into())];

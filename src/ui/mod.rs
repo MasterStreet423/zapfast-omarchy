@@ -21,6 +21,7 @@ pub mod new_group;
 pub mod pane;
 pub mod picker;
 pub mod polls;
+pub mod quick_reply;
 pub mod rail;
 pub mod settings;
 pub mod update;

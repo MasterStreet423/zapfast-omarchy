@@ -31,3 +31,5 @@ src/ui/rail.rs
 src/ui/mod.rs
 src/ui/new_group.rs
 src/group_admin.rs
+src/app/quick_reply.rs
+src/ui/quick_reply.rs
