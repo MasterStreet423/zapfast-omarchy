@@ -2720,6 +2720,1178 @@ msgstr "{count} chats sin leer"
 msgid "Use another account"
 msgstr "Usar otra cuenta"
 
+#. Translators: one word, no spaces. The word after @ that mentions everyone.
+#: src/mentions.rs:80
+msgctxt "mention"
+msgid "all"
+msgstr "todos"
+
+#: src/new_group.rs:190 src/ui/new_group.rs:445
+msgid "Enter a name for the group."
+msgstr "Escribe un nombre para el grupo."
+
+#: src/new_group.rs:192
+#, rust-format
+msgid "A group name can have at most {count} characters."
+msgstr "El nombre de un grupo puede tener como máximo {count} caracteres."
+
+#: src/new_group.rs:196
+msgid "Choose at least one person for the group."
+msgstr "Elige al menos una persona para el grupo."
+
+#: src/new_group.rs:198
+msgid "Connect to WhatsApp to create a group."
+msgstr "Conéctate a WhatsApp para crear un grupo."
+
+#: src/new_group.rs:201
+msgid ""
+"WhatsApp did not answer in time. If the group does not appear shortly, try "
+"again."
+msgstr ""
+"WhatsApp no respondió a tiempo. Si el grupo no aparece en breve, inténtalo "
+"de nuevo."
+
+#: src/new_group.rs:206
+msgid "WhatsApp does not allow this account to create groups right now."
+msgstr "WhatsApp no permite que esta cuenta cree grupos ahora mismo."
+
+#: src/new_group.rs:211
+msgid "You have created too many groups recently. Try again later."
+msgstr "Has creado demasiados grupos recientemente. Inténtalo más tarde."
+
+#: src/new_group.rs:216
+msgid "WhatsApp did not accept this group's name or members."
+msgstr "WhatsApp no aceptó el nombre o los miembros de este grupo."
+
+#: src/new_group.rs:219
+msgid "Could not create the group. Try again."
+msgstr "No se pudo crear el grupo. Inténtalo de nuevo."
+
+#: src/new_group.rs:258
+#, rust-format
+msgid ""
+"{names} could not be added to the group. Their privacy settings may not "
+"allow it."
+msgstr ""
+"No se pudo añadir a {names} al grupo. Es posible que su configuración de "
+"privacidad no lo permita."
+
+#: src/model.rs:234
+msgid "Missed"
+msgstr "Perdidas"
+
+#: src/model.rs:1626 src/ui/calls.rs:94
+msgid "Missed voice call"
+msgstr "Llamada de voz perdida"
+
+#: src/model.rs:1627 src/ui/calls.rs:95
+msgid "Missed video call"
+msgstr "Videollamada perdida"
+
+#: src/model.rs:1628 src/ui/conversation.rs:734 src/ui/conversation.rs:4211
+#: src/ui/calls.rs:98 src/ui/calls.rs:383
+msgid "Voice call"
+msgstr "Llamada de voz"
+
+#: src/model.rs:1629 src/ui/conversation.rs:762 src/ui/conversation.rs:4219
+#: src/ui/calls.rs:99 src/ui/calls.rs:381
+msgid "Video call"
+msgstr "Videollamada"
+
+#: src/util.rs:305 src/settings.rs:380
+msgid "Off"
+msgstr "Desactivado"
+
+#: src/util.rs:306
+msgid "24 hours"
+msgstr "24 horas"
+
+#: src/util.rs:307
+msgid "7 days"
+msgstr "7 días"
+
+#: src/util.rs:308
+msgid "90 days"
+msgstr "90 días"
+
+#: src/util.rs:311
+msgid "Disappearing messages"
+msgstr "Mensajes temporales"
+
+#: src/util.rs:581
+#, rust-format
+msgid "{seconds} s"
+msgstr "{seconds} s"
+
+#: src/util.rs:582
+#, rust-format
+msgid "{minutes} min"
+msgstr "{minutes} min"
+
+#: src/util.rs:583
+#, rust-format
+msgid "{minutes} min {seconds} s"
+msgstr "{minutes} min {seconds} s"
+
+#: src/util.rs:584
+#, rust-format
+msgid "{hours} h"
+msgstr "{hours} h"
+
+#: src/util.rs:585
+#, rust-format
+msgid "{hours} h {minutes} min"
+msgstr "{hours} h {minutes} min"
+
+#: src/ui/chats.rs:185 src/ui/chats.rs:517 src/app.rs:3191
+msgid "Starred"
+msgstr "Destacados"
+
+#: src/ui/chats.rs:262 src/ui/conversation.rs:828
+msgid "Back to the calls"
+msgstr "Volver a las llamadas"
+
+#: src/ui/chats.rs:271 src/ui/chats.rs:404
+msgid "New call"
+msgstr "Nueva llamada"
+
+#: src/ui/chats.rs:285
+msgid "Search name or number"
+msgstr "Buscar nombre o número"
+
+#: src/ui/chats.rs:686
+msgid "No starred messages"
+msgstr "No hay mensajes destacados"
+
+#: src/ui/chats.rs:689
+msgid "Right-click a message and choose Star to keep it here."
+msgstr "Haz clic derecho en un mensaje y elige Destacar para guardarlo aquí."
+
+#: src/ui/conversation.rs:252
+#, rust-format
+msgid "Pinned message {index} of {count}: {text}"
+msgstr "Mensaje fijado {index} de {count}: {text}"
+
+#: src/ui/conversation.rs:606
+msgid "Select messages"
+msgstr "Seleccionar mensajes"
+
+#: src/ui/conversation.rs:727 src/ui/call.rs:129 src/ui/call.rs:577
+msgid "Hang up"
+msgstr "Colgar"
+
+#: src/ui/conversation.rs:1437
+msgid "Original group message unavailable"
+msgstr "El mensaje original del grupo no está disponible"
+
+#: src/ui/conversation.rs:2023
+msgid "Send as document"
+msgstr "Enviar como documento"
+
+#: src/ui/conversation.rs:2027 src/ui/locations.rs:16
+msgid "Send location"
+msgstr "Enviar ubicación"
+
+#: src/ui/conversation.rs:2356
+msgid "You pinned a message"
+msgstr "Has fijado un mensaje"
+
+#: src/ui/conversation.rs:2359
+msgid "A message was pinned"
+msgstr "Se ha fijado un mensaje"
+
+#: src/ui/conversation.rs:2361
+#, rust-format
+msgid "{} pinned a message"
+msgstr "{} ha fijado un mensaje"
+
+#: src/ui/conversation.rs:3076
+#, rust-format
+msgid "Select message from {sender}, {time}: {summary}"
+msgstr "Seleccionar mensaje de {sender} ({time}): {summary}"
+
+#: src/ui/conversation.rs:4202
+msgid "Group calls happen on the phone"
+msgstr "Las llamadas grupales se hacen en el teléfono"
+
+#: src/ui/conversation.rs:5641 src/ui/conversation.rs:5970
+msgid "Reply privately"
+msgstr "Responder en privado"
+
+#: src/ui/conversation.rs:5642 src/ui/conversation.rs:5982
+msgid "Star"
+msgstr "Destacar"
+
+#: src/ui/conversation.rs:5643 src/ui/conversation.rs:5980
+msgid "Unstar"
+msgstr "Quitar destacado"
+
+#: src/ui/conversation.rs:5644 src/ui/conversation.rs:5998
+msgid "Pin message"
+msgstr "Fijar mensaje"
+
+#: src/ui/conversation.rs:5645 src/ui/conversation.rs:5996
+msgid "Unpin message"
+msgstr "Dejar de fijar"
+
+#: src/ui/conversation.rs:5647 src/ui/conversation.rs:6030
+msgid "Open in the viewer"
+msgstr "Abrir en la vista previa"
+
+#: src/ui/conversation.rs:7273
+msgid "Save all…"
+msgstr "Guardar todo…"
+
+#: src/ui/dialogs.rs:440 src/ui/new_group.rs:285
+msgid "New group"
+msgstr "Nuevo grupo"
+
+#: src/ui/dialogs.rs:509
+#, rust-format
+msgid "Forward {count} message"
+msgid_plural "Forward {count} messages"
+msgstr[0] "Reenviar {count} mensaje"
+msgstr[1] "Reenviar {count} mensajes"
+
+#: src/ui/dialogs.rs:519
+msgid "Forward to these chats?"
+msgstr "¿Reenviar a estos chats?"
+
+#: src/ui/dialogs.rs:538 src/ui/info.rs:274 src/ui/info.rs:1050
+#: src/ui/info.rs:1690 src/ui/new_group.rs:35 src/ui/new_group.rs:456
+msgid "Back"
+msgstr "Atrás"
+
+#: src/ui/dialogs.rs:693
+msgid "Messages forwarded many times can be sent to one chat at a time"
+msgstr ""
+"Los mensajes reenviados muchas veces solo pueden enviarse a un chat a la vez"
+
+#: src/ui/dialogs.rs:701
+#, rust-format
+msgid "You can forward to up to {count} chat"
+msgid_plural "You can forward to up to {count} chats"
+msgstr[0] "Puedes reenviar a un máximo de {count} chat"
+msgstr[1] "Puedes reenviar a un máximo de {count} chats"
+
+#: src/ui/dialogs.rs:727
+#, rust-format
+msgid "{count} recipient selected"
+msgid_plural "{count} recipients selected"
+msgstr[0] "{count} destinatario seleccionado"
+msgstr[1] "{count} destinatarios seleccionados"
+
+#
+#: src/ui/dialogs.rs:738
+msgid "Review recipients"
+msgstr "Revisar destinatarios"
+
+#: src/ui/dialogs.rs:936
+#, rust-format
+msgid "{count} selected message"
+msgid_plural "{count} selected messages"
+msgstr[0] "{count} mensaje seleccionado"
+msgstr[1] "{count} mensajes seleccionados"
+
+#: src/ui/dialogs.rs:1290
+msgid ""
+"This removes these messages from your phone and linked devices. Other people "
+"keep their copy. Connect to WhatsApp to delete them. This cannot be undone."
+msgstr ""
+"Esto elimina estos mensajes de tu teléfono y dispositivos vinculados. Las "
+"demás personas conservan su copia. Conéctate a WhatsApp para eliminarlos. "
+"Esta acción no se puede deshacer."
+
+#: src/ui/dialogs.rs:1291
+#, rust-format
+msgid ""
+"Everyone in this chat will see \"This message was deleted\" in place of the "
+"selected message. This cannot be undone."
+msgid_plural ""
+"Everyone in this chat will see \"This message was deleted\" in place of the "
+"selected messages. This cannot be undone."
+msgstr[0] ""
+"Todos en este chat verán \"Este mensaje fue eliminado\" en lugar del mensaje "
+"seleccionado. No se puede deshacer."
+msgstr[1] ""
+"Todos en este chat verán \"Este mensaje fue eliminado\" en lugar de los "
+"mensajes seleccionados. No se puede deshacer."
+
+#: src/ui/dialogs.rs:1363
+#, rust-format
+msgid ""
+"This deletes \"{name}\" and its stickers from this computer. To use it "
+"again, import it again."
+msgstr ""
+"Esto elimina «{name}» y sus stickers de este ordenador. Para volver a "
+"usarlo, impórtalo de nuevo."
+
+#: src/ui/dialogs.rs:1369
+msgid "Remove sticker pack?"
+msgstr "¿Quitar el paquete de stickers?"
+
+#: src/ui/dialogs.rs:1402
+msgid "Clear the media cache?"
+msgstr "¿Vaciar la caché multimedia?"
+
+#: src/ui/dialogs.rs:1406
+#, rust-format
+msgid ""
+"This deletes the photos, videos, stickers and files {account} downloaded to "
+"this computer. Messages stay, and attachments download again when you open "
+"them, while WhatsApp still has them."
+msgstr ""
+"Se eliminarán las fotos, los vídeos, los stickers y los archivos que "
+"{account} descargó en este ordenador. Los mensajes se conservan y los "
+"adjuntos se vuelven a descargar al abrirlos, mientras WhatsApp los tenga."
+
+#: src/ui/dialogs.rs:1411
+msgid "Files in a download folder you chose are kept."
+msgstr ""
+"Se conservan los archivos de una carpeta de descargas que hayas elegido."
+
+#: src/ui/dialogs.rs:1480
+msgid "Reset the invite link?"
+msgstr ""
+
+#: src/ui/dialogs.rs:1486
+msgid ""
+"The current link will stop working, and nobody can join with it any more. A "
+"new link replaces it."
+msgstr ""
+
+#: src/ui/dialogs.rs:1495 src/ui/info.rs:1608
+msgid "Reset link"
+msgstr ""
+
+#: src/ui/dialogs.rs:1512
+msgid "Remove from the group?"
+msgstr ""
+
+#: src/ui/dialogs.rs:1518
+#, rust-format
+msgid ""
+"{name} will no longer receive messages from {group}. You can add them again "
+"later."
+msgstr ""
+
+#: src/ui/locations.rs:29
+msgid "Paste a map link or coordinates"
+msgstr "Pega un enlace de mapa o coordenadas"
+
+#: src/ui/locations.rs:58
+msgid ""
+"Short links only open online. Paste the full map link or the coordinates."
+msgstr ""
+"Los enlaces cortos solo se abren en línea. Pega el enlace completo del mapa "
+"o las coordenadas."
+
+#: src/ui/locations.rs:67
+msgid "That is not a location."
+msgstr "Eso no es una ubicación."
+
+#: src/ui/settings.rs:421 src/ui/settings.rs:1862
+msgid "Custom title bar"
+msgstr "Barra de título personalizada"
+
+#: src/ui/settings.rs:424
+msgid ""
+"Draw ZapFast's own title bar and window buttons instead of the desktop's."
+msgstr ""
+"Dibuja la barra de título y los botones de ventana propios de ZapFast en "
+"lugar de los del escritorio."
+
+#: src/ui/settings.rs:445
+msgid "Fetch older history"
+msgstr "Cargar historial antiguo"
+
+#: src/ui/settings.rs:448
+msgid ""
+"Asks your phone in the background for older messages in the open, pinned and "
+"ten most recent chats."
+msgstr ""
+"Pide a tu teléfono en segundo plano mensajes anteriores del chat abierto, "
+"los fijados y los diez chats más recientes."
+
+#: src/ui/settings.rs:531
+msgid "Show message content in notifications"
+msgstr "Mostrar el contenido de los mensajes en las notificaciones"
+
+#: src/ui/settings.rs:532
+msgid "When off, they say only “New message”."
+msgstr "Si está desactivado, solo dicen «Nuevo mensaje»."
+
+#: src/ui/settings.rs:537
+msgid "Limit repeat notifications"
+msgstr "Limitar notificaciones repetidas"
+
+#: src/ui/settings.rs:540
+msgid ""
+"After one notification, a chat stays quiet for 10 minutes. Opening the chat "
+"resets this. In groups, mentions and replies to you still notify."
+msgstr ""
+"Tras una notificación, el chat queda en silencio durante 10 minutos. Abrir "
+"el chat lo reinicia. En los grupos, las menciones y respuestas a ti siguen "
+"notificando."
+
+#: src/ui/settings.rs:840 src/ui/settings.rs:1454
+msgid "Storage used"
+msgstr "Almacenamiento usado"
+
+#: src/ui/settings.rs:841
+msgid "Media cache"
+msgstr "Caché multimedia"
+
+#: src/ui/settings.rs:842 src/ui/settings.rs:1508
+msgid "Images"
+msgstr "Imágenes"
+
+#: src/ui/settings.rs:843 src/ui/settings.rs:1514
+msgid "Videos and GIFs"
+msgstr "Vídeos y GIF"
+
+#: src/ui/settings.rs:845 src/ui/settings.rs:1526
+msgid "Other"
+msgstr "Otros"
+
+#: src/ui/settings.rs:846 src/ui/settings.rs:1460
+msgid "Clear…"
+msgstr "Vaciar…"
+
+#: src/ui/settings.rs:1489
+#, rust-format
+msgid ""
+"Photos, videos, stickers and files {account} downloaded to this computer. "
+"Clearing them keeps your messages; attachments download again when you open "
+"them."
+msgstr ""
+"Fotos, vídeos, stickers y archivos que {account} descargó en este ordenador. "
+"Al vaciarlos se conservan tus mensajes; los adjuntos se vuelven a descargar "
+"al abrirlos."
+
+#: src/ui/call.rs:142
+msgid "Return to the call"
+msgstr "Volver a la llamada"
+
+#: src/ui/call.rs:218
+msgid "Wants to switch to video: turn on your camera to answer"
+msgstr "Quiere cambiar a video: activa tu cámara para responder"
+
+#: src/ui/call.rs:228
+msgid "Their camera is off"
+msgstr "Su cámara está apagada"
+
+#: src/ui/call.rs:311
+msgid "Hide the call screen"
+msgstr "Ocultar la pantalla de llamada"
+
+#: src/ui/call.rs:320
+msgid "Exit full screen"
+msgstr "Salir de pantalla completa"
+
+#: src/ui/call.rs:322
+msgid "Full screen"
+msgstr "Pantalla completa"
+
+#: src/ui/call.rs:377 src/ui/call.rs:383 src/ui/call.rs:388
+msgid "Connecting…"
+msgstr "Conectando…"
+
+#: src/ui/call.rs:379
+msgid "Calling…"
+msgstr "Llamando…"
+
+#: src/ui/call.rs:381
+msgid "Ringing…"
+msgstr "Sonando…"
+
+#: src/ui/call.rs:392 src/ui/call.rs:400
+msgid "Call ended"
+msgstr "Llamada finalizada"
+
+#: src/ui/call.rs:401
+msgid "Missed call"
+msgstr "Llamada perdida"
+
+#: src/ui/call.rs:402 src/ui/calls.rs:115
+msgid "Declined"
+msgstr "Rechazada"
+
+#: src/ui/call.rs:403 src/ui/calls.rs:117
+msgid "Busy"
+msgstr "Ocupado"
+
+#: src/ui/call.rs:404 src/ui/call.rs:409 src/ui/calls.rs:118
+msgid "Could not connect"
+msgstr "No se pudo conectar"
+
+#: src/ui/call.rs:405 src/ui/calls.rs:119
+msgid "No answer"
+msgstr "Sin respuesta"
+
+#: src/ui/call.rs:407 src/ui/calls.rs:120 src/app.rs:4166
+msgid "Connection lost"
+msgstr "Se perdió la conexión"
+
+#: src/ui/call.rs:411 src/ui/calls.rs:114
+msgid "Answered on another device"
+msgstr "Respondida en otro dispositivo"
+
+#: src/ui/call.rs:414 src/ui/calls.rs:116
+msgid "Declined on another device"
+msgstr "Rechazada en otro dispositivo"
+
+#: src/ui/call.rs:435
+#, rust-format
+msgid "Microphone “{name}” is not available; using the system default"
+msgstr ""
+"El micrófono «{name}» no está disponible; se usa el predeterminado del "
+"sistema"
+
+#: src/ui/call.rs:439
+#, rust-format
+msgid "Speaker “{name}” is not available; using the system default"
+msgstr ""
+"El altavoz «{name}» no está disponible; se usa el predeterminado del sistema"
+
+#: src/ui/call.rs:441
+#, rust-format
+msgid "Camera “{name}” is not available"
+msgstr "La cámara «{name}» no está disponible"
+
+#: src/ui/call.rs:464
+msgid "No audio is arriving from this call"
+msgstr "No llega audio de esta llamada"
+
+#: src/ui/call.rs:466
+msgid "This call's audio cannot be decoded"
+msgstr "No se puede decodificar el audio de esta llamada"
+
+#: src/ui/call.rs:474
+msgid "The other side's audio is not getting through"
+msgstr "El audio de la otra persona no llega"
+
+#: src/ui/call.rs:543
+msgid "Start video"
+msgstr "Iniciar video"
+
+#: src/ui/call.rs:550
+msgid "Turn the camera off"
+msgstr "Desactivar la cámara"
+
+#: src/ui/call.rs:557
+msgid "Turn the camera on"
+msgstr "Activar la cámara"
+
+#: src/ui/call.rs:567
+msgid "Devices"
+msgstr "Dispositivos"
+
+#: src/ui/call.rs:624
+msgid "Microphone"
+msgstr "Micrófono"
+
+#: src/ui/call.rs:635
+msgid "Speaker"
+msgstr "Altavoz"
+
+#: src/ui/call.rs:647
+msgid "Camera"
+msgstr "Cámara"
+
+#: src/ui/call.rs:648
+msgid "First camera"
+msgstr "Primera cámara"
+
+#: src/ui/call.rs:737
+msgid "Incoming voice call"
+msgstr "Llamada de voz entrante"
+
+#: src/ui/call.rs:738
+msgid "Incoming video call"
+msgstr "Videollamada entrante"
+
+#: src/ui/call.rs:740
+#, rust-format
+msgid "Group voice call from {name}"
+msgstr "Llamada de voz grupal de {name}"
+
+#: src/ui/call.rs:743
+#, rust-format
+msgid "Group video call from {name}"
+msgstr "Videollamada grupal de {name}"
+
+#: src/ui/call.rs:745
+msgid "Incoming group voice call"
+msgstr "Llamada de voz grupal entrante"
+
+#: src/ui/call.rs:746
+msgid "Incoming group video call"
+msgstr "Videollamada grupal entrante"
+
+#: src/ui/call.rs:785
+msgid "Decline"
+msgstr "Rechazar"
+
+#: src/ui/call.rs:798
+msgid "Accept"
+msgstr "Aceptar"
+
+#: src/ui/call.rs:1218
+msgid "Invited"
+msgstr "Invitado"
+
+#: src/ui/calls.rs:96
+msgid "Missed group voice call"
+msgstr "Llamada grupal de voz perdida"
+
+#: src/ui/calls.rs:97
+msgid "Missed group video call"
+msgstr "Videollamada grupal perdida"
+
+#: src/ui/calls.rs:100
+msgid "Group voice call"
+msgstr "Llamada grupal de voz"
+
+#: src/ui/calls.rs:101
+msgid "Group video call"
+msgstr "Videollamada grupal"
+
+#: src/ui/calls.rs:169 src/app/calls.rs:112
+msgid "Call link"
+msgstr "Enlace de llamada"
+
+#: src/ui/calls.rs:199
+msgid "No calls yet"
+msgstr "Aún no hay llamadas"
+
+#: src/ui/calls.rs:202
+msgid ""
+"Calls from your phone's call log and the ones you make here appear here."
+msgstr ""
+"Aquí aparecen las llamadas del registro de tu teléfono y las que hagas desde "
+"aquí."
+
+#: src/ui/calls.rs:208
+msgid "Reading this account's calls."
+msgstr "Leyendo las llamadas de esta cuenta."
+
+#: src/ui/calls.rs:232
+msgid "No missed calls"
+msgstr "No hay llamadas perdidas"
+
+#: src/ui/calls.rs:233
+msgid "Choose All to see every call."
+msgstr "Elige Todos para ver todas las llamadas."
+
+#: src/ui/calls.rs:255
+msgid "No matching calls"
+msgstr "No hay llamadas que coincidan"
+
+#: src/ui/calls.rs:536
+msgid "Frequently contacted"
+msgstr "Contactos frecuentes"
+
+#: src/ui/calls.rs:554
+msgid "All contacts"
+msgstr "Todos los contactos"
+
+#: src/ui/calls.rs:618
+#, rust-format
+msgid "Video call {name}"
+msgstr "Videollamada a {name}"
+
+#: src/ui/calls.rs:632
+#, rust-format
+msgid "Voice call {name}"
+msgstr "Llamada de voz a {name}"
+
+#: src/ui/calls.rs:662
+msgid "Start call"
+msgstr "Iniciar llamada"
+
+#: src/ui/calls.rs:683
+msgid ""
+"Call one person by voice or video, or choose a call in the list to see it."
+msgstr ""
+"Llama a una persona por voz o video, o elige una llamada de la lista para "
+"verla."
+
+#: src/app/calls.rs:116
+msgid "Locked chat"
+msgstr "Chat bloqueado"
+
+#: src/app/calls.rs:398 src/app/calls.rs:679
+msgid "Hang up the current call first"
+msgstr "Primero cuelga la llamada en curso"
+
+#: src/app/calls.rs:503 src/app/calls.rs:572
+msgid "Incoming call"
+msgstr "Llamada entrante"
+
+#: src/app/calls.rs:613
+#, rust-format
+msgid ""
+"{caller} is calling {group}. ZapFast can't join group calls yet: answer on "
+"your phone."
+msgstr ""
+"{caller} está llamando a {group}. ZapFast aún no puede unirse a llamadas "
+"grupales: responde en tu teléfono."
+
+#: src/app/calls.rs:621
+#, rust-format
+msgid ""
+"{caller} is calling you and others. ZapFast can't join group calls yet: "
+"answer on your phone."
+msgstr ""
+"{caller} te está llamando a ti y a otras personas. ZapFast aún no puede "
+"unirse a llamadas grupales: responde en tu teléfono."
+
+#: src/app.rs:885
+msgid "Could not check the number. Please try again."
+msgstr "No se pudo comprobar el número. Inténtalo de nuevo."
+
+#: src/app.rs:889
+msgid "This number is not on WhatsApp"
+msgstr "Este número no está en WhatsApp"
+
+#: src/app.rs:892
+msgid "Not connected to WhatsApp"
+msgstr "Sin conexión a WhatsApp"
+
+#: src/app.rs:895 src/app.rs:7750
+msgid "Enter a valid international phone number"
+msgstr "Introduce un número de teléfono internacional válido"
+
+#: src/app.rs:3113
+msgid "Media cache cleared"
+msgstr "Caché multimedia vaciada"
+
+#: src/app.rs:3193
+msgid "Star removed"
+msgstr "Destacado quitado"
+
+#: src/app.rs:3229
+msgid "Pinned for 7 days"
+msgstr "Fijado durante 7 días"
+
+#: src/app.rs:3231
+msgid "Pin removed"
+msgstr "Mensaje sin fijar"
+
+#: src/app.rs:3730
+msgid "Loading chat history"
+msgstr "Cargando el historial del chat"
+
+#: src/app.rs:3882
+msgid "Could not use this picture."
+msgstr "No se puede usar esta imagen."
+
+#: src/app.rs:4096 src/app.rs:7639
+msgid "This chat already has three pinned messages"
+msgstr "Este chat ya tiene tres mensajes fijados"
+
+#: src/app.rs:4101
+msgid ""
+"WhatsApp hasn't turned on group calls from a computer for your account yet. "
+"Ask someone in the group to call it, and answer here."
+msgstr ""
+"WhatsApp aún no ha activado las llamadas grupales desde un ordenador para tu "
+"cuenta. Pide a alguien del grupo que llame y contesta aquí."
+
+#: src/app.rs:4106 src/app.rs:6697
+msgid "ZapFast can't join group calls yet: open the link on your phone."
+msgstr ""
+"ZapFast aún no puede unirse a llamadas grupales: abre el enlace en tu "
+"teléfono."
+
+#: src/app.rs:4176
+msgid "Connecting"
+msgstr "Conectando"
+
+#
+#: src/app.rs:6861
+msgid "A selected chat is no longer writable"
+msgstr "Ya no se pueden enviar mensajes a uno de los chats seleccionados"
+
+#: src/app.rs:8272
+msgid "Invite link copied"
+msgstr ""
+
+#. Translators: an announcement from an account that is not on screen:
+#. the account's name, then what it announced.
+#: src/app.rs:8539
+#, rust-format
+msgid "{}: {}"
+msgstr "{}: {}"
+
+#: src/app.rs:8649
+msgid "The old link no longer works. Here is a new one."
+msgstr ""
+
+#: src/app.rs:8691
+#, rust-format
+msgid "{count} person added to the group"
+msgid_plural "{count} people added to the group"
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/ui/image_editor.rs:106
+msgid "Cancel (Esc)"
+msgstr "Cancelar (Esc)"
+
+#: src/ui/image_editor.rs:119
+msgid "Keep this crop"
+msgstr "Conservar este recorte"
+
+#: src/ui/image_editor.rs:140
+msgid "Reset"
+msgstr "Restablecer"
+
+#: src/ui/image_editor.rs:144
+msgid "Turn right"
+msgstr "Girar a la derecha"
+
+#: src/ui/image_editor.rs:157
+msgid "Turn left"
+msgstr "Girar a la izquierda"
+
+#: src/ui/image_preview.rs:444
+msgid "Show in the chat"
+msgstr "Ver en el chat"
+
+#: src/ui/image_preview.rs:499
+msgid "Show the photo"
+msgstr "Mostrar la foto"
+
+#: src/ui/image_preview.rs:503
+msgid "Play motion photo"
+msgstr "Reproducir foto en movimiento"
+
+#: src/ui/image_preview.rs:866
+msgid "Play or pause the video"
+msgstr "Reproducir o pausar el vídeo"
+
+#. Translators: the body of a notification that hides who wrote and
+#. what: a message has arrived.
+#: src/notify.rs:400
+msgctxt "notification"
+msgid "New message"
+msgstr "Mensaje nuevo"
+
+#: src/settings.rs:381
+msgid "Direct messages"
+msgstr "Chats individuales"
+
+#: src/settings.rs:383
+msgid "Direct messages and groups"
+msgstr "Chats individuales y grupos"
+
+#: src/ui/info.rs:45
+msgid "Media, links and docs"
+msgstr "Archivos multimedia, enlaces y documentos"
+
+#: src/ui/info.rs:266
+msgid "Group info"
+msgstr "Información del grupo"
+
+#: src/ui/info.rs:268
+msgid "Channel info"
+msgstr "Información del canal"
+
+#: src/ui/info.rs:270
+msgid "Contact info"
+msgstr "Información del contacto"
+
+#: src/ui/info.rs:543
+msgid "Description"
+msgstr "Descripción"
+
+#: src/ui/info.rs:566 src/ui/info.rs:1691
+msgid "Group permissions"
+msgstr ""
+
+#: src/ui/info.rs:741 src/ui/new_group.rs:69
+msgid "Add members"
+msgstr ""
+
+#: src/ui/info.rs:795
+#, rust-format
+msgid "Options for {name}"
+msgstr ""
+
+#: src/ui/info.rs:847
+msgid "Group admin"
+msgstr ""
+
+#: src/ui/info.rs:975
+#, rust-format
+msgid "{}+"
+msgstr "{}+"
+
+#: src/ui/info.rs:1028
+msgid "Could not list the media."
+msgstr "No se pudieron mostrar los archivos multimedia."
+
+#: src/ui/info.rs:1036 src/ui/info.rs:1583 src/ui/login.rs:114
+msgid "Try again"
+msgstr "Reintentar"
+
+#: src/ui/info.rs:1148
+msgid "No media"
+msgstr "No hay archivos multimedia"
+
+#: src/ui/info.rs:1151
+msgid "Photos and videos shared in this chat will show here."
+msgstr "Las fotos y los videos compartidos en este chat aparecerán aquí."
+
+#: src/ui/info.rs:1325
+msgid "No documents"
+msgstr "No hay documentos"
+
+#: src/ui/info.rs:1326
+msgid "Files shared in this chat will show here."
+msgstr "Los archivos compartidos en este chat aparecerán aquí."
+
+#: src/ui/info.rs:1349
+#, rust-format
+msgid "{} page"
+msgid_plural "{} pages"
+msgstr[0] "{} página"
+msgstr[1] "{} páginas"
+
+#: src/ui/info.rs:1371
+msgid "No links"
+msgstr "No hay enlaces"
+
+#: src/ui/info.rs:1372
+msgid "Links shared in this chat will show here."
+msgstr "Los enlaces compartidos en este chat aparecerán aquí."
+
+#: src/ui/info.rs:1445
+msgid "Only the newest items are listed."
+msgstr "Solo se muestran los elementos más recientes."
+
+#: src/ui/info.rs:1461
+msgctxt "info tab"
+msgid "Media"
+msgstr "Multimedia"
+
+#: src/ui/info.rs:1462
+msgctxt "info tab"
+msgid "Docs"
+msgstr "Documentos"
+
+#: src/ui/info.rs:1463
+msgctxt "info tab"
+msgid "Links"
+msgstr "Enlaces"
+
+#: src/ui/info.rs:1546
+msgid "Invite via link"
+msgstr ""
+
+#: src/ui/info.rs:1556
+msgid "Getting the link…"
+msgstr ""
+
+#: src/ui/info.rs:1593
+msgid "Copy link"
+msgstr ""
+
+#: src/ui/info.rs:1657
+msgid "Make group admin"
+msgstr ""
+
+#: src/ui/info.rs:1661
+msgid "Dismiss as admin"
+msgstr ""
+
+#: src/ui/info.rs:1665
+msgid "Remove from group"
+msgstr ""
+
+#: src/ui/info.rs:1730
+msgid "Admins can:"
+msgstr ""
+
+#: src/ui/info.rs:1732
+msgid "Members can:"
+msgstr ""
+
+#: src/ui/login.rs:125
+msgid "Start over…"
+msgstr "Empezar de nuevo…"
+
+#: src/ui/rail.rs:302
+msgid "Calls"
+msgstr "Llamadas"
+
+#: src/ui/rail.rs:309
+msgid "Starred messages"
+msgstr "Mensajes destacados"
+
+#: src/ui/mod.rs:866
+msgid "Minimize"
+msgstr "Minimizar"
+
+#: src/ui/mod.rs:867
+msgid "Maximize"
+msgstr "Maximizar"
+
+#: src/ui/mod.rs:868
+msgid "Restore"
+msgstr "Restaurar"
+
+#: src/ui/new_group.rs:71
+msgid "Add group members"
+msgstr "Añadir miembros al grupo"
+
+#: src/ui/new_group.rs:139
+#, rust-format
+msgid "{count} selected"
+msgid_plural "{count} selected"
+msgstr[0] "{count} seleccionado"
+msgstr[1] "{count} seleccionados"
+
+#: src/ui/new_group.rs:149
+msgctxt "add group members"
+msgid "Add"
+msgstr ""
+
+#: src/ui/new_group.rs:151
+msgid "Next"
+msgstr "Siguiente"
+
+#: src/ui/new_group.rs:153
+msgid "Choose at least one person"
+msgstr "Elige al menos una persona"
+
+#: src/ui/new_group.rs:179
+#, rust-format
+msgid "Remove {name}"
+msgstr "Quitar a {name}"
+
+#: src/ui/new_group.rs:303
+msgid "Add group photo"
+msgstr "Añadir foto del grupo"
+
+#: src/ui/new_group.rs:334
+msgid "Group name (required)"
+msgstr "Nombre del grupo (obligatorio)"
+
+#: src/ui/new_group.rs:409
+#, rust-format
+msgid "{count} member besides you"
+msgid_plural "{count} members besides you"
+msgstr[0] "{count} miembro además de ti"
+msgstr[1] "{count} miembros además de ti"
+
+#: src/ui/new_group.rs:438
+msgid "Creating the group…"
+msgstr "Creando el grupo…"
+
+#: src/group_admin.rs:60
+msgid "Edit group settings"
+msgstr ""
+
+#: src/group_admin.rs:61
+msgid "Send new messages"
+msgstr ""
+
+#: src/group_admin.rs:62
+msgid "Add other members"
+msgstr ""
+
+#: src/group_admin.rs:63
+msgid "Approve new members"
+msgstr ""
+
+#: src/group_admin.rs:73
+msgid "Change the group's name, photo, description and disappearing messages."
+msgstr ""
+
+#: src/group_admin.rs:75
+msgid "Write in the group."
+msgstr ""
+
+#: src/group_admin.rs:76
+msgid "Add people to the group."
+msgstr ""
+
+#: src/group_admin.rs:79
+msgid "When turned on, admins must approve anyone who wants to join."
+msgstr ""
+
+#: src/group_admin.rs:216
+msgid "Connect to WhatsApp to change the group."
+msgstr ""
+
+#: src/group_admin.rs:217
+msgid "WhatsApp did not answer in time. Try again."
+msgstr ""
+
+#: src/group_admin.rs:218
+msgid "Only group admins can do that."
+msgstr ""
+
+#: src/group_admin.rs:219
+msgid "Too many changes at once. Try again later."
+msgstr ""
+
+#: src/group_admin.rs:220
+msgid "Could not change the group. Try again."
+msgstr ""
+
+#: src/group_admin.rs:228
+msgid "Connect to WhatsApp to see the invite link."
+msgstr ""
+
+#: src/group_admin.rs:229
+msgid "Only group admins can see the invite link."
+msgstr ""
+
+#: src/group_admin.rs:230
+msgid "Could not get the invite link."
+msgstr ""
+
+#: src/group_admin.rs:291
+#, rust-format
+msgid ""
+"{names} could not be added to the group. Their privacy settings may not "
+"allow it. You can send them the invite link."
+msgstr ""
+
+#: src/group_admin.rs:295
+#, rust-format
+msgid "{names} left the group recently and cannot be added back yet."
+msgstr ""
+
+#: src/group_admin.rs:297
+#, rust-format
+msgid "The group is full. {names} could not be added."
+msgstr ""
+
+#: src/group_admin.rs:298
+#, rust-format
+msgid "{names} could not be added to the group."
+msgstr ""
+
+#: src/group_admin.rs:308
+#, rust-format
+msgid "{name} is now a group admin."
+msgstr ""
+
+#: src/group_admin.rs:309
+#, rust-format
+msgid "{name} is no longer a group admin."
+msgstr ""
+
+#: src/group_admin.rs:310
+#, rust-format
+msgid "{name} was removed from the group."
+msgstr ""
+
 #~ msgid "Close settings"
 #~ msgstr "Cerrar ajustes"
 
@@ -3099,3 +4271,20 @@ msgstr "Usar otra cuenta"
 
 #~ msgid "Saved"
 #~ msgstr "Guardados"
+
+#~ msgid "Back to the chats"
+#~ msgstr "Volver a los chats"
+
+#~ msgid "Show in chat"
+#~ msgstr "Ver en el chat"
+
+#, rust-format
+#~ msgid "Open the chat with {name}"
+#~ msgstr "Abrir el chat con {name}"
+
+#, rust-format
+#~ msgid "Pinned message: {}"
+#~ msgstr "Mensaje fijado: {}"
+
+#~ msgid "Next pinned message"
+#~ msgstr "Siguiente mensaje fijado"

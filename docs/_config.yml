@@ -35,6 +35,7 @@ defaults:
         - WhatsApp client
         - Rust
         - egui
+        - fastframe
         - whatsapp-rust
         - Linux WhatsApp desktop
   - scope:

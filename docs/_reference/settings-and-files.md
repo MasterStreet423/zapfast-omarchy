@@ -16,19 +16,28 @@ On Linux:
 | Account list | `~/.config/zapfast/accounts.json` | Which numbers are linked here and which one is showing |
 | Session keys | `~/.local/state/zapfast/accounts/<id>/session.db` | Deleting it unlinks that number |
 | Message archive | `~/.local/state/zapfast/accounts/<id>/archive.db` | Encrypted; the only copy of history WhatsApp will not send again |
-| Per-number settings | `~/.local/state/zapfast/accounts/<id>/settings.json` | Notifications, receipts, typing, automatic downloads, the last open chat, and the wallpaper |
+| Per-number settings | `~/.local/state/zapfast/accounts/<id>/settings.json` | Notifications, receipts, typing, automatic downloads, background history, the last open chat, the chat-list chip or label, and the wallpaper |
 | Stickers and packs | `~/.local/state/zapfast/accounts/<id>/stickers/` | Plain WebP files; each pack is a folder |
 | Wallpaper image | `~/.local/state/zapfast/accounts/<id>/wallpaper.jpg` | Copy of the chosen picture (or `.png`, `.webp`, `.gif`) |
 | Attachments, avatars | `~/.cache/zapfast/accounts/<id>/` | Safe to delete; available files download again when viewed |
 | Last run's log | `~/.local/state/zapfast/zapfast.log` | `--verbose` for more |
+| The run before's log | `~/.local/state/zapfast/zapfast.previous.log` | Kept for one more start |
 | Crash log | `~/.local/state/zapfast/panic.log` | Safe to delete |
 
 Back up the archive if you need its history. WhatsApp sends only recent
 history to a new device, although ZapFast can request some older messages from
 the phone. Clearing the media cache makes ZapFast download attachments again.
 Expired attachments may still be available through the phone.
+**Settings > Files > Storage used** shows how much space the account on screen
+has in its media cache, split into images, videos and GIFs, stickers, and other
+files. **Clear…** there deletes that account's cached attachments after asking:
+its messages, its other caches, and the other accounts' files stay, and so do
+files in a download folder you chose.
 **Settings > Files > Change…** sends new downloads to another folder, leaving
-earlier ones in place.
+earlier ones in place. There, documents keep the name they were sent with; a
+file already in the folder is never replaced, and the download becomes
+`name (1).pdf`, `name (2).pdf`, and so on. Characters a file system refuses
+become `_`.
 
 On macOS, settings, state, and the logs are in
 `~/Library/Application Support/me.paolino.zapfast` and the caches in
@@ -89,15 +98,38 @@ name or description, in the interface language or in English.
 
 **Appearance**
 
-- **Theme**: dark, light, follow the system, or a local JSON palette from the
-  themes folder. See [Making a theme]({{ '/themes/' | relative_url }}).
+- **Theme**: dark, light, follow the system, Messages, or a local JSON
+  palette from the themes folder. See [Making a theme]({{ '/themes/' | relative_url }}).
+  **Messages** follows the system's light or dark appearance in macOS's
+  greys, with bubbles shaped, spaced and coloured as Messages on the Mac
+  draws them (yours in iMessage blue, shading deeper down the window), the
+  Mac's system blue for buttons and highlights, a frosted header that
+  messages scroll under, and photos without a bubble. Its sidebar and
+  conversation show the desktop through the window where the platform
+  offers a material: AppKit's on macOS, Mica on Windows 11 22H2 and later,
+  and Hyprland's blur on Linux. Elsewhere, including other Linux desktops,
+  where an unblurred desktop behind the sidebar would cost its text
+  contrast, and in a window opened before choosing it on Windows or Linux,
+  the window is opaque in the theme's colours; it turns translucent from
+  the next window.
 - **Wallpaper**: WhatsApp's light and dark chat wallpaper colours, with or
   without doodles.
 - **Zoom**: interface scale, also `Ctrl+Plus`, `Ctrl+Minus` and `Ctrl+0`.
 - **Language**: the interface language, or **Auto** to follow the system.
   Brazilian Portuguese, German, Spanish, Italian, French, Russian, Simplified
-  Chinese, Traditional Chinese, and Turkish are available; otherwise English.
+  Chinese, Traditional Chinese, Turkish, and Indonesian are available; otherwise English.
   Message contents, names, and logs are never translated.
+- **Custom title bar** (Windows and Linux, off by default): ZapFast draws
+  its own title bar instead of the desktop's. The window buttons sit in the
+  top corner of whichever pane is there (the open chat's header, the info
+  panel, Settings, the Calls page, the call screen), on the left or the
+  right as GNOME's button layout says, or Windows' three square buttons;
+  the headers drag the window and a double-click maximizes or restores it,
+  and the window's edges resize it. Turning it on or off replaces the
+  window at once, keeping the open chat and any call. It is off by default
+  because some Intel graphics drivers draw a frameless window with a black
+  band at the top, with clicks landing below where they are drawn. macOS
+  always keeps its own traffic lights.
 
 **Chats**
 
@@ -105,10 +137,21 @@ name or description, in the interface language or in English.
   on macOS) sends.
 - **Download files automatically**: attachments up to 64 MiB download as they
   come into view. When off, click one to download it. Visible stickers still
-  download automatically. The same 64 MiB limit applies to manual downloads.
-- **Keep chats archived** (development builds): on by default. When off, a new
-  message, received or sent, brings an archived chat back to the list. Applies
-  to all accounts here; it does not read or change the phone's own setting.
+  download automatically. Larger attachments download only when clicked.
+- **Fetch older history**: off by default, and set for
+  each number. When on, ZapFast asks the phone for older messages without you
+  scrolling: the open chat first, then pinned chats and the ten most recently
+  active ones (never channels). It sends at most one request every twenty
+  seconds, and only while no other history request is waiting. Each chat is
+  asked for at most five pages each time ZapFast runs, and a chat the phone
+  does not answer goes to the back of the queue. Pages fetched this way go into
+  the archive without moving the view. A chat the phone says has nothing older
+  is not asked again.
+- **Keep chats archived**: on by default. When off, a new message, received or
+  sent, brings an archived chat back to the list. Applies to all accounts here
+  whose phone has not sent its own **Keep chats archived**; once a phone has,
+  ZapFast follows the phone for that account. It does not change the phone's
+  setting.
 - **Pause other media while recording or playing**: pause music and videos in
   other apps while you record, or while a voice message, audio, or video plays
   with sound, and resume them afterwards. Linux and Windows only.
@@ -119,15 +162,31 @@ name or description, in the interface language or in English.
 
 - **Desktop notifications**: for chats you are not looking at. Muted chats stay
   quiet.
+- **Show message content in notifications**: on by default. When off, every
+  notification says only "New message" from ZapFast, without the chat, the
+  sender, the text, or a picture, as behind the app lock, and plays only the
+  message sound. Clicking one still opens the message. Applies to every
+  account.
 - **Message sound** and **Mention sound**: Pidgin's sounds, the system sound,
-  none, or an audio file.
+  none, or an audio file. On macOS, Pidgin's sounds and the system sound play
+  with the notification, so Do Not Disturb, Focus, and the notification
+  settings for ZapFast silence them; an audio file of your own plays
+  regardless.
 - **Play sounds for group messages**: when off, only mentions and replies to
   you make a sound in groups.
+- **Limit repeat notifications**: off by default. Choose **Direct messages**,
+  **Groups**, or **Direct messages and groups**. A limited chat sends one
+  notification (and its sound), then stays quiet for 10 minutes. Reading the
+  chat, here or on another device, starts over. In groups, a mention of you or a reply to you always
+  notifies. Settings for this account.
 
 **Privacy**
 
 - **Send read receipts**: the blue ticks others see, subject to the account
-  setting below.
+  setting below. When account read receipts are off, read ticks are also hidden
+  on outgoing direct messages in the conversation, chat list, and Message info,
+  as on the phone. Group receipts and voice-message played receipts are
+  unaffected.
 - **Show when you are typing**: send typing and recording state.
 - **Last seen**, **Online**, **Profile photo**, **About**, **Groups**, **Read
   receipts**, **Calls**: your WhatsApp account privacy, stored on WhatsApp's
@@ -138,7 +197,11 @@ name or description, in the interface language or in English.
 
 - **Keep running when the window closes**: keep ZapFast linked in the tray.
 - **Start at login**: start in the tray without a window, where the platform
-  supports it.
+  supports it. If the desktop's tray is not up yet, ZapFast waits up to 30
+  seconds for it, then opens the window, since a desktop without a tray could
+  not bring it back. On macOS this is a login item under System Settings >
+  General > Login Items, which macOS may ask you to allow there; inside a
+  Flatpak the desktop's background portal asks first.
 - **Check for updates**: ask GitHub once a day whether a newer release exists.
 - **Download updates automatically**: download and verify a new release in the
   background; restarting stays your choice. Package managers and Flatpak update
@@ -149,6 +212,9 @@ name or description, in the interface language or in English.
   `http://host:port`, each with an optional `user:password@`; a bare
   `host:port` is an HTTP proxy. Changing it reconnects at once. Empty uses
   `ALL_PROXY` or `HTTPS_PROXY` from the environment and honors `NO_PROXY`.
+  A call's signaling goes through the proxy, but its audio and video do not:
+  they travel over UDP straight to WhatsApp's call relays, which see this
+  computer's address.
 - **GIPHY API key**: for GIF search, unless the build includes one. Set
   `ZAPFAST_GIPHY_KEY` at compile time to include a default key. The earlier
   `FASTSAPP_GIPHY_KEY` remains a fallback for existing builds.
@@ -165,8 +231,9 @@ playback speed, and the chat list and search pane widths.
 
 Development builds also remember the window's size, position, and maximized
 state in `settings.json`, including when reopening from the tray or a
-notification. On Wayland the compositor controls placement, so ZapFast keeps
-the size without choosing the position. These window changes and **Keep chats
+notification. The window opens at the same size whatever the interface's
+zoom. On Wayland the compositor controls placement, so ZapFast keeps the size
+without choosing the position. These window changes and **Keep chats
 archived** are not yet included in 0.19.0.
 
 Labels always get a chip each, in a row under the filter chips, once a label
@@ -222,6 +289,37 @@ the new one.
 
 ## The log
 
-Each run replaces `zapfast.log` and records warnings and errors, never
+Each run starts `zapfast.log` afresh and records warnings and errors, never
 message contents, phone numbers, or keys. Include the end of this file when
-reporting an issue. **Settings > Files > Log > Open** shows it.
+reporting an issue. **Settings > Files > Log > Open** shows it. The run before
+is kept beside it as `zapfast.previous.log`: if ZapFast froze and you had to
+restart it, that file holds what happened.
+
+During a call the log also records the call's numbers every few seconds: the
+video rate, loss and keyframes in each direction, and the audio devices'
+health. They are counts and sizes only.
+
+### Saving a call's video for diagnosis
+
+To work on a video call's picture quality, start ZapFast with
+`ZAPFAST_CALL_VIDEO_DUMP` set to a folder. Each video call then writes the
+video it sends and the video it receives there, as raw H.264
+(`<time>-<call>-sent.h264` and `-received.h264`), which `ffmpeg` and media
+players read. Nothing is written without the variable. The files are the
+picture of both people on the call, so only set it for a call whose other side
+agreed, and delete the files when you are done.
+
+### Saving a call's audio for diagnosis
+
+To work on echo cancellation, start ZapFast with `ZAPFAST_CALL_AUDIO_DUMP` set
+to a folder. Each call's microphone stream then writes four files there,
+`<time>-<stream>-reference.wav` (the other side's voice as your speaker played
+it), `-microphone.wav` (your microphone before any processing), `-output.wav`
+(what was sent after echo cancellation, noise suppression and level control),
+all mono 16 kHz, and `-order.csv`, which lets a developer replay the recording
+through the echo canceller exactly as the call ran it
+(`cargo run --release --example aec_replay -- <folder>/<time>-<stream>-reference.wav`,
+with the options listed at the top of `examples/aec_replay.rs`).
+Nothing is written without the variable. The files are both people's voices,
+so only set it for a call whose other side agreed, and delete the files when
+you are done.

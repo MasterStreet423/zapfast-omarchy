@@ -11,7 +11,7 @@ use egui::{
 
 use crate::app::App;
 use crate::i18n::gettext;
-use crate::model::{Action, PickerTab, StickerPack, StickerShelf};
+use crate::model::{Action, Dialog, PickerTab, StickerPack, StickerShelf};
 use crate::theme::{self, Icon, Palette};
 
 use super::conversation;
@@ -87,9 +87,11 @@ pub fn show(app: &mut App, ctx: &egui::Context) {
                     });
                 });
         });
-    // Close on outside clicks, except on the toggle button or a sticker menu.
+    // Close on outside clicks, except on the toggle button, a sticker menu, or
+    // a dialog the picker opened.
     let rect = area.response.rect;
     let clicked_outside = !egui::Popup::is_any_open(ctx)
+        && app.dialog.is_none()
         && ctx.input(|input| {
             input.pointer.any_pressed()
                 && input
@@ -420,7 +422,12 @@ fn reaction_picker(app: &mut App, ctx: &egui::Context) {
         .conversations
         .get(&chat)
         .and_then(|conversation| conversation.message(&message))
-        .map(|message| (app.display_name(&message.sender), message.content.summary()));
+        .map(|message| {
+            (
+                app.display_name(&message.sender),
+                message.content.summary_in(app.locale),
+            )
+        });
     let area = egui::Area::new(egui::Id::new("reaction-picker"))
         .fixed_pos(pos)
         .order(egui::Order::Foreground)
@@ -1380,7 +1387,7 @@ fn sticker_tab(app: &mut App, ui: &mut egui::Ui, palette: &Palette) {
                         ui.ctx()
                             .data_mut(|data| data.insert_temp(remove_pack_id(), remove.rect));
                         if remove.clicked() {
-                            delete_pack = Some(pack.dir.clone());
+                            delete_pack = Some((pack.name.clone(), pack.dir.clone()));
                         }
                         if !pack.stickers.is_empty()
                             && theme::icon_button(
@@ -1457,8 +1464,12 @@ fn sticker_tab(app: &mut App, ui: &mut egui::Ui, palette: &Palette) {
             member,
         });
     }
-    if let Some(dir) = delete_pack {
-        app.actions.push(Action::DeleteStickerPack(dir));
+    if let Some((name, dir)) = delete_pack {
+        app.actions
+            .push(Action::ShowDialog(Dialog::ConfirmRemoveStickerPack {
+                name,
+                dir,
+            }));
     }
     if let Some(dir) = share_pack {
         app.actions.push(Action::ShareStickerPack(dir));
@@ -1911,7 +1922,7 @@ fn pack_holds(pack: &StickerPack, hash: &str) -> bool {
 
 /// Returns whether a sticker moves, probing each path once and re-probing
 /// only when the file changes on disk.
-fn moves(ctx: &egui::Context, path: &Path) -> bool {
+pub(crate) fn moves(ctx: &egui::Context, path: &Path) -> bool {
     ctx.data_mut(|data| {
         data.get_temp_mut_or_default::<MotionMemo>(egui::Id::new("animated-sticker-paths"))
             .moves(path, probe_motion)
@@ -1926,13 +1937,7 @@ fn probe_motion(path: &Path) -> Option<bool> {
     let mut head = [0u8; 64];
     let mut file = std::fs::File::open(path).ok()?;
     let read = std::io::Read::read(&mut file, &mut head).ok()?;
-    let head = &head[..read];
-    Some(
-        head.len() >= 12
-            && &head[0..4] == b"RIFF"
-            && &head[8..12] == b"WEBP"
-            && head.windows(4).any(|window| window == b"ANIM"),
-    )
+    Some(crate::animation::webp_moves(&head[..read]))
 }
 
 fn sticker_picture(ui: &egui::Ui, path: &Path, rect: Rect) {
@@ -2129,8 +2134,11 @@ mod pack_tests {
         frame(&mut app, &ctx, click(trash.center()));
         assert!(
             app.actions
-                .contains(&Action::DeleteStickerPack(PathBuf::from("/packs/Futebol"))),
-            "the trash button removes the pack"
+                .contains(&Action::ShowDialog(Dialog::ConfirmRemoveStickerPack {
+                    name: "Futebol".to_owned(),
+                    dir: PathBuf::from("/packs/Futebol"),
+                })),
+            "the trash button asks before removing the pack"
         );
     }
 

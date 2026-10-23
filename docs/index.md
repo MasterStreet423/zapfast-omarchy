@@ -28,6 +28,9 @@ features:
   - icon: ⚡
     title: Lightweight
     details: Opens in under a second and uses about 200MB of RAM. No browser engine.
+  - icon: 🦀
+    title: Native, in Rust
+    details: "Built with [egui](https://www.egui.rs) and [fastframe](https://fastframe.dev), the framework behind a family of native desktop apps. No browser engine inside."
   - icon: 🎤
     title: Voice messages
     details: Play, seek, and record voice messages in the chat. OGG/Opus support is built in.
@@ -37,17 +40,25 @@ features:
   - icon: 🔔
     title: Background mode
     details: Closing the window keeps ZapFast linked in the tray. Notifications show the chat picture, and muted chats stay quiet.
+  - icon: 👥
+    title: Several numbers
+    details: Link more than one WhatsApp number and switch between them from your picture at the foot of the rail beside the chat list.
+  - icon: 🎨
+    title: Themes
+    details: Light, dark, or the system's appearance, custom colour themes, and on Omarchy your desktop theme.
+    link: /themes/
+    link_text: Make a theme
   - icon: ⌨️
     title: Keyboard shortcuts
     details: Search, switch chats, reply, and record with shortcuts. Select and copy text, including across messages.
   - icon: 🔓
     title: Open source
-    details: MIT-licensed Rust built with egui and whatsapp-rust. The linking process is documented.
+    details: MIT-licensed Rust that links through whatsapp-rust. The linking process is documented.
     link: https://github.com/crmne/zapfast
     link_text: Read the source
 ---
 
-<p class="sibling"><strong>Want Spotify just as fast and native?</strong> <a href="https://spotifast.rocks">Spotifast</a> is ZapFast's sibling: the same native interface, for Spotify. Both are built on <a href="https://github.com/crmne/fastframe">fastframe</a>, the shared foundation for native Rust apps built with egui.</p>
+<p class="sibling"><strong>Want Spotify just as fast and native?</strong> <a href="https://spotifast.rocks">Spotifast</a> is ZapFast's sibling: the same native interface, for Spotify. Both are built on <a href="https://fastframe.dev">fastframe</a>, the shared foundation for native Rust apps built with <a href="https://www.egui.rs">egui</a>.</p>
 
 <video class="hero-film image-src" controls muted loop playsinline preload="metadata" poster="{{ '/assets/images/launch-film-poster.jpg' | relative_url }}" aria-label="ZapFast in under a minute: a film of the app, made with its built-in demo content" hidden>
   <source src="{{ '/assets/videos/launch-film.mp4' | relative_url }}" type="video/mp4">

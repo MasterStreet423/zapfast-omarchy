@@ -35,17 +35,18 @@ source build has no launcher integration.
 
 The build needs a C/C++ toolchain, CMake, and Perl (for the bundled
 OpenSSL); `rust-toolchain.toml` pins the Rust version. On Linux it also needs
-egui's development libraries and ALSA. libopus and the H.264 decoder build
-from source. On Arch Linux:
+egui's development libraries, ALSA, and PipeWire with clang (the PipeWire
+output's bindings are generated at build time). libopus and the H.264 decoder
+build from source. On Arch Linux:
 
 ```sh
-sudo pacman -S --needed alsa-lib libxkbcommon wayland cmake perl
+sudo pacman -S --needed alsa-lib pipewire clang libxkbcommon wayland cmake perl
 ```
 
-On Debian or Ubuntu:
+On Debian 13, Ubuntu 24.04 or newer:
 
 ```sh
-sudo apt install build-essential cmake perl libasound2-dev libxkbcommon-dev libwayland-dev libgl1-mesa-dev
+sudo apt install build-essential cmake perl clang libclang-dev libasound2-dev libpipewire-0.3-dev libxkbcommon-dev libwayland-dev libgl1-mesa-dev
 ```
 
 With Nix, `nix develop` provides the toolchain and every native dependency,
@@ -59,7 +60,8 @@ The packaged desktop entry is `packaging/applications/zapfast.desktop`;
 ZapFast links as a companion device, like WhatsApp Web. Start it and either:
 
 - scan the QR code with your phone (WhatsApp, **Settings**, **Linked
-  devices**, **Link a device**), or
+  devices**, **Link a device**). The phone's camera app also reads the code
+  and opens **Linked devices** in WhatsApp, or
 - click **Link with phone number** and enter the eight-character code on your
   phone.
 
@@ -67,9 +69,11 @@ The link survives restarts. Your phone does not need to stay on the same
 network or be online to read messages already stored in ZapFast.
 
 Several numbers can stay linked in one window. Click your own picture at the
-top of the chat list to switch between them or to add another (**Settings >
+bottom of the rail beside the chat list to switch between them or to add
+another (**Settings >
 Account > Add account** works too); a dot on it means another number has
-unread chats. Each number keeps its own keys, archive, media, and
+unread chats. `Ctrl+Shift+A` (Command+Shift+A on macOS) switches to the next
+number. Each number keeps its own keys, archive, media, and
 notification, receipt, download, and wallpaper settings.
 
 ## Message history

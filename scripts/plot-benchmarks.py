@@ -9,7 +9,6 @@ import statistics
 
 import matplotlib
 matplotlib.use('Agg')
-matplotlib.rcParams['svg.hashsalt'] = 'zapfast-benchmark-2026-09-15'
 import matplotlib.pyplot as plt
 
 
@@ -56,14 +55,8 @@ def bars(fig, bounds, field, unit, label):
 
 
 def save(fig, stem, description):
-    for extension in ['svg', 'png']:
-        metadata = {'Description': description}
-        if extension == 'svg':
-            metadata['Date'] = None
-        output = ASSETS / f'{stem}.{extension}'
-        fig.savefig(output, facecolor=BACKGROUND, metadata=metadata)
-        if extension == 'svg':
-            output.write_text('\n'.join(line.rstrip() for line in output.read_text().splitlines()) + '\n')
+    # The site shows only the PNG charts.
+    fig.savefig(ASSETS / f'{stem}.png', facecolor=BACKGROUND, metadata={'Description': description})
     plt.close(fig)
 
 

@@ -7,56 +7,35 @@
 use crate::settings::NotificationSound;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
-#[cfg(target_os = "linux")]
-mod badge;
+pub use fastframe_dock::Badge;
 #[cfg(target_os = "windows")]
-mod badge_windows;
-#[cfg(target_os = "windows")]
-mod windows;
-#[cfg(target_os = "linux")]
-pub use badge::Badge;
-#[cfg(target_os = "windows")]
-pub use badge_windows::{Badge, Taskbar};
+pub use fastframe_dock::Taskbar;
 
-/// A no-op taskbar badge on platforms without a taskbar badge implementation.
-#[cfg(not(any(target_os = "linux", target_os = "windows")))]
-#[derive(Default)]
-pub struct Badge;
-
-#[cfg(not(any(target_os = "linux", target_os = "windows")))]
-impl Badge {
-    /// Does nothing; no supported desktop here reads a taskbar badge.
-    pub fn set(&mut self, _count: u32) {}
+/// The localized accessible text for the Windows unread overlay.
+#[cfg(any(target_os = "windows", test))]
+pub fn badge_description(count: u32, locale: crate::i18n::Locale) -> String {
+    crate::i18n::ngettext(locale, "{} unread message", "{} unread messages", count)
+        .replace("{}", &count.to_string())
 }
 
 /// Chat and message a clicked notification opens. The message id travels with
 /// the click, so the reader lands on what was announced instead of on the end
-/// of the chat.
+/// of the chat. An incoming call has no message: its click only brings the
+/// window up, where the call is waiting.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct NotificationTarget {
     pub account: crate::model::AccountId,
     pub chat: String,
-    pub message: String,
+    pub message: Option<String>,
 }
 
-#[cfg(any(target_os = "macos", test))]
-const MACOS_APPLICATION_ID: &str = "me.paolino.fastsapp";
-
-#[cfg(target_os = "macos")]
-fn macos_application_ready() -> bool {
-    static READY: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    *READY.get_or_init(|| {
-        // The library's implicit default looks up an app named "use_default"
-        // through AppleScript, which opens macOS's application chooser.
-        match notify_rust::set_application(MACOS_APPLICATION_ID) {
-            Ok(()) => true,
-            Err(error) => {
-                log::debug!("could not initialize notification application: {error}");
-                false
-            }
-        }
-    })
+/// The key a call's notification waits under, apart from the chat's message
+/// notifications: answering a call takes back its own notification and leaves
+/// a message that arrived meanwhile on the desktop.
+fn call_key(chat: &str) -> String {
+    format!("call:{chat}")
 }
 
 /// Notifications that may still wait for a click. Each one waiting holds a
@@ -66,6 +45,12 @@ fn macos_application_ready() -> bool {
 /// straight into its history without a signal. Without a limit they piled up
 /// until the process ran out of descriptors and aborted.
 const WAITING_LIMIT: usize = 32;
+
+/// How long a chat stays quiet after a notification when its notifications
+/// are limited. Opening the chat ends the wait early.
+const THROTTLE_WINDOW: Duration = Duration::from_secs(10 * 60);
+
+type Throttle = Arc<Mutex<std::collections::HashMap<(String, String), Instant>>>;
 
 type PendingByAccountChat =
     std::collections::HashMap<(String, String), Vec<(u64, tokio::sync::oneshot::Sender<Stop>)>>;
@@ -98,6 +83,9 @@ pub struct Notifications {
     pending: PendingByAccountChat,
     /// Order of registration, so the oldest waiting notification is released first.
     registered: u64,
+    /// When each limited chat last showed a notification. Shared so a failed
+    /// delivery, which happens on the notification's own thread, can undo it.
+    throttle: Throttle,
     /// What unit tests would have shown, recorded instead of shown on the
     /// desktop. Always empty outside tests.
     pub shown: Vec<Shown>,
@@ -166,8 +154,75 @@ impl Notifications {
         }
     }
 
+    /// Takes back a call's notification, and only that one.
+    pub fn clear_call(&mut self, account: &crate::model::AccountId, chat: &str) {
+        self.clear(account, &call_key(chat));
+    }
+
+    /// Whether a notification for this chat may be shown at `now`. A chat
+    /// whose notifications are `limited` is allowed once, then refused for
+    /// `THROTTLE_WINDOW` counted from the notification that was shown;
+    /// refused messages do not extend the wait. The wait starts here, so a
+    /// burst of messages shows one notification; [`Self::show`] ends it again
+    /// if the desktop then fails to show that notification.
+    pub fn allow(
+        &self,
+        account: &crate::model::AccountId,
+        chat: &str,
+        now: Instant,
+        limited: bool,
+    ) -> bool {
+        if !limited {
+            return true;
+        }
+        let key = (account.as_str().to_owned(), chat.to_owned());
+        let mut throttle = self.throttle.lock().unwrap_or_else(|p| p.into_inner());
+        if throttle
+            .get(&key)
+            .is_some_and(|last| now.saturating_duration_since(*last) < THROTTLE_WINDOW)
+        {
+            return false;
+        }
+        throttle.insert(key, now);
+        true
+    }
+
+    /// Lets the chat's next message notify at once, because the chat was looked at.
+    pub fn reset_throttle(&self, account: &crate::model::AccountId, chat: &str) {
+        self.throttle
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .remove(&(account.as_str().to_owned(), chat.to_owned()));
+    }
+
+    /// Ends the wait the chat has now, unless a newer one has replaced it by
+    /// the time the returned function runs.
+    fn undo_throttle(
+        &self,
+        account: &crate::model::AccountId,
+        chat: &str,
+    ) -> Box<dyn FnOnce() + Send> {
+        let key = (account.as_str().to_owned(), chat.to_owned());
+        let throttle = Arc::clone(&self.throttle);
+        let started = throttle
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .get(&key)
+            .copied();
+        Box::new(move || {
+            let mut throttle = throttle.lock().unwrap_or_else(|p| p.into_inner());
+            if started.is_some() && throttle.get(&key).copied() == started {
+                throttle.remove(&key);
+            }
+        })
+    }
+
     pub fn clear_account(&mut self, account: &crate::model::AccountId) {
         let account = account.as_str();
+        self.throttle
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .retain(|(id, _), _| id != account);
         let keys: Vec<_> = self
             .pending
             .keys()
@@ -198,8 +253,19 @@ impl Notifications {
         target: NotificationTarget,
         opened: Arc<Mutex<Vec<NotificationTarget>>>,
         wake: impl Fn() + Send + 'static,
+        limited: bool,
     ) {
-        let cancelled = self.register(&target.account, &target.chat);
+        let key = match target.message {
+            Some(_) => target.chat.clone(),
+            None => call_key(&target.chat),
+        };
+        let cancelled = self.register(&target.account, &key);
+        // A limited chat's wait ends again if the desktop does not show this.
+        let failed: Box<dyn FnOnce() + Send> = if limited {
+            self.undo_throttle(&target.account, &target.chat)
+        } else {
+            Box::new(|| {})
+        };
         if cfg!(test) {
             self.shown.push(Shown {
                 title,
@@ -209,24 +275,37 @@ impl Notifications {
             });
             return;
         }
+        let undo = Arc::new(Mutex::new(Some(failed)));
+        let undo_spawn = Arc::clone(&undo);
         let spawned = std::thread::Builder::new()
             .name("notification".into())
             .spawn(move || {
-                let system_sound = sound == NotificationSound::System;
-                play_sound(sound);
+                let failed = move || {
+                    if let Some(undo) = undo_spawn.lock().unwrap_or_else(|p| p.into_inner()).take()
+                    {
+                        undo();
+                    }
+                };
+                if !played_by_notification(&sound) {
+                    play_sound(sound.clone());
+                }
                 deliver(
                     &title,
                     &body,
                     picture.as_deref(),
-                    system_sound,
+                    &sound,
                     target,
                     opened,
                     wake,
                     cancelled,
+                    failed,
                 )
             });
         if let Err(error) = spawned {
             log::debug!("no thread for a notification: {error}");
+            if let Some(undo) = undo.lock().unwrap_or_else(|p| p.into_inner()).take() {
+                undo();
+            }
         }
     }
 }
@@ -234,6 +313,35 @@ impl Notifications {
 /// Pidgin's message and alert sounds (GPL-2.0, see `assets/sounds/README.md`).
 const RECEIVE: &[u8] = include_bytes!("../assets/sounds/receive.wav");
 const ALERT: &[u8] = include_bytes!("../assets/sounds/alert.wav");
+
+/// Whether the notification itself plays the sound, instead of ZapFast. On
+/// macOS a sound the notification plays is silenced along with the banner by
+/// Do Not Disturb, Focus, and the app's notification settings, so Pidgin's
+/// sounds go with it when the application bundle carries them.
+fn sound_file(sound: &NotificationSound) -> Option<&'static str> {
+    match sound {
+        NotificationSound::Receive => Some("zapfast-receive.wav"),
+        NotificationSound::Alert => Some("zapfast-alert.wav"),
+        _ => None,
+    }
+}
+
+fn played_by_notification(sound: &NotificationSound) -> bool {
+    sound_file(sound).is_some_and(fastframe_notifications::bundled_sound_exists)
+}
+
+fn native_sound(sound: &NotificationSound) -> fastframe_notifications::Sound {
+    use fastframe_notifications::Sound;
+    if *sound == NotificationSound::System {
+        Sound::Default
+    } else if let Some(name) =
+        sound_file(sound).filter(|name| fastframe_notifications::bundled_sound_exists(name))
+    {
+        Sound::Named(name.into())
+    } else {
+        Sound::Silent
+    }
+}
 
 /// Plays a notification sound on its own thread, for notifications and
 /// their preview in Settings. System sounds and silence play nothing here.
@@ -254,10 +362,17 @@ pub fn play_sound(sound: NotificationSound) {
             let played = (|| -> Result<(), String> {
                 let reader = source().map_err(|error| error.to_string())?;
                 let decoder = rodio::Decoder::new(reader).map_err(|error| error.to_string())?;
-                let device = crate::audio::open_output().map_err(|error| error.to_string())?;
+                let device = crate::audio::open_output(None)?;
                 let player = rodio::Player::connect_new(device.mixer());
                 player.append(decoder);
-                player.sleep_until_end();
+                // Not `sleep_until_end`: a stream that keeps failing plays nothing, so the
+                // sound would never end and the stream would stay open (#507).
+                while !player.empty() {
+                    if device.failed() {
+                        return Err("the sound output failed".to_owned());
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(50));
+                }
                 Ok(())
             })();
             if let Err(error) = played {
@@ -272,12 +387,17 @@ pub fn play_sound(sound: NotificationSound) {
 trait ReadSeek: std::io::Read + std::io::Seek + Send + Sync {}
 impl<T: std::io::Read + std::io::Seek + Send + Sync> ReadSeek for T {}
 
-/// The title and body of a notification while the app lock is on, which
-/// name neither the chat nor the sender and carry none of the message.
+/// The title and body of a notification while the app lock is on, or with
+/// notification content turned off, which name neither the chat nor the
+/// sender and carry none of the message. The body has a context of its own:
+/// without one, catalogs gave it the composer placeholder's translation
+/// ("Type a message").
 pub fn locked_lines(locale: crate::i18n::Locale) -> (String, String) {
     (
         "ZapFast".to_owned(),
-        crate::i18n::gettext(locale, "New message").into_owned(),
+        // Translators: the body of a notification that hides who wrote and
+        // what: a message has arrived.
+        crate::i18n::pgettext(locale, "notification", "New message").into_owned(),
     )
 }
 
@@ -291,148 +411,206 @@ pub fn lines(chat_name: &str, is_group: bool, sender: &str, summary: &str) -> (S
     (chat_name.to_owned(), body)
 }
 
-#[cfg(target_os = "linux")]
+/// The bundle identifier packaging/macos gives the app.
+const MACOS_BUNDLE_ID: &str = "me.paolino.fastsapp";
+
+/// The identity notifications are sent under. macOS refuses a client whose
+/// identity is not the running bundle's before it asks for permission, so a
+/// mismatch leaves the app out of Notification Center: no banners, no sound,
+/// and no Dock badge. Elsewhere it is the app id the desktop entry and the
+/// Windows shortcuts use.
+fn notification_app_id() -> &'static str {
+    if cfg!(target_os = "macos") {
+        MACOS_BUNDLE_ID
+    } else {
+        "me.paolino.zapfast"
+    }
+}
+
+/// Fastframe owns the platform adapters and one bounded native worker. This
+/// thread only keeps ZapFast's account-scoped cancellation and click routing.
 #[expect(clippy::too_many_arguments)]
 fn deliver(
     title: &str,
     body: &str,
     picture: Option<&std::path::Path>,
-    system_sound: bool,
+    sound: &NotificationSound,
     target: NotificationTarget,
     opened: Arc<Mutex<Vec<NotificationTarget>>>,
     wake: impl Fn() + Send + 'static,
     mut cancelled: tokio::sync::oneshot::Receiver<Stop>,
+    failed: impl FnOnce(),
 ) {
+    use fastframe_notifications::{App, Client, Event, Notification};
+    static CLIENT: std::sync::OnceLock<Result<Client, fastframe_notifications::Error>> =
+        std::sync::OnceLock::new();
     let Some(may_wait) = before_showing(&mut cancelled) else {
         return;
     };
-    let mut notification = notify_rust::Notification::new();
-    notification
-        .appname("ZapFast")
-        .summary(title)
-        .body(body)
-        .icon("zapfast")
-        .action(
-            "default",
-            &crate::i18n::gettext(crate::i18n_extra::locale(), "Open"),
-        );
-    if !system_sound {
-        notification.hint(notify_rust::Hint::SuppressSound(true));
-    }
-    if let Some(picture) = picture {
-        notification.image_path(&picture.to_string_lossy());
-    }
-    match notification.show() {
-        Ok(handle) => {
-            if !may_wait {
-                // Shown, and left to the desktop: the handle does not close it.
-                return;
-            }
-            let runtime = match tokio::runtime::Builder::new_current_thread()
-                .enable_all()
-                .build()
-            {
-                Ok(runtime) => runtime,
-                Err(error) => {
-                    handle.close();
-                    log::debug!("no notification action runtime: {error}");
+    let client = match CLIENT.get_or_init(|| {
+        Client::new(
+            App::new(notification_app_id(), "ZapFast")
+                .desktop_entry("zapfast")
+                .icon("zapfast")
+                // ZapFast's green, the theme's accent, behind the logo on
+                // Windows toasts, so Windows 11's dark theme leaves it as drawn.
+                .logo(
+                    include_bytes!("../packaging/macos/icon-1024.png"),
+                    [0x00, 0xa8, 0x84],
+                ),
+        )
+    }) {
+        Ok(client) => client,
+        Err(_) => {
+            failed();
+            return;
+        }
+    };
+    let runtime = match tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+    {
+        Ok(runtime) => runtime,
+        Err(_) => {
+            failed();
+            return;
+        }
+    };
+    runtime.block_on(async {
+        // Retain the existing permission request on first notification. The
+        // framework rechecks OS settings without caching a permission denial.
+        if let Err(error) = client.request_permission().await {
+            log::debug!("native notification permission unavailable: {error}");
+            failed();
+            return;
+        }
+        // Reading the chat during a permission prompt must suppress delivery.
+        let may_wait = if may_wait {
+            let Some(wait) = before_showing(&mut cancelled) else { return; };
+            wait
+        } else { false };
+        let mut notification = Notification::new(title).body(body).category("im.received").sound(native_sound(sound)).action("default", &crate::i18n::gettext(crate::i18n_extra::locale(), "Open"));
+        if let Some(picture) = picture { notification = notification.image(picture); }
+        let (events, mut responses) = tokio::sync::mpsc::unbounded_channel();
+        let handle = match client.show_with(notification, move |event| { let _ = events.send(event); }) {
+            Ok(handle) => handle,
+            Err(error) => { log::debug!("native notification unavailable: {error}"); failed(); return; }
+        };
+        loop {
+            tokio::select! {
+                biased;
+                stop = &mut cancelled, if may_wait => {
+                    if stop != Ok(Stop::Release) { handle.close(); }
                     return;
                 }
-            };
-            runtime.block_on(async {
-                tokio::select! {
-                    biased;
-                    stop = &mut cancelled => {
-                        if stop != Ok(Stop::Release) {
-                            handle.close_async().await;
-                        }
+                response = responses.recv() => match response {
+                    Some(Event::Shown) if may_wait => {},
+                    Some(Event::Shown) => return,
+                    Some(Event::Activated) => {
+                        opened.lock().unwrap_or_else(|p| p.into_inner()).push(target);
+                        wake();
+                        return;
                     }
-                    _ = handle.wait_for_action_async(|action| {
-                        if matches!(action, notify_rust::NotificationResponse::Default) {
-                            opened.lock().unwrap_or_else(|p| p.into_inner()).push(target);
-                            wake();
-                        }
-                    }) => {}
+                    Some(Event::Failed(error)) => { log::debug!("native notification unavailable: {error}"); failed(); return; }
+                    _ => return,
                 }
-            });
+            }
         }
-        Err(error) => log::debug!("no notification: {error}"),
-    }
-}
-
-#[cfg(target_os = "windows")]
-#[expect(clippy::too_many_arguments)]
-fn deliver(
-    title: &str,
-    body: &str,
-    picture: Option<&std::path::Path>,
-    system_sound: bool,
-    target: NotificationTarget,
-    opened: Arc<Mutex<Vec<NotificationTarget>>>,
-    wake: impl Fn() + Send + 'static,
-    mut cancelled: tokio::sync::oneshot::Receiver<Stop>,
-) {
-    if before_showing(&mut cancelled).is_some()
-        && let Err(error) = windows::show(title, body, picture, system_sound, target, opened, wake)
-    {
-        log::debug!("no Windows notification: {error}");
-    }
-}
-
-#[cfg(not(any(target_os = "linux", target_os = "windows")))]
-#[expect(clippy::too_many_arguments)]
-fn deliver(
-    title: &str,
-    body: &str,
-    picture: Option<&std::path::Path>,
-    system_sound: bool,
-    _target: NotificationTarget,
-    _opened: Arc<Mutex<Vec<NotificationTarget>>>,
-    _wake: impl Fn() + Send + 'static,
-    mut cancelled: tokio::sync::oneshot::Receiver<Stop>,
-) {
-    // Never fall back to application discovery, including for unbundled builds.
-    #[cfg(target_os = "macos")]
-    if !macos_application_ready() {
-        return;
-    }
-    if before_showing(&mut cancelled).is_none() {
-        return;
-    }
-    let mut notification = notify_rust::Notification::new();
-    notification.appname("ZapFast").summary(title).body(body);
-    #[cfg(target_os = "macos")]
-    if system_sound {
-        // The notification system's default sound; custom sounds are played
-        // by ZapFast, and None stays silent.
-        notification.sound_name("NSUserNotificationDefaultSoundName");
-    }
-    #[cfg(not(target_os = "macos"))]
-    let _ = system_sound;
-    // Windows uses the image; macOS always uses the app icon.
-    if let Some(picture) = picture {
-        notification.image_path(&picture.to_string_lossy());
-    }
-    if let Err(error) = notification.show() {
-        log::debug!("no notification: {error}");
-    }
+    });
 }
 
 #[cfg(test)]
 mod tests {
+    /// Notifications on macOS need the bundle's own identifier, or the
+    /// system never asks for permission.
+    #[test]
+    fn the_macos_notification_identity_is_the_bundle_identifier() {
+        let plist = include_str!("../packaging/macos/Info.plist");
+        let key = "<key>CFBundleIdentifier</key>";
+        let after = &plist[plist.find(key).expect("Info.plist names the bundle") + key.len()..];
+        let value = after
+            .trim_start()
+            .strip_prefix("<string>")
+            .and_then(|rest| rest.split_once("</string>"))
+            .map(|(value, _)| value);
+        assert_eq!(value, Some(super::MACOS_BUNDLE_ID));
+        #[cfg(target_os = "macos")]
+        assert_eq!(super::notification_app_id(), super::MACOS_BUNDLE_ID);
+    }
+
+    #[test]
+    fn badge_description_agrees_with_the_count() {
+        use crate::i18n::Locale;
+        assert_eq!(
+            super::badge_description(1, Locale::English),
+            "1 unread message"
+        );
+        assert_eq!(
+            super::badge_description(3, Locale::English),
+            "3 unread messages"
+        );
+    }
+
     use super::*;
     use crate::model::AccountId;
 
     fn account(id: &str) -> AccountId {
         AccountId(id.into())
     }
+    #[test]
+    fn native_sound_preserves_system_sound_and_silence() {
+        assert_eq!(
+            native_sound(&NotificationSound::System),
+            fastframe_notifications::Sound::Default
+        );
+        assert_eq!(
+            native_sound(&NotificationSound::None),
+            fastframe_notifications::Sound::Silent
+        );
+    }
 
     #[test]
-    fn macos_notification_identity_matches_the_packaged_application() {
-        let plist = include_str!("../packaging/macos/Info.plist");
-        assert!(plist.contains(&format!(
-            "<key>CFBundleIdentifier</key><string>{MACOS_APPLICATION_ID}</string>"
-        )));
+    fn the_bundle_script_ships_every_built_in_sound() {
+        let script = include_str!("../packaging/macos/bundle.sh");
+        for sound in [NotificationSound::Receive, NotificationSound::Alert] {
+            assert!(script.contains(sound_file(&sound).expect("bundled sound")));
+        }
+        assert_eq!(
+            sound_file(&NotificationSound::Custom("/a.wav".into())),
+            None
+        );
+    }
+
+    #[test]
+    fn the_windows_shortcut_uses_the_notification_identity() {
+        let installer = include_str!("../packaging/windows/zapfast.iss");
+        let shortcuts: Vec<_> = installer
+            .lines()
+            .filter(|line| {
+                line.starts_with("Name: \"{autoprograms}")
+                    || line.starts_with("Name: \"{autodesktop}")
+            })
+            .collect();
+        assert_eq!(shortcuts.len(), 2);
+        for shortcut in shortcuts {
+            assert!(shortcut.contains("AppUserModelID: \"me.paolino.zapfast\""));
+        }
+    }
+
+    /// Answering a call takes back its own notification and leaves a
+    /// message that arrived while it rang on the desktop.
+    #[test]
+    fn answering_a_call_leaves_its_chats_message_notifications_alone() {
+        let mut notifications = Notifications::default();
+        let one = account("1");
+        let mut message = notifications.register(&one, "a");
+        let mut call = notifications.register(&one, &call_key("a"));
+        notifications.clear_call(&one, "a");
+        assert_eq!(call.try_recv(), Ok(Stop::Close));
+        assert_eq!(
+            message.try_recv(),
+            Err(tokio::sync::oneshot::error::TryRecvError::Empty)
+        );
     }
 
     #[test]
@@ -460,6 +638,76 @@ mod tests {
             next.try_recv(),
             Err(tokio::sync::oneshot::error::TryRecvError::Closed)
         );
+    }
+
+    #[test]
+    fn a_limited_chat_notifies_once_then_waits_ten_minutes() {
+        let notifications = Notifications::default();
+        let one = account("1");
+        let start = Instant::now();
+        assert!(notifications.allow(&one, "a", start, true));
+        assert!(!notifications.allow(&one, "a", start + Duration::from_secs(1), true));
+        // Refused messages do not push the end of the wait back.
+        assert!(!notifications.allow(&one, "a", start + Duration::from_secs(599), true));
+        assert!(notifications.allow(&one, "a", start + THROTTLE_WINDOW, true));
+        assert!(!notifications.allow(&one, "a", start + THROTTLE_WINDOW, true));
+    }
+
+    #[test]
+    fn a_notification_that_was_not_shown_does_not_start_the_wait() {
+        let notifications = Notifications::default();
+        let one = account("1");
+        let start = Instant::now();
+        assert!(notifications.allow(&one, "a", start, true));
+        let undo = notifications.undo_throttle(&one, "a");
+        undo();
+        assert!(notifications.allow(&one, "a", start, true));
+
+        // A wait that has since been replaced is left alone.
+        let undo = notifications.undo_throttle(&one, "a");
+        notifications.reset_throttle(&one, "a");
+        let later = start + THROTTLE_WINDOW;
+        assert!(notifications.allow(&one, "a", later, true));
+        undo();
+        assert!(!notifications.allow(&one, "a", later, true));
+    }
+
+    #[test]
+    fn unlimited_chats_always_notify_and_leave_no_state() {
+        let notifications = Notifications::default();
+        let one = account("1");
+        let start = Instant::now();
+        assert!(notifications.allow(&one, "a", start, false));
+        assert!(notifications.allow(&one, "a", start, false));
+        assert!(notifications.throttle.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn opening_a_chat_lets_its_next_message_notify() {
+        let notifications = Notifications::default();
+        let one = account("1");
+        let start = Instant::now();
+        assert!(notifications.allow(&one, "a", start, true));
+        assert!(notifications.allow(&one, "b", start, true));
+        notifications.reset_throttle(&one, "a");
+        assert!(notifications.allow(&one, "a", start, true));
+        assert!(!notifications.allow(&one, "b", start, true));
+    }
+
+    #[test]
+    fn the_wait_is_kept_per_account_and_chat() {
+        let mut notifications = Notifications::default();
+        let start = Instant::now();
+        assert!(notifications.allow(&account("1"), "a", start, true));
+        assert!(notifications.allow(&account("2"), "a", start, true));
+        assert!(notifications.allow(&account("1"), "b", start, true));
+        assert!(!notifications.allow(&account("1"), "a", start, true));
+        notifications.clear_account(&account("1"));
+        assert!(notifications.allow(&account("1"), "a", start, true));
+        assert!(!notifications.allow(&account("2"), "a", start, true));
+        // Locking the app closes notifications but keeps the waits.
+        notifications.clear_all();
+        assert!(!notifications.allow(&account("2"), "a", start, true));
     }
 
     #[test]
@@ -549,10 +797,11 @@ mod tests {
             NotificationTarget {
                 account: crate::model::AccountId::first(),
                 chat: "test".into(),
-                message: "test-message".into(),
+                message: Some("test-message".into()),
             },
             Default::default(),
             || {},
+            false,
         );
         std::thread::sleep(std::time::Duration::from_secs(2));
     }
@@ -570,6 +819,26 @@ mod tests {
         );
         notifications.clear(&second, "shared");
         assert_eq!(theirs.try_recv(), Ok(Stop::Close));
+    }
+
+    #[test]
+    fn a_hidden_notification_says_new_message_in_every_language() {
+        use crate::i18n::Locale;
+        for (locale, body) in [
+            (Locale::English, "New message"),
+            (Locale::PortugueseBrazil, "Nova mensagem"),
+            (Locale::German, "Neue Nachricht"),
+            (Locale::Spanish, "Mensaje nuevo"),
+            (Locale::Italian, "Nuovo messaggio"),
+            (Locale::French, "Nouveau message"),
+            (Locale::Russian, "Новое сообщение"),
+            (Locale::ChineseSimplified, "新消息"),
+            (Locale::ChineseTraditional, "新訊息"),
+            (Locale::Turkish, "Yeni mesaj"),
+            (Locale::Indonesian, "Pesan baru"),
+        ] {
+            assert_eq!(locked_lines(locale).1, body, "{locale:?}");
+        }
     }
 
     #[test]

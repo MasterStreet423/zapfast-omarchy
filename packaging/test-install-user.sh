@@ -18,7 +18,7 @@ fake="$work/zapfast-fake"
 printf '#!/bin/sh\nexit 0\n' > "$fake"
 chmod +x "$fake"
 
-# The Desktop Entry Exec escaping, mirroring src/autostart.rs: a backslash is
+# The Desktop Entry Exec escaping, mirroring fastframe-autostart: a backslash is
 # doubled first, then `"`, `` ` ``, `$` and `\` are backslash-escaped, and a
 # literal `%` is doubled. Written here so the test states the expected bytes
 # rather than reading them back from the script under test.
@@ -40,18 +40,29 @@ check_prefix() {
   test -s "$entry"
   test -s "$prefix/share/icons/hicolor/scalable/apps/zapfast.svg"
 
+  # `%U` stays after the quoted path: it is what passes a `whatsapp://` link
+  # to the binary, which the MimeType line claims this entry handles.
   local expected
-  expected=$(printf 'Exec="%s"' "$(escape_exec "${prefix}/bin/zapfast")")
+  expected=$(printf 'Exec="%s" %%U' "$(escape_exec "${prefix}/bin/zapfast")")
   grep -qxF "$expected" "$entry" || {
     echo "unexpected Exec for prefix: $prefix" >&2
     grep '^Exec=' "$entry" >&2
     echo "expected: $expected" >&2
     exit 1
   }
+  # The Quit action keeps its argument after the quoted path.
+  local quit
+  quit=$(printf 'Exec="%s" quit' "$(escape_exec "${prefix}/bin/zapfast")")
+  grep -qxF "$quit" "$entry" || {
+    echo "unexpected Quit action Exec for prefix: $prefix" >&2
+    grep '^Exec=' "$entry" >&2
+    echo "expected: $quit" >&2
+    exit 1
+  }
 
   # desktop-file-validate rejects the spec-correct doubled backslash in a
   # quoted Exec, so it is only consulted for paths without one. The escaping is
-  # still checked above, and mirrors src/autostart.rs.
+  # still checked above, and mirrors fastframe-autostart.
   if command -v desktop-file-validate >/dev/null 2>&1 && [[ "$prefix" != *\\* ]]; then
     desktop-file-validate "$entry"
   fi
@@ -70,7 +81,7 @@ test ! -e "$work/elsewhere" || { echo "wrote into XDG_DATA_HOME despite a prefix
 
 # A relative prefix becomes absolute, since a launcher cannot resolve it.
 (cd "$work" && bash "$script_dir/install-user.sh" "$fake" relative >/dev/null)
-grep -qxF "Exec=\"$work/relative/bin/zapfast\"" "$work/relative/share/applications/zapfast.desktop" || {
+grep -qxF "Exec=\"$work/relative/bin/zapfast\" %U" "$work/relative/share/applications/zapfast.desktop" || {
   echo "a relative prefix left a relative Exec" >&2
   exit 1
 }

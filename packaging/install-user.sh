@@ -45,11 +45,12 @@ installed="$bin_dir/zapfast"
 install -Dm755 "$binary" "$installed"
 install -Dm644 "$here/icons/zapfast.svg" "$icons_dir/zapfast.svg"
 mkdir -p "$apps_dir"
-# The one line that changes: `Exec=zapfast` becomes the path just installed,
-# so the entry works whether or not ~/.local/bin is on the session's PATH.
+# The lines that change: `Exec=zapfast`, and the actions' `Exec=zapfast <verb>`,
+# name the path just installed, so the entry works whether or not ~/.local/bin
+# is on the session's PATH. Arguments after the binary are kept.
 #
 # The path is quoted and escaped the way a Desktop Entry's Exec key wants, the
-# same rules src/autostart.rs applies to the tray entry, because a home
+# same rules fastframe-autostart applies to the tray entry, because a home
 # directory like `/home/alice/Zap Fast` is valid: unquoted, the launcher would
 # read that as an executable plus an argument and the entry would do nothing.
 # `"`, `` ` ``, `$` and `\` are backslash-escaped, and a literal `%` is doubled.
@@ -69,7 +70,16 @@ EXEC_PATH="$installed" awk '
     }
     return out "\""
   }
-  /^Exec=/ { print "Exec=" quote(ENVIRON["EXEC_PATH"]); next }
+  # Everything after the command name stays: `%U` is what hands a
+  # `whatsapp://` link to the binary, so dropping it would break the scheme
+  # the MimeType line claims, and the Quit action keeps the `quit` it asks
+  # the running copy for.
+  /^Exec=/ {
+    rest = $0
+    sub(/^Exec=[^ ]*[ ]*/, "", rest)
+    print "Exec=" quote(ENVIRON["EXEC_PATH"]) (rest != "" ? " " rest : "")
+    next
+  }
   { print }
 ' "$here/applications/zapfast.desktop" > "$apps_dir/zapfast.desktop"
 

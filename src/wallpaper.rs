@@ -351,15 +351,8 @@ pub fn import(source: &Path, state: &Path) -> Result<PathBuf, String> {
         };
         (bytes, extension)
     };
-    std::fs::create_dir_all(state).map_err(|error| error.to_string())?;
     let target = state.join(format!("wallpaper.{extension}"));
-    let temporary = state.join("wallpaper.tmp");
-    std::fs::write(&temporary, contents)
-        .and_then(|()| std::fs::rename(&temporary, &target))
-        .map_err(|error| {
-            let _ = std::fs::remove_file(&temporary);
-            error.to_string()
-        })?;
+    fastframe_file::write(&target, contents).map_err(|error| error.to_string())?;
     for other in EXTENSIONS.into_iter().filter(|other| *other != extension) {
         let _ = std::fs::remove_file(state.join(format!("wallpaper.{other}")));
     }

@@ -24,6 +24,9 @@ class FlatpakPackaging(unittest.TestCase):
             self.assertEqual(source[key], bundle[key], key)
         self.assertIn("--persist=.local/state", source["finish-args"])
         self.assertIn("--talk-name=org.freedesktop.secrets", source["finish-args"])
+        self.assertIn("--talk-name=org.freedesktop.Notifications", source["finish-args"])
+        # Video calls read the camera through Video4Linux.
+        self.assertIn("--device=all", source["finish-args"])
         self.assertFalse(any(arg.startswith("--filesystem=") for arg in source["finish-args"]))
         meta = ET.parse(HERE / f"{APP_ID}.metainfo.xml").getroot()
         self.assertEqual(meta.findtext("id"), APP_ID)

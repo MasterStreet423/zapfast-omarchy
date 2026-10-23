@@ -92,10 +92,17 @@ native-packages build \
 Secret configuration applies to future builds. Existing published DMGs retain
 their original signatures; this setup does not replace release assets.
 
-Linux releases build on Ubuntu 24.04 (glibc 2.39). DEB/RPM recipes declare
-runtime-loaded Wayland, X11 and EGL libraries as well as ALSA and its PulseAudio
-plugin. Packaging CI builds both architectures from the published v0.13.1 fixture
-on PRs; release runs use their own tag. Clean Ubuntu, Debian and Fedora containers
+Linux releases build on Ubuntu 24.04, so the binaries need glibc 2.39 or newer
+and the packages install on Ubuntu 24.04 and Debian 13 onwards: 22.04's
+libpipewire is older than the 0.3.53 fastframe-audio's PipeWire output builds
+against. native-packages derives the `libc6`/`glibc` floor from the binary; do
+not declare one. DEB/RPM recipes declare runtime-loaded Wayland, X11 and EGL
+libraries as well as ALSA (`libasound2t64 | libasound2`, the package's name
+before and after the 64-bit time transition) and libpipewire
+(`libpipewire-0.3-0t64 | libpipewire-0.3-0`, `pipewire-libs`). Sound goes to
+PipeWire or PulseAudio directly, so ALSA's PulseAudio plugin is not needed.
+Packaging CI builds both architectures from the published v0.13.1 fixture on
+PRs; release runs use their own tag. Clean Ubuntu, Debian and Fedora containers
 install and remove each package, check GUI libraries loaded with `dlopen`, and
 verify desktop and theme assets. Run the same check locally with
 `bash packaging/test-install.sh ubuntu:24.04 /path/to/native-packages-output`. The macOS job selects `macos-universal`
@@ -126,3 +133,29 @@ disclosure of generated material. Review the manifests and these changes before
 submitting. The manifests use the current Freedesktop 26.08 runtime; the CI builder
 container is 25.08 and installs the runtime and SDK named by the manifest. The GitHub release job includes the bundle
 in `checksums.txt`. No existing release files are replaced by this change.
+
+## winget
+
+`packaging/winget/` holds the manifests for the `crmne.ZapFast` package in
+[microsoft/winget-pkgs](https://github.com/microsoft/winget-pkgs). They install
+the per-user MSI of each stable release, which also takes over a copy installed
+by the Inno Setup installer; its fixed UpgradeCode tells winget which installed
+program is ZapFast. v0.19.0 and earlier ship no MSI, so the first winget
+version is the first release that does.
+
+Submission is a manual step for the maintainer, after the release's assets and
+`checksums.txt` exist. Nothing in CI submits it. Write the manifests from the
+published release, then validate and submit them from a fork of winget-pkgs:
+
+```sh
+python3 packaging/winget/manifests.py vX.Y.Z /path/to/winget-pkgs
+winget validate --manifest /path/to/winget-pkgs/manifests/c/crmne/ZapFast/X.Y.Z
+winget install --manifest /path/to/winget-pkgs/manifests/c/crmne/ZapFast/X.Y.Z
+```
+
+Commit only that version's directory and open a pull request to
+`microsoft/winget-pkgs` (or use `wingetcreate submit` on the directory). Its
+validation installs the package and records anything else it needs. Later
+releases can reuse the same command or `wingetcreate update crmne.ZapFast`;
+change the templates here when the description or installers change, so the
+next submission keeps them.

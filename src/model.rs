@@ -3,7 +3,8 @@
 //! The backend translates protocol types into these models, keeping protobufs
 //! out of views and giving the archive a stable shape.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::time::Instant;
 
 use serde::{Deserialize, Serialize};
@@ -48,6 +49,43 @@ impl std::fmt::Display for AccountId {
 impl From<&str> for AccountId {
     fn from(value: &str) -> Self {
         Self(value.to_owned())
+    }
+}
+
+/// A composer quote, optionally from a different chat (a private group reply).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ReplyTarget {
+    pub id: String,
+    pub chat: Option<ChatId>,
+}
+
+impl ReplyTarget {
+    /// Returns the explicit group source, or the destination for an ordinary same-chat reply.
+    pub fn source_chat<'a>(&'a self, destination: &'a str) -> &'a str {
+        self.chat.as_deref().unwrap_or(destination)
+    }
+}
+
+impl From<String> for ReplyTarget {
+    /// Wraps a same-chat message id without inventing a cross-chat source.
+    fn from(id: String) -> Self {
+        Self { id, chat: None }
+    }
+}
+
+impl From<&str> for ReplyTarget {
+    /// Wraps a same-chat message id without inventing a cross-chat source.
+    fn from(id: &str) -> Self {
+        id.to_owned().into()
+    }
+}
+
+impl std::ops::Deref for ReplyTarget {
+    type Target = str;
+
+    /// Exposes the message id for existing transcript lookup helpers.
+    fn deref(&self) -> &str {
+        &self.id
     }
 }
 
@@ -97,6 +135,51 @@ pub enum ChatFilter {
     Channels,
 }
 
+/// The chat list's filter as settings keep it: a chip or a label. `None` is
+/// the All chip.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ListFilter {
+    Chip(ChatFilter),
+    Label(String),
+}
+
+impl ListFilter {
+    const LABEL: &'static str = "label:";
+
+    /// The text stored for this filter; `None` for showing every chat.
+    pub fn key(chip: ChatFilter, label: Option<&str>) -> Option<String> {
+        if let Some(label) = label {
+            return Some(format!("{}{label}", Self::LABEL));
+        }
+        let key = match chip {
+            ChatFilter::All => return None,
+            ChatFilter::Unread => "unread",
+            ChatFilter::Private => "private",
+            ChatFilter::Favorites => "favorites",
+            ChatFilter::Groups => "groups",
+            ChatFilter::Channels => "channels",
+        };
+        Some(key.to_owned())
+    }
+
+    /// Reads a stored filter. Anything unknown, as a later version may
+    /// write, shows every chat.
+    pub fn parse(key: &str) -> Option<Self> {
+        if let Some(label) = key.strip_prefix(Self::LABEL) {
+            return (!label.is_empty()).then(|| Self::Label(label.to_owned()));
+        }
+        let chip = match key {
+            "unread" => ChatFilter::Unread,
+            "private" => ChatFilter::Private,
+            "favorites" => ChatFilter::Favorites,
+            "groups" => ChatFilter::Groups,
+            "channels" => ChatFilter::Channels,
+            _ => return None,
+        };
+        Some(Self::Chip(chip))
+    }
+}
+
 impl ChatFilter {
     pub const EVERY: [Self; 6] = [
         Self::All,
@@ -131,6 +214,45 @@ impl ChatFilter {
     }
 }
 
+/// Call-history filter chosen from the chips under the Calls page's search
+/// field.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum CallFilter {
+    #[default]
+    All,
+    /// Calls to us that nobody took, group calls included.
+    Missed,
+}
+
+impl CallFilter {
+    pub const EVERY: [Self; 2] = [Self::All, Self::Missed];
+
+    pub fn label(self, locale: crate::i18n::Locale) -> std::borrow::Cow<'static, str> {
+        use crate::i18n::gettext;
+        match self {
+            Self::All => gettext(locale, "All"),
+            Self::Missed => gettext(locale, "Missed"),
+        }
+    }
+
+    /// The text settings keep for this filter; `None` for every call.
+    pub fn key(self) -> Option<String> {
+        match self {
+            Self::All => None,
+            Self::Missed => Some("missed".to_owned()),
+        }
+    }
+
+    /// Reads a stored filter. Anything unknown, as a later version may
+    /// write, shows every call.
+    pub fn parse(key: Option<&str>) -> Self {
+        match key {
+            Some("missed") => Self::Missed,
+            _ => Self::All,
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct Chat {
     pub id: ChatId,
@@ -160,6 +282,9 @@ pub struct Chat {
     pub favorite_position: u32,
     /// Canonical group-member ids, empty until loaded.
     pub participants: Vec<String>,
+    /// Group description: `None` until metadata is fetched, `Some("")`
+    /// when fetched without a description, otherwise the original text.
+    pub group_description: Option<String>,
     /// Whether this is an announcement group where we cannot post.
     pub read_only: bool,
     /// Whether we confirmed leaving this group or channel. Kept apart from
@@ -171,14 +296,43 @@ pub struct Chat {
     pub info_locked: Option<bool>,
     /// Whether we are an admin of this group, as its metadata last said.
     pub admin: bool,
+    /// Who may do what in the group, and who its admins are; `None` until
+    /// the group's metadata has said.
+    pub group_settings: Option<GroupSettings>,
     /// Hidden while WhatsApp chat lock is enabled on the phone.
     pub locked: bool,
-    /// Disappearing-message duration in seconds, if enabled.
+    /// Disappearing-message duration in seconds. `Some(0)` is the timer
+    /// WhatsApp turned off, which is not the same as never having heard about
+    /// it: `None` means nobody has said.
     pub ephemeral_expiration: Option<u32>,
     /// Labels worn by this chat, in creation order. Local to this computer.
     pub labels: Vec<String>,
     /// This chat's own notification sound; `None` follows Settings.
     pub notification_sound: Option<crate::settings::NotificationSound>,
+    /// The oldest unread message that mentions us (or everyone), which the
+    /// chat list marks with "@" and opening the chat shows.
+    pub unread_mention: Option<String>,
+    /// This chat's own voice message speed; `None` follows Settings.
+    pub voice_speed: Option<f32>,
+}
+
+/// A group's permissions and admins, as its metadata says. Kept in the
+/// archive with the chat; a change made here lands once WhatsApp accepts it.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct GroupSettings {
+    /// Only admins may send messages (WhatsApp's announcement mode).
+    pub announce: bool,
+    /// Every member may add people, not only admins.
+    pub members_add: bool,
+    /// Admins approve people who join through the link.
+    pub approval: bool,
+    /// Every member may see and share the invite link, not only admins.
+    pub members_share_link: bool,
+    /// The admins under canonical chat ids, the creator included.
+    pub admins: Vec<String>,
+    /// The creator (WhatsApp's super admin), under canonical chat ids.
+    pub super_admins: Vec<String>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -191,7 +345,34 @@ pub struct LastMessage {
     /// The whole message behind `summary`, every line of it: the chat row
     /// shows it in a tooltip when the one-line preview cannot.
     pub full: String,
+    /// Whether `summary` and `full` start with a content label such as
+    /// "Photo" rather than the message's own text.
+    pub labelled: bool,
     pub status: Delivery,
+}
+
+impl LastMessage {
+    /// `summary` with its content label in `locale`.
+    pub fn summary_in(&self, locale: crate::i18n::Locale) -> std::borrow::Cow<'_, str> {
+        self.localized(locale, &self.summary)
+    }
+
+    /// `full` with its content label in `locale`.
+    pub fn full_in(&self, locale: crate::i18n::Locale) -> std::borrow::Cow<'_, str> {
+        self.localized(locale, &self.full)
+    }
+
+    fn localized<'a>(
+        &self,
+        locale: crate::i18n::Locale,
+        text: &'a str,
+    ) -> std::borrow::Cow<'a, str> {
+        if self.labelled {
+            localized_summary(locale, text)
+        } else {
+            std::borrow::Cow::Borrowed(text)
+        }
+    }
 }
 
 impl Chat {
@@ -213,14 +394,18 @@ impl Chat {
             favorite: false,
             favorite_position: 0,
             participants: Vec::new(),
+            group_description: None,
             read_only: false,
             left: false,
             info_locked: None,
             admin: false,
+            group_settings: None,
             locked: false,
             ephemeral_expiration: None,
             labels: Vec::new(),
             notification_sound: None,
+            unread_mention: None,
+            voice_speed: None,
         }
     }
 
@@ -236,6 +421,12 @@ impl Chat {
 
     pub fn is_group(&self) -> bool {
         self.kind == ChatKind::Group
+    }
+
+    /// Never held a message: history sync files such a conversation for
+    /// many contacts, and the phone lists none of them.
+    pub fn never_messaged(&self) -> bool {
+        self.last.is_none() && self.last_activity == 0
     }
 
     /// Counted unread, or marked unread with nothing pending.
@@ -271,6 +462,62 @@ impl Chat {
         self.is_group() && !self.left && (self.admin || self.info_locked == Some(false))
     }
 
+    /// Whether we may add people to the group: admins always, other members
+    /// only while the group lets every member add (WhatsApp's "Add other
+    /// members"). Nothing is offered until the metadata says.
+    pub fn can_add_members(&self) -> bool {
+        self.is_group()
+            && !self.left
+            && (self.admin
+                || self
+                    .group_settings
+                    .as_ref()
+                    .is_some_and(|settings| settings.members_add))
+    }
+
+    /// Whether the group's invite link is shown: to admins, and to every
+    /// member while the group lets members share it.
+    pub fn can_share_invite_link(&self) -> bool {
+        self.is_group()
+            && !self.left
+            && (self.admin
+                || self
+                    .group_settings
+                    .as_ref()
+                    .is_some_and(|settings| settings.members_share_link))
+    }
+
+    /// Whether we run the group: its permissions, resetting its link, and
+    /// what its members may be made. Only admins do.
+    pub fn can_manage_group(&self) -> bool {
+        self.is_group() && !self.left && self.admin
+    }
+
+    /// Whether `member` is one of the group's admins, as its metadata said.
+    pub fn is_group_admin(&self, member: &str) -> bool {
+        self.group_settings
+            .as_ref()
+            .is_some_and(|settings| settings.admins.iter().any(|id| id == member))
+    }
+
+    /// Whether `member` created the group, whom nobody can dismiss or remove.
+    pub fn is_group_creator(&self, member: &str) -> bool {
+        self.group_settings
+            .as_ref()
+            .is_some_and(|settings| settings.super_admins.iter().any(|id| id == member))
+    }
+
+    /// Whether we may mention everyone. A group of at most
+    /// [`crate::mentions::OPEN_LIMIT`] people allows any member who can post.
+    /// A larger group allows only admins. An empty member list means the
+    /// phone has not said who is in, so nothing is offered yet.
+    pub fn can_mention_everyone(&self) -> bool {
+        self.is_group()
+            && self.can_send()
+            && !self.participants.is_empty()
+            && (self.participants.len() <= crate::mentions::OPEN_LIMIT || self.admin)
+    }
+
     /// Whether the member list names any of `ours`.
     pub fn lists_any(&self, ours: &[&str]) -> bool {
         self.participants
@@ -280,6 +527,13 @@ impl Chat {
 
     pub fn muted(&self, now: i64) -> bool {
         matches!(self.muted_until, Some(0)) || self.muted_until.is_some_and(|until| until > now)
+    }
+
+    /// The chat's disappearing-message duration, and only while the timer is
+    /// on. A timer WhatsApp turned off is a fact about the chat, not a timer,
+    /// so it reads as none here.
+    pub fn disappearing_timer(&self) -> Option<u32> {
+        self.ephemeral_expiration.filter(|seconds| *seconds > 0)
     }
 
     /// Direct-chat phone number as digits.
@@ -364,9 +618,24 @@ pub struct LinkPreview {
 }
 
 impl Message {
+    /// Returns a valid individual sender only for an incoming, non-revoked group message.
+    pub fn private_reply_recipient(&self) -> Option<&str> {
+        (!self.from_me
+            && ChatKind::from_id(&self.chat) == ChatKind::Group
+            && !matches!(self.content, Content::Revoked)
+            && self.sender.split_once('@').is_some_and(|(user, server)| {
+                !user.is_empty() && matches!(server, "s.whatsapp.net" | "lid")
+            }))
+        .then_some(self.sender.as_str())
+    }
     /// One-line summary used in chat rows and quotes.
     pub fn summary(&self) -> String {
         self.content.summary()
+    }
+
+    /// [`Self::summary`] with its content label in `locale`.
+    pub fn summary_in(&self, locale: crate::i18n::Locale) -> String {
+        self.content.summary_in(locale)
     }
 
     /// The line of this message that contains `query`, for a search result's
@@ -377,15 +646,106 @@ impl Message {
     }
 }
 
+/// A web link in a chat's messages, for the info panel's Links tab.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ChatLink {
+    /// The message it was written in.
+    pub message: String,
+    pub timestamp: i64,
+    pub url: String,
+    /// The preview's title, when WhatsApp attached one for this address.
+    pub title: Option<String>,
+}
+
+/// How many pictures and videos, documents, and links the info panel lists
+/// for a chat, each. The worker asks the archive for one more, so a full
+/// list can be told apart from a cut one.
+pub const MEDIA_LIST_LIMIT: usize = 500;
+
+/// What the info panel lists for one chat: its pictures and videos, its
+/// documents, and the web links in its text, each newest first.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct ChatMedia {
+    pub chat: ChatId,
+    pub media: Vec<Message>,
+    pub docs: Vec<Message>,
+    pub links: Vec<ChatLink>,
+    /// Whether the archive held more than each list carries.
+    pub media_truncated: bool,
+    pub docs_truncated: bool,
+    pub links_truncated: bool,
+}
+
+impl ChatMedia {
+    /// Files `rows` under their tabs, newest first, each list cut at
+    /// `limit`. Stickers, audio, deleted and phone-only messages, and text
+    /// without a web link are left out.
+    pub fn collect(chat: ChatId, mut rows: Vec<Message>, limit: usize) -> Self {
+        rows.sort_by_key(|row| std::cmp::Reverse(row.timestamp));
+        let mut media = Self {
+            chat,
+            ..Self::default()
+        };
+        for row in rows {
+            match &row.content {
+                Content::Image { .. } | Content::Video { .. } => media.media.push(row),
+                Content::Document { .. } => media.docs.push(row),
+                Content::Text { .. } => {
+                    for (url, title) in row.content.web_links() {
+                        media.links.push(ChatLink {
+                            message: row.id.clone(),
+                            timestamp: row.timestamp,
+                            url,
+                            title,
+                        });
+                    }
+                }
+                _ => {}
+            }
+        }
+        media.media_truncated = media.media.len() > limit;
+        media.docs_truncated = media.docs.len() > limit;
+        media.links_truncated = media.links.len() > limit;
+        media.media.truncate(limit);
+        media.docs.truncate(limit);
+        media.links.truncate(limit);
+        media
+    }
+
+    /// Whether any list was cut.
+    pub fn truncated(&self) -> bool {
+        self.media_truncated || self.docs_truncated || self.links_truncated
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Quoted {
+    /// Source chat for a cross-chat quote, absent for ordinary replies.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub chat: Option<ChatId>,
     pub id: String,
     pub sender: String,
     pub sender_name: Option<String>,
     pub summary: String,
+    /// Whether `summary` starts with a content label such as "Photo" rather
+    /// than quoting text. `None` for quotes archived before it was kept.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub labelled: Option<bool>,
     /// Mentions in quoted text.
     #[serde(default)]
     pub mentions: Vec<MentionRef>,
+}
+
+impl Quoted {
+    /// `summary` with its content label in `locale`. A quote archived before
+    /// `labelled` was kept translates a label it starts with.
+    pub fn summary_in(&self, locale: crate::i18n::Locale) -> std::borrow::Cow<'_, str> {
+        if self.labelled == Some(false) {
+            std::borrow::Cow::Borrowed(&self.summary)
+        } else {
+            localized_summary(locale, &self.summary)
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -412,6 +772,9 @@ pub enum Content {
     Image {
         caption: Option<String>,
         media: Media,
+        /// The short clip of a motion photo.
+        #[serde(default)]
+        motion: Option<Motion>,
     },
     Video {
         caption: Option<String>,
@@ -480,6 +843,12 @@ pub enum Content {
         /// message keeps its start time so updates do not reorder the chat.
         #[serde(default)]
         updated: i64,
+        /// Whether the sender's phone has posted positions this device cannot
+        /// read. WhatsApp keeps live locations off linked devices, so the
+        /// card holds the last position it was given and says where the
+        /// newer ones are.
+        #[serde(default)]
+        newer_on_phone: bool,
     },
     Contact {
         display_name: String,
@@ -509,6 +878,65 @@ pub enum Content {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         once: Option<OnceMedia>,
     },
+    /// A call in this chat, where it falls among the messages, as WhatsApp
+    /// shows it. `from_me` on the message says who placed it. Entries ZapFast
+    /// writes itself carry an id that starts with [`CALL_ENTRY_PREFIX`] and are
+    /// never sent anywhere.
+    Call {
+        video: bool,
+        status: CallStatus,
+        /// Seconds the call was up; zero when it never was.
+        #[serde(default)]
+        duration: u64,
+        /// A group call.
+        #[serde(default)]
+        group: bool,
+    },
+}
+
+/// The id prefix of the call entries ZapFast files from call records: the
+/// calls it handled and the phone's call log. They are local, so no receipt,
+/// reaction or deletion is ever sent for them.
+pub const CALL_ENTRY_PREFIX: &str = "zapfast-call-";
+
+/// The chat id the entries of calls joined through a call link are filed
+/// under. No chat has it: such a call belongs to none, so its entries show on
+/// the Calls page alone, never in the chat list.
+pub const CALL_LINK_CHAT: &str = "zapfast-call-link";
+
+/// How far apart, in seconds, two entries for one call may be: the phone's
+/// call-log message and the call's record are stamped by different clocks.
+pub const CALL_ENTRY_WINDOW: i64 = 120;
+
+/// What became of a call.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CallStatus {
+    /// The two sides talked, so the call's length is real.
+    Answered,
+    /// Another of this account's devices took it.
+    AnsweredElsewhere,
+    /// An incoming call nobody picked up.
+    Missed,
+    /// Refused, by either side.
+    Declined,
+    /// Another of this account's devices refused it.
+    DeclinedElsewhere,
+    /// The other phone was on another call.
+    Busy,
+    /// It never came up, for no reason above.
+    Failed,
+    /// Outgoing, and nobody answered.
+    NoAnswer,
+    /// The line went while the call was up.
+    ConnectionLost,
+}
+
+impl CallStatus {
+    /// Whether the call is one to notice: missed, refused, or never up.
+    pub fn is_bad(self) -> bool {
+        !matches!(self, Self::Answered | Self::AnsweredElsewhere)
+    }
 }
 
 /// The kind of media a view-once message holds.
@@ -662,6 +1090,110 @@ pub const GROUP_NAME_LIMIT: usize = whatsapp_rust::wacore::iq::groups::GROUP_SUB
 /// WhatsApp's longest live location share, in seconds.
 pub const LIVE_LOCATION_LIMIT: i64 = 8 * 60 * 60;
 
+/// One photo or playable clip of a chat, as the archive lists them for the
+/// full-window viewer's album (`Command::LoadChatMedia`): what it is, when it
+/// arrived, and what a strip or grid needs to draw it before the file itself
+/// is loaded. Any view that lists a chat's photos and clips reads these.
+#[derive(Clone, Debug)]
+pub struct MediaItem {
+    pub id: String,
+    /// For an interactive message's picture, which one: `None` for the
+    /// message's own attachment or a card's header image, and the carousel
+    /// card's index otherwise, as `Action::Download` counts them.
+    pub card: Option<usize>,
+    pub timestamp: i64,
+    pub video: bool,
+    /// `None` until the attachment is downloaded.
+    pub path: Option<std::path::PathBuf>,
+    /// The stored thumbnail, drawn instead of decoding the file.
+    pub thumbnail: Option<Vec<u8>>,
+}
+
+impl MediaItem {
+    /// The album items one message holds, in the order it shows them: a photo
+    /// or a playable clip, or an interactive message's card images.
+    ///
+    /// `exists` is asked once per recorded path: an attachment that was deleted
+    /// or moved is reported as missing, so the item offers Download again
+    /// instead of drawing a dead frame. A downloaded file the viewer cannot
+    /// decode (a bmp, a tif) is not an item: the bubble sends it to the system
+    /// viewer. A card image is an item only once it is downloaded, as the card
+    /// downloads its own pictures.
+    pub fn of_content(
+        id: &str,
+        timestamp: i64,
+        content: &Content,
+        thumbnail: Option<&[u8]>,
+        exists: impl Fn(&Path) -> bool,
+    ) -> Vec<MediaItem> {
+        let item = |card, video, path, thumbnail: Option<&[u8]>| MediaItem {
+            id: id.to_owned(),
+            card,
+            timestamp,
+            video,
+            path,
+            thumbnail: thumbnail.map(<[u8]>::to_vec),
+        };
+        if let Some(kind) = content.gallery_kind() {
+            let path = content
+                .media()
+                .and_then(|media| media.path.clone())
+                .filter(|path| exists(path));
+            if path
+                .as_ref()
+                .is_some_and(|path| gallery_kind_for_path(path).is_none())
+            {
+                return Vec::new();
+            }
+            return vec![item(None, kind == GalleryKind::Video, path, thumbnail)];
+        }
+        let Content::Interactive {
+            card: Some(card), ..
+        } = content
+        else {
+            return Vec::new();
+        };
+        std::iter::once((None, &**card))
+            .chain(
+                card.carousel
+                    .iter()
+                    .enumerate()
+                    .map(|(index, entry)| (Some(index), entry)),
+            )
+            .filter_map(|(index, entry)| {
+                let path = entry.image.as_ref()?.path.clone().filter(|path| {
+                    gallery_kind_for_path(path) == Some(GalleryKind::Photo) && exists(path)
+                })?;
+                // Each card keeps its own preview; the header image may only
+                // have the message's.
+                let preview = entry
+                    .thumbnail
+                    .as_deref()
+                    .or(thumbnail.filter(|_| index.is_none()));
+                Some(item(index, false, Some(path), preview))
+            })
+            .collect()
+    }
+
+    /// The album items of a message already in memory, checking its files.
+    pub fn of_message(message: &Message) -> Vec<MediaItem> {
+        Self::of_content(
+            &message.id,
+            message.timestamp,
+            &message.content,
+            message.thumbnail.as_deref(),
+            Path::is_file,
+        )
+    }
+}
+
+/// A photo or a playable video, as the in-app viewer album counts them.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum GalleryKind {
+    Photo,
+    Video,
+}
+
 impl Content {
     /// Whether a live location sent at `sent` has stopped by `now`: its
     /// sender ended it, or it has outlived the longest share.
@@ -734,6 +1266,70 @@ impl Content {
         }
     }
 
+    /// The web addresses in a text message: the preview's, with its title,
+    /// then the others written in the text, each once.
+    pub fn web_links(&self) -> Vec<(String, Option<String>)> {
+        let Self::Text { text, preview } = self else {
+            return Vec::new();
+        };
+        // The preview's address was normalised when it was archived; the
+        // ones found in the text are normalised the same way, so an address
+        // typed without its scheme is not listed beside its preview.
+        let normalise =
+            |url: &str| crate::safety::preview_url(url).unwrap_or_else(|| url.to_owned());
+        let mut links: Vec<(String, Option<String>)> = Vec::new();
+        if let Some(preview) = preview {
+            let title = preview
+                .title
+                .clone()
+                .filter(|title| !title.trim().is_empty());
+            links.push((normalise(&preview.url), title));
+        }
+        for url in crate::markup::links(text) {
+            let url = normalise(&url);
+            if !links.iter().any(|(known, _)| *known == url) {
+                links.push((url, None));
+            }
+        }
+        links
+    }
+
+    /// Whether the info panel lists this message: a picture, a video, a
+    /// document, or text with a web link.
+    pub fn listable(&self) -> bool {
+        match self {
+            Self::Image { .. } | Self::Video { .. } | Self::Document { .. } => true,
+            Self::Text { .. } => !self.web_links().is_empty(),
+            _ => false,
+        }
+    }
+
+    /// Whether [`Self::summary`] starts with a content label such as "Photo"
+    /// rather than the message's own text.
+    pub fn labelled(&self) -> bool {
+        !matches!(self, Self::Text { .. } | Self::Interactive { .. })
+    }
+
+    /// [`Self::summary`] with its content label in `locale`.
+    pub fn summary_in(&self, locale: crate::i18n::Locale) -> String {
+        let summary = self.summary();
+        if self.labelled() {
+            localized_summary(locale, &summary).into_owned()
+        } else {
+            summary
+        }
+    }
+
+    /// [`Self::full_summary`] with its content label in `locale`.
+    pub fn full_summary_in(&self, locale: crate::i18n::Locale) -> String {
+        let summary = self.full_summary();
+        if self.labelled() {
+            localized_summary(locale, &summary).into_owned()
+        } else {
+            summary
+        }
+    }
+
     pub fn summary(&self) -> String {
         match self {
             Self::Text { text, .. } | Self::Interactive { text, .. } => {
@@ -793,6 +1389,28 @@ impl Content {
                 view_once: true, ..
             } => "View once message".to_owned(),
             Self::PhoneOnly { .. } => "Message on your phone".to_owned(),
+            Self::Call {
+                video,
+                status,
+                duration,
+                ..
+            } => {
+                let label = match (status, video) {
+                    (CallStatus::Missed, false) => "Missed voice call",
+                    (CallStatus::Missed, true) => "Missed video call",
+                    (_, false) => "Voice call",
+                    (_, true) => "Video call",
+                };
+                if *status == CallStatus::Answered && *duration > 0 {
+                    format!(
+                        "{label} ({})",
+                        // Summaries are English, as every other one is.
+                        crate::util::call_length(crate::i18n::Locale::English, *duration)
+                    )
+                } else {
+                    label.to_owned()
+                }
+            }
         }
     }
 
@@ -827,11 +1445,32 @@ impl Content {
         }
     }
 
+    /// Whether this message belongs in the viewer album, and as what.
+    ///
+    /// A GIF is not a video here: it plays inline as an animation, so it is
+    /// left out.
+    pub fn gallery_kind(&self) -> Option<GalleryKind> {
+        match self {
+            Self::Image { .. } => Some(GalleryKind::Photo),
+            Self::Video { gif: false, .. } => Some(GalleryKind::Video),
+            _ => None,
+        }
+    }
+
     /// Carries downloaded file paths over from `old` when rederiving content
     /// from the raw protobuf: the main attachment and each carousel card's image.
     pub fn keep_local_paths(&mut self, old: &Content) {
         if let (Some(new), Some(old)) = (self.media_mut(), old.media()) {
             new.path = old.path.clone();
+        }
+        if let (
+            Self::Image { motion: new, .. },
+            Self::Image {
+                motion: Some(old), ..
+            },
+        ) = (&mut *self, old)
+        {
+            *new = Some(old.clone());
         }
         if let (
             Self::Interactive {
@@ -850,6 +1489,38 @@ impl Content {
         }
     }
 
+    /// Forgets every downloaded file of this message kept under `dir`, so
+    /// it downloads again: the attachment, a motion photo's clip, and each
+    /// carousel card's picture. Files elsewhere, such as a chosen download
+    /// folder, are kept.
+    pub fn forget_files_in(&mut self, dir: &std::path::Path) {
+        let forget = |path: &mut Option<PathBuf>, state: &mut MediaState| {
+            if path.as_deref().is_some_and(|path| path.starts_with(dir)) {
+                *path = None;
+                *state = MediaState::Idle;
+            }
+        };
+        if let Some(media) = self.media_mut() {
+            forget(&mut media.path, &mut media.state);
+        }
+        match self {
+            Self::Image {
+                motion: Some(motion),
+                ..
+            } => forget(&mut motion.path, &mut motion.state),
+            Self::Interactive {
+                card: Some(card), ..
+            } => {
+                for item in &mut card.carousel {
+                    if let Some(media) = item.image.as_mut() {
+                        forget(&mut media.path, &mut media.state);
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
     pub fn media_mut(&mut self) -> Option<&mut Media> {
         match self {
             Self::Image { media, .. }
@@ -865,6 +1536,27 @@ impl Content {
     }
 }
 
+/// The viewer kind of a file on disk, from its name alone.
+pub(crate) fn gallery_kind_for_path(path: &Path) -> Option<GalleryKind> {
+    gallery_file(&path.file_name()?.to_string_lossy())
+}
+
+/// The viewer kind of a file, from its name. A GIF is an inline animation, not
+/// a clip, so it is left out, and a photo is only a format the image crate is
+/// built to draw (`jpeg`, `png`, `webp`): a `bmp` or a `tif` opens the viewer
+/// and fails to decode, where the system viewer draws it.
+fn gallery_file(file_name: &str) -> Option<GalleryKind> {
+    let ext = Path::new(file_name)
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .map(|ext| ext.to_ascii_lowercase())?;
+    match ext.as_str() {
+        "jpg" | "jpeg" | "png" | "webp" => Some(GalleryKind::Photo),
+        "mp4" | "m4v" | "mov" | "webm" | "mkv" | "3gp" | "3gpp" => Some(GalleryKind::Video),
+        _ => None,
+    }
+}
+
 /// What a video is called in previews.
 fn video_label(gif: bool, note: bool) -> &'static str {
     if gif {
@@ -876,6 +1568,100 @@ fn video_label(gif: bool, note: bool) -> &'static str {
     }
 }
 
+/// The labels a summary of content other than text starts with. Summaries
+/// are made in English where the archive and the worker build them, and
+/// [`localized_summary`] translates the label when one is shown.
+const SUMMARY_LABELS: [&str; 26] = [
+    "Photo",
+    "Video",
+    "GIF",
+    "Video message",
+    "Voice message",
+    "Audio",
+    "Document",
+    "Sticker",
+    "Sticker pack",
+    "Location",
+    "Live location",
+    "Live location ended",
+    "Contact",
+    "Poll",
+    "This message was deleted",
+    "Unsupported message",
+    "View once photo",
+    "View once video",
+    "View once voice message",
+    "View once audio",
+    "View once message",
+    "Message on your phone",
+    "Missed voice call",
+    "Missed video call",
+    "Voice call",
+    "Video call",
+];
+
+/// A summary label in `locale`. Literal calls, so xgettext extracts each.
+fn summary_label(
+    locale: crate::i18n::Locale,
+    label: &'static str,
+) -> std::borrow::Cow<'static, str> {
+    use crate::i18n::gettext;
+    match label {
+        "Photo" => gettext(locale, "Photo"),
+        "Video" => gettext(locale, "Video"),
+        "GIF" => gettext(locale, "GIF"),
+        "Video message" => gettext(locale, "Video message"),
+        "Voice message" => gettext(locale, "Voice message"),
+        "Audio" => gettext(locale, "Audio"),
+        "Document" => gettext(locale, "Document"),
+        "Sticker" => gettext(locale, "Sticker"),
+        "Sticker pack" => gettext(locale, "Sticker pack"),
+        "Location" => gettext(locale, "Location"),
+        "Live location" => gettext(locale, "Live location"),
+        "Live location ended" => gettext(locale, "Live location ended"),
+        "Contact" => gettext(locale, "Contact"),
+        "Poll" => gettext(locale, "Poll"),
+        "This message was deleted" => gettext(locale, "This message was deleted"),
+        "Unsupported message" => gettext(locale, "Unsupported message"),
+        "View once photo" => gettext(locale, "View once photo"),
+        "View once video" => gettext(locale, "View once video"),
+        "View once voice message" => gettext(locale, "View once voice message"),
+        "View once audio" => gettext(locale, "View once audio"),
+        "View once message" => gettext(locale, "View once message"),
+        "Message on your phone" => gettext(locale, "Message on your phone"),
+        "Missed voice call" => gettext(locale, "Missed voice call"),
+        "Missed video call" => gettext(locale, "Missed video call"),
+        "Voice call" => gettext(locale, "Voice call"),
+        "Video call" => gettext(locale, "Video call"),
+        _ => std::borrow::Cow::Borrowed(label),
+    }
+}
+
+/// `summary` with the content label it starts with, such as "Photo" or
+/// "Voice message", in `locale`. What follows the label (a caption, a file
+/// name, a length) stays as it is. A summary of text must not come here: a
+/// message that reads "Location: home" is the sender's words.
+pub fn localized_summary(locale: crate::i18n::Locale, summary: &str) -> std::borrow::Cow<'_, str> {
+    // The longest label that fits, so "Video message" is not read as "Video".
+    let label = SUMMARY_LABELS
+        .into_iter()
+        .filter(|label| {
+            summary.strip_prefix(label).is_some_and(|rest| {
+                rest.is_empty() || rest.starts_with(": ") || rest.starts_with(" (")
+            })
+        })
+        .max_by_key(|label| label.len());
+    let Some(label) = label else {
+        return std::borrow::Cow::Borrowed(summary);
+    };
+    let translated = summary_label(locale, label);
+    if translated == label {
+        return std::borrow::Cow::Borrowed(summary);
+    }
+    std::borrow::Cow::Owned(format!("{translated}{}", &summary[label.len()..]))
+}
+
+/// `label: caption` with the caption whole, for a row that wraps it.
 fn with_caption(label: &str, caption: &Option<String>) -> String {
     match caption
         .as_deref()
@@ -886,7 +1672,7 @@ fn with_caption(label: &str, caption: &Option<String>) -> String {
     }
 }
 
-/// Maximum size accepted for a downloaded attachment.
+/// Maximum size of an attachment downloaded without the reader asking.
 pub(crate) const ATTACHMENT_DOWNLOAD_LIMIT: u64 = 64 * 1024 * 1024;
 
 /// Attachment metadata, download state, and optional local file. Download keys
@@ -897,6 +1683,9 @@ pub struct Media {
     pub size: u64,
     pub width: Option<u32>,
     pub height: Option<u32>,
+    /// Parent message id when WhatsApp sent this picture or video as an album.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub album: Option<String>,
     /// Decrypted downloaded file.
     #[serde(default)]
     pub path: Option<PathBuf>,
@@ -906,12 +1695,85 @@ pub struct Media {
 }
 
 impl Media {
-    /// Whether the attachment's declared size can be downloaded locally.
+    /// Whether the attachment's declared size may download automatically.
     ///
     /// A missing size is represented as zero and is allowed here. The worker
-    /// still enforces the limit while streaming it from WhatsApp.
+    /// still enforces the limit while streaming an automatic download.
     pub fn is_within_download_limit(&self) -> bool {
         self.size <= ATTACHMENT_DOWNLOAD_LIMIT
+    }
+}
+
+/// A motion photo's clip. Its download keys stay in the archive.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct Motion {
+    /// Decrypted downloaded file.
+    #[serde(default)]
+    pub path: Option<PathBuf>,
+    /// Non-persisted download state.
+    #[serde(skip)]
+    pub state: MediaState,
+}
+
+/// Counts and sizes of the files in an account's media cache, for the
+/// storage rows in Settings. The kind comes from each file's extension.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct StorageStats {
+    pub images: u64,
+    pub image_bytes: u64,
+    pub videos: u64,
+    pub video_bytes: u64,
+    pub stickers: u64,
+    pub sticker_bytes: u64,
+    pub other: u64,
+    pub other_bytes: u64,
+}
+
+impl StorageStats {
+    /// Counts one cached file of `bytes` under the kind its name says.
+    /// Animated GIFs arrive as MP4 videos, so they count with the videos.
+    pub fn add(&mut self, path: &std::path::Path, bytes: u64) {
+        let extension = path
+            .extension()
+            .and_then(|extension| extension.to_str())
+            .map(str::to_ascii_lowercase)
+            .unwrap_or_default();
+        let (count, total) = match extension.as_str() {
+            "jpg" | "jpeg" | "png" | "heic" | "heif" | "bmp" | "tif" | "tiff" => {
+                (&mut self.images, &mut self.image_bytes)
+            }
+            "mp4" | "m4v" | "mov" | "3gp" | "3gpp" | "webm" | "mkv" | "gif" => {
+                (&mut self.videos, &mut self.video_bytes)
+            }
+            "webp" => (&mut self.stickers, &mut self.sticker_bytes),
+            _ => (&mut self.other, &mut self.other_bytes),
+        };
+        *count += 1;
+        *total = total.saturating_add(bytes);
+    }
+
+    /// Every cached byte counted.
+    pub fn bytes_total(self) -> u64 {
+        self.image_bytes
+            .saturating_add(self.video_bytes)
+            .saturating_add(self.sticker_bytes)
+            .saturating_add(self.other_bytes)
+    }
+
+    /// Every cached file counted.
+    pub fn files_total(self) -> u64 {
+        self.images + self.videos + self.stickers + self.other
+    }
+
+    /// Filled width for `bytes` out of `total` on a track of `track` pixels.
+    /// Empty when there is nothing to measure, so an empty cache draws no
+    /// bar instead of dividing by zero.
+    pub fn bar_width(bytes: u64, total: u64, track: f32) -> f32 {
+        if total == 0 || track <= 0.0 {
+            0.0
+        } else {
+            track * (bytes as f32 / total as f32)
+        }
     }
 }
 
@@ -975,8 +1837,17 @@ impl Contact {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Page {
     Chats,
+    /// Every call of the account, newest first.
+    Calls,
     Settings,
     Wallpaper,
+}
+
+/// Which side of a call this account was on.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CallDirection {
+    Incoming,
+    Outgoing,
 }
 
 /// The tabs of the picker above the composer.
@@ -1065,6 +1936,253 @@ impl StickerCrop {
     }
 }
 
+/// Which part of a crop is being dragged. The edges move one side, a corner
+/// moves two, and `Inside` moves the whole region.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CropEdge {
+    Inside,
+    Left,
+    Right,
+    Top,
+    Bottom,
+    TopLeft,
+    TopRight,
+    BottomLeft,
+    BottomRight,
+}
+
+impl CropEdge {
+    /// Whether this part drags the region's left side.
+    fn moves_left(self) -> bool {
+        matches!(self, Self::Left | Self::TopLeft | Self::BottomLeft)
+    }
+
+    /// Whether this part drags the region's right side.
+    fn moves_right(self) -> bool {
+        matches!(self, Self::Right | Self::TopRight | Self::BottomRight)
+    }
+
+    /// Whether this part drags the region's top side.
+    fn moves_top(self) -> bool {
+        matches!(self, Self::Top | Self::TopLeft | Self::TopRight)
+    }
+
+    /// Whether this part drags the region's bottom side.
+    fn moves_bottom(self) -> bool {
+        matches!(self, Self::Bottom | Self::BottomLeft | Self::BottomRight)
+    }
+}
+
+/// The smallest crop side, so a drag cannot close the region to nothing.
+pub const CROP_MIN_SIDE: u32 = 16;
+
+/// A region of a picture to keep, in its pixels, as the picture is shown.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PictureCrop {
+    pub x: u32,
+    pub y: u32,
+    pub width: u32,
+    pub height: u32,
+}
+
+impl PictureCrop {
+    /// The whole picture.
+    pub fn full(width: u32, height: u32) -> Self {
+        Self {
+            x: 0,
+            y: 0,
+            width: width.max(1),
+            height: height.max(1),
+        }
+    }
+
+    /// The same region kept inside a picture of this size.
+    pub fn clamped(self, width: u32, height: u32) -> Self {
+        let (width, height) = (width.max(1), height.max(1));
+        let crop_width = self.width.clamp(1, width);
+        let crop_height = self.height.clamp(1, height);
+        Self {
+            x: self.x.min(width - crop_width),
+            y: self.y.min(height - crop_height),
+            width: crop_width,
+            height: crop_height,
+        }
+    }
+
+    /// The region after one edge or corner is dragged by whole pixels.
+    pub fn drag(self, edge: CropEdge, dx: i64, dy: i64, width: u32, height: u32) -> Self {
+        let (width, height) = (i64::from(width.max(1)), i64::from(height.max(1)));
+        let (mut left, mut top) = (i64::from(self.x), i64::from(self.y));
+        let (mut right, mut bottom) = (left + i64::from(self.width), top + i64::from(self.height));
+        if edge == CropEdge::Inside {
+            return self.moved(dx, dy, width as u32, height as u32);
+        }
+        if edge.moves_left() {
+            left += dx;
+        }
+        if edge.moves_right() {
+            right += dx;
+        }
+        if edge.moves_top() {
+            top += dy;
+        }
+        if edge.moves_bottom() {
+            bottom += dy;
+        }
+        left = left.clamp(0, width);
+        right = right.clamp(0, width);
+        top = top.clamp(0, height);
+        bottom = bottom.clamp(0, height);
+        // A moving edge gives way to the fixed one, so the region keeps a
+        // usable size without the picture's own edge being pushed out.
+        let least = i64::from(CROP_MIN_SIDE).min(width).min(height);
+        if edge.moves_left() {
+            left = left.min(right - least).max(0);
+        }
+        if edge.moves_right() {
+            right = right.max(left + least).min(width);
+        }
+        if edge.moves_top() {
+            top = top.min(bottom - least).max(0);
+        }
+        if edge.moves_bottom() {
+            bottom = bottom.max(top + least).min(height);
+        }
+        Self {
+            x: left as u32,
+            y: top as u32,
+            width: (right - left).max(1) as u32,
+            height: (bottom - top).max(1) as u32,
+        }
+    }
+
+    /// The region moved by whole pixels, staying inside the picture.
+    pub fn moved(self, dx: i64, dy: i64, width: u32, height: u32) -> Self {
+        let shift = |at: u32, by: i64| (i64::from(at) + by).max(0) as u32;
+        Self {
+            x: shift(self.x, dx),
+            y: shift(self.y, dy),
+            ..self
+        }
+        .clamped(width, height)
+    }
+
+    /// The same content after the picture is turned a quarter clockwise. The
+    /// picture's former height becomes its width.
+    pub fn turned_clockwise(self, old_height: u32) -> Self {
+        Self {
+            x: old_height.saturating_sub(self.y + self.height),
+            y: self.x,
+            width: self.height,
+            height: self.width,
+        }
+    }
+
+    /// The same content after the picture is turned a quarter anticlockwise.
+    pub fn turned_counter_clockwise(self, old_width: u32) -> Self {
+        Self {
+            x: self.y,
+            y: old_width.saturating_sub(self.x + self.width),
+            width: self.height,
+            height: self.width,
+        }
+    }
+}
+
+/// Where a picture being edited comes from: a staged file, or a picture that
+/// was pasted and only lives in memory.
+#[derive(Clone, Debug, PartialEq)]
+pub enum PictureSource {
+    File(PathBuf),
+    /// Straight RGBA rows, as the clipboard gives them.
+    Pasted(Arc<Vec<u8>>),
+}
+
+/// A staged picture on its way to being cropped and sent.
+#[derive(Clone, Debug, PartialEq)]
+pub struct PictureEdit {
+    /// The staged attachment it replaces, named rather than numbered, so that
+    /// removing another attachment cannot point it at a different picture.
+    pub target: crate::app::AttachmentId,
+    pub source: PictureSource,
+    /// The source picture's own size, before any turn.
+    pub width: u32,
+    pub height: u32,
+    pub crop: PictureCrop,
+    /// Quarter turns clockwise already applied to the source.
+    pub turns: u8,
+}
+
+impl PictureEdit {
+    /// A whole, unturned picture from a staged attachment.
+    pub fn new(
+        target: crate::app::AttachmentId,
+        source: PictureSource,
+        width: u32,
+        height: u32,
+    ) -> Self {
+        Self {
+            target,
+            source,
+            width: width.max(1),
+            height: height.max(1),
+            crop: PictureCrop::full(width, height),
+            turns: 0,
+        }
+    }
+
+    /// The source turned to the side the crop is measured in.
+    pub fn displayed_size(&self) -> (u32, u32) {
+        if self.turns.is_multiple_of(2) {
+            (self.width, self.height)
+        } else {
+            (self.height, self.width)
+        }
+    }
+
+    /// Turns the picture, carrying the selection round with it.
+    pub fn turned(self, clockwise: bool) -> Self {
+        let (width, height) = self.displayed_size();
+        let crop = if clockwise {
+            self.crop.turned_clockwise(height)
+        } else {
+            self.crop.turned_counter_clockwise(width)
+        };
+        Self {
+            turns: if clockwise {
+                (self.turns + 1) % 4
+            } else {
+                (self.turns + 3) % 4
+            },
+            crop,
+            ..self
+        }
+    }
+
+    /// The whole picture again, the way it started: no turn and nothing
+    /// cropped away. This is what the editor's Reset does, so it has to undo
+    /// the turn as well as the region.
+    pub fn reset(self) -> Self {
+        Self {
+            crop: PictureCrop::full(self.width, self.height),
+            turns: 0,
+            ..self
+        }
+    }
+}
+
+/// Where a staged picture came from before it was cropped. Keeping it means
+/// cropping the same picture again opens on the original with its crop, so a
+/// second pass does not stack another lossy generation on the first.
+#[derive(Clone, Debug, PartialEq)]
+pub struct PictureOrigin {
+    pub source: PictureSource,
+    pub width: u32,
+    pub height: u32,
+    pub crop: PictureCrop,
+    pub turns: u8,
+}
+
 /// A picture on its way to becoming a sticker.
 #[derive(Clone, Debug, PartialEq)]
 pub struct StickerDraft {
@@ -1109,12 +2227,40 @@ pub struct Gif {
     pub height: u32,
 }
 
+/// The tab open in the info panel's media view.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MediaTab {
+    Media,
+    Docs,
+    Links,
+}
+
+/// What the info panel shows: the chat's overview, or its media view on one
+/// of the tabs.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum InfoView {
+    Overview,
+    Media(MediaTab),
+    /// A group's permissions, for its admins.
+    Permissions,
+}
+
+/// The info panel beside the conversation. It can show a member of the open
+/// group, so its chat is not always the open one.
+#[derive(Clone, Debug, PartialEq)]
+pub struct InfoPanel {
+    pub chat: ChatId,
+    pub view: InfoView,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum Dialog {
     Shortcuts,
     About,
     ConfirmUnlink,
     ConfirmRemoveAccount(AccountId),
+    /// Confirms emptying one account's media cache.
+    ConfirmClearMediaCache(AccountId),
     /// Phone number used for pairing-code linking.
     PairWithPhone,
     /// Contacts and the self-chat shortcut.
@@ -1123,7 +2269,6 @@ pub enum Dialog {
     NewContact,
     UnlockLockedChats,
     ConfirmLockChat(ChatId),
-    ChatInfo(ChatId),
     /// Manages the local labels.
     Labels,
     /// Confirms deleting a chat, which cannot be undone.
@@ -1140,6 +2285,17 @@ pub enum Dialog {
         /// Revokes for everyone instead of deleting only this copy.
         for_everyone: bool,
     },
+    /// Confirms removing an imported sticker pack from disk.
+    ConfirmRemoveStickerPack {
+        name: String,
+        dir: PathBuf,
+    },
+    /// Confirms deleting the complete selection, captured when the menu opens.
+    ConfirmDeleteSelection {
+        chat: ChatId,
+        messages: Vec<String>,
+        for_everyone: bool,
+    },
     /// Chooses a destination for an archived message.
     Forward {
         chat: ChatId,
@@ -1147,6 +2303,8 @@ pub enum Dialog {
         messages: Vec<String>,
     },
     CreatePoll(ChatId),
+    /// Picks the spot to send, from coordinates or a map link.
+    SendLocation(ChatId),
     PollResults {
         chat: ChatId,
         message: String,
@@ -1168,6 +2326,15 @@ pub enum Dialog {
     MessageInfo {
         chat: ChatId,
         message: String,
+    },
+    /// Picks people to add to a group, with New group's check boxes.
+    AddGroupMembers(ChatId),
+    /// Confirms revoking a group's invite link for a new one.
+    ConfirmResetInviteLink(ChatId),
+    /// Confirms removing someone from a group.
+    ConfirmRemoveMember {
+        chat: ChatId,
+        member: ChatId,
     },
 }
 
@@ -1296,17 +2463,79 @@ pub enum Scroll {
     Bottom,
 }
 
+/// How many chats a message may be forwarded to at once, as on WhatsApp.
+pub const FORWARD_LIMIT: usize = 5;
+
+/// The forwarding limit for messages: one chat when any of them was
+/// forwarded many times, [`FORWARD_LIMIT`] otherwise.
+pub fn forward_limit(frequently_forwarded: bool) -> usize {
+    if frequently_forwarded {
+        1
+    } else {
+        FORWARD_LIMIT
+    }
+}
+
 /// Actions queued by views and applied after drawing.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Action {
     Open(Page),
     /// Opens settings, or closes them when they are already showing.
     ToggleSettings,
+    /// Steps back to the previously visited page, chat, or dialog, as a
+    /// browser's back button does.
+    NavigateBack,
+    /// Steps forward again after a back step.
+    NavigateForward,
     OpenChat(ChatId),
+    /// Starts a voice call with the chat: the person, or everyone in a group.
+    StartCall(ChatId),
+    /// Starts a video call with the chat: the person, or everyone in a group.
+    StartVideoCall(ChatId),
+    /// Picks a call history row on the Calls page: its chat opens beside the
+    /// list at the call, with the chat's own call buttons in its header.
+    /// Carries the row's first call, which picks the row out.
+    PickCall {
+        chat: ChatId,
+        message: String,
+    },
+    /// Opens the new-call list over the Calls list, or closes it.
+    ShowNewCall(bool),
+    /// Answers the ringing incoming call.
+    AnswerCall,
+    /// Declines the ringing incoming call.
+    DeclineCall,
+    /// Ends the current call.
+    HangupCall,
+    /// Mutes or unmutes the current call's microphone.
+    SetCallMuted(bool),
+    /// Turns the current call's camera on or off.
+    SetCallCamera(bool),
+    /// Rebinds the current call's microphone; `None` is the system default.
+    SetCallMicrophone(Option<String>),
+    /// Rebinds the current call's speaker; `None` is the system default.
+    SetCallSpeaker(Option<String>),
+    /// Switches the current call's camera node.
+    SetCallCameraDevice(Option<String>),
+    /// Steps away from the full call screen without ending the call.
+    LeaveCallSurface,
+    /// Opens the full call screen again.
+    ReturnToCall,
+    /// Takes the call surface full screen, or leaves full screen again. The window moves; the call
+    /// does not.
+    ToggleCallFullscreen,
     /// Creates and opens a chat for a contact without one.
     StartChat {
         id: ChatId,
         name: String,
+        dismiss_dialog: bool,
+    },
+    /// Puts a template in the named chat's composer without sending it, the
+    /// way a share link's `text=` asks. Carries the chat it belongs to, since
+    /// a chat the app refuses to open must not put its text in another one.
+    PrefillComposer {
+        chat: ChatId,
+        text: String,
     },
     /// Opens a chat at a message search result.
     OpenMessage {
@@ -1317,6 +2546,16 @@ pub enum Action {
     OpenChatSearch,
     /// Closes the pane and drops its query and day.
     CloseChatSearch,
+    /// Opens the info panel beside the conversation for a chat or a group
+    /// member, on its overview.
+    OpenInfo(ChatId),
+    CloseInfo,
+    /// Moves the open info panel between its overview and its media view.
+    ShowInfo(InfoView),
+    /// Asks the worker again for the panel's listing after it failed.
+    RetryInfoMedia,
+    /// Closes the contact name editor without saving.
+    CloseContactEdit,
     /// Replaces the query of the open chat's search.
     ChatSearch(String),
     /// Restricts the in-chat search to a local calendar day.
@@ -1326,7 +2565,15 @@ pub enum Action {
         chat: ChatId,
         text: String,
         /// Quoted message id.
-        quoting: Option<String>,
+        quoting: Option<crate::model::ReplyTarget>,
+    },
+    /// Sends a spot as a location message.
+    SendLocation {
+        chat: ChatId,
+        latitude: f64,
+        longitude: f64,
+        /// Quoted message, in this chat or, for a private reply, in its group.
+        quoting: Option<ReplyTarget>,
     },
     ReplyInteractive {
         chat: ChatId,
@@ -1370,7 +2617,21 @@ pub enum Action {
         message: String,
     },
     Download {
+        /// The reader asked for it (a click, a menu item): exempt from the
+        /// automatic download limit.
+        manual: bool,
         card: Option<usize>,
+        chat: ChatId,
+        message: String,
+    },
+    /// Downloads a motion photo's clip.
+    DownloadMotion {
+        chat: ChatId,
+        message: String,
+    },
+    /// Plays a motion photo's clip over its photo, downloading it first, or
+    /// goes back to the photo.
+    ToggleMotion {
         chat: ChatId,
         message: String,
     },
@@ -1401,14 +2662,15 @@ pub enum Action {
     },
     /// Mutes or unmutes video playback.
     ToggleVideoSound,
-    /// Shows a downloaded video over the whole window, starting it if it is
-    /// not the one loaded.
+    /// Plays videos at the next of 1x, 1.5x and 2x.
+    CycleVideoSpeed,
+    /// Plays a downloaded video, or a motion photo's clip (`message` is then
+    /// the photo), in the full-window viewer, starting it if it is not the
+    /// one loaded. Closing the viewer puts a video back in its message.
     ExpandVideo {
         message: String,
         path: PathBuf,
     },
-    /// Puts the video covering the window back in its message.
-    CollapseVideo,
     /// Starts, cancels, or sends a voice recording.
     StartRecording,
     CancelRecording,
@@ -1419,7 +2681,24 @@ pub enum Action {
     /// extension and existence are checked here, and anything else opens
     /// externally; an image that then fails to decode shows a message with an
     /// Open externally button inside the preview.
-    PreviewImage(PathBuf),
+    PreviewImage {
+        path: PathBuf,
+        /// The chat whose album the viewer browses from here.
+        chat: ChatId,
+        /// The message this picture came from, so the album can be positioned.
+        message: String,
+        /// Which of an interactive message's pictures, as `MediaItem::card`.
+        card: Option<usize>,
+    },
+    /// Moves the viewer to the next (`1`) or previous (`-1`) item of the album:
+    /// the Right and Left arrow keys, and the arrows over the picture.
+    ViewerStep(i8),
+    /// Shows one item of the album the viewer already has, by message id.
+    ViewImage {
+        message: String,
+        /// Which of an interactive message's pictures, as `MediaItem::card`.
+        card: Option<usize>,
+    },
     ZoomImageIn,
     /// Scales the previewed image by a factor, as the wheel or a pinch asks.
     ZoomImageBy(f32),
@@ -1428,6 +2707,9 @@ pub enum Action {
     ZoomImageOut,
     FitImage,
     CloseImagePreview,
+    /// Shows a downloaded sticker large, with a favorite toggle.
+    PreviewSticker(PathBuf),
+    CloseStickerPreview,
     OpenFile(PathBuf),
     /// Opens ZapFast's log, or shows it in its folder when no application
     /// takes it, and says so when neither works.
@@ -1438,6 +2720,10 @@ pub enum Action {
         path: PathBuf,
         name: String,
     },
+    /// Saves a group of downloaded album attachments into one chosen folder.
+    SaveAttachments {
+        files: Vec<(PathBuf, String)>,
+    },
     OpenUrl(String),
     CopyText(String),
     CopyImage(PathBuf),
@@ -1445,13 +2731,24 @@ pub enum Action {
     DismissToast(usize),
     /// Starts a reply to a message in the open chat.
     Reply(String),
-    CancelReply,
-    /// Forwards an archived message to another chat.
-    Forward {
-        from_chat: ChatId,
-        messages: Vec<String>,
-        to_chat: ChatId,
+    /// Opens the group sender's direct chat with this message quoted.
+    ReplyPrivately {
+        chat: ChatId,
+        message: String,
     },
+    CancelReply,
+    /// Starts selecting messages in the open chat with none picked yet.
+    StartSelection,
+    /// Adds a chat to the forwarding dialog's recipients or removes it,
+    /// within the forwarding limit. Nothing is sent.
+    ToggleForwardRecipient(ChatId),
+    /// Shows the chosen recipients for confirmation (two or more).
+    ReviewForward,
+    /// Returns from the confirmation to the recipient list, keeping it.
+    BackToForwardSelection,
+    /// Forwards to the chosen recipients: one at once, several after
+    /// their confirmation.
+    ConfirmForward,
     /// Starts selecting messages in the open chat, beginning with this one.
     SelectMessage(String),
     /// Adds a message to the selection or removes it.
@@ -1482,8 +2779,17 @@ pub enum Action {
         chat: ChatId,
         id: String,
     },
-    /// Opens the attachment picker for the current chat.
-    Attach,
+    /// Stars or unstars one message from its bubble's menu.
+    SetStar {
+        chat: ChatId,
+        message: String,
+        starred: bool,
+    },
+    /// Opens the attachment picker for the current chat. With `documents`
+    /// the picked files go as documents, pictures included.
+    Attach {
+        documents: bool,
+    },
     /// Opens or closes the composer tools menu.
     SetComposerTools(bool),
     SendFiles(Vec<PathBuf>),
@@ -1598,12 +2904,20 @@ pub enum Action {
     /// Clears a chat's messages here and on the phone, keeping the chat.
     ClearChat(ChatId),
     SetPinned(ChatId, bool),
+    /// Pins or unpins one message for everyone in the chat.
+    SetMessagePinned {
+        chat: ChatId,
+        message: String,
+        pinned: bool,
+    },
     /// Marks a chat as a favorite, or removes the mark, here and on the phone.
     SetFavorite(ChatId, bool),
     ShowDialog(Dialog),
     CloseDialog,
     ToggleSidebar,
     SetChatFilter(ChatFilter),
+    /// Picks the chip the Calls page's history shows.
+    SetCallFilter(CallFilter),
     /// Picks the label the chat list shows; `None` shows every chat.
     SelectLabel(Option<String>),
     /// Replaces the labels worn by one chat.
@@ -1626,10 +2940,46 @@ pub enum Action {
     DeleteLabel(String),
     /// Shows or leaves the archived chats.
     ShowArchived(bool),
+    /// Shows or hides the starred messages in the left panel.
+    ToggleStarred,
     /// Mutes (`true`) or unmutes every followed channel.
     MuteAllChannels(bool),
     /// Joins the group of the invite being previewed.
     JoinGroup,
+    /// Gives the New chat dialog's contacts check boxes, to make a group.
+    StartNewGroup,
+    /// Picks someone for the new group, or lets them go.
+    ToggleNewGroupMember(ChatId),
+    /// From choosing the new group's members to naming it.
+    NewGroupNext,
+    /// One step back: from naming to choosing, from choosing to the list.
+    NewGroupBack,
+    /// Asks for a photo for the new group.
+    PickNewGroupPicture,
+    RemoveNewGroupPicture,
+    /// Creates the group the New chat dialog put together.
+    CreateGroup,
+    /// Asks WhatsApp for a group's invite link, for the info panel.
+    FetchInviteLink(ChatId),
+    /// Copies the group's invite link, once it is known, with a toast.
+    CopyInviteLink(ChatId),
+    /// Revokes the group's invite link; WhatsApp answers with a new one.
+    ResetInviteLink(ChatId),
+    /// Adds the people picked in the Add members dialog to its group.
+    AddGroupMembers,
+    /// Changes one of the group's permissions: `members` true lets every
+    /// member, false only admins (for approval: true turns it on).
+    SetGroupPermission {
+        chat: ChatId,
+        permission: crate::group_admin::Permission,
+        members: bool,
+    },
+    /// Makes a member an admin, dismisses one, or removes them.
+    ChangeGroupMember {
+        chat: ChatId,
+        member: ChatId,
+        change: crate::group_admin::MemberChange,
+    },
     /// A chat opened from the main list, kept there under the Unread filter.
     KeepUnread(ChatId),
     /// Focuses the chat-list search and leaves the open chat alone.
@@ -1662,6 +3012,10 @@ pub enum Action {
     SetTheme(crate::settings::ThemeChoice),
     /// Draws the interface in the platform's font or in the bundled Inter.
     SetFont(crate::settings::FontChoice),
+    /// Windows and Linux: draws ZapFast's own title bar and window buttons
+    /// (`true`) or the desktop's. Decorations are fixed when a window is
+    /// made, so the window is replaced.
+    SetCustomTitlebar(bool),
     SetInterfaceLanguage(Option<crate::i18n::Locale>),
     SetCustomTheme(String),
     SetWallpaperColor(crate::settings::WallpaperColor),
@@ -1697,6 +3051,11 @@ pub enum Action {
     },
     /// Asks for an audio file for one chat's notifications.
     PickChatSound(ChatId),
+    /// Sets a chat's own voice message speed; `None` follows Settings.
+    SetChatVoiceSpeed {
+        chat: ChatId,
+        speed: Option<f32>,
+    },
     /// Asks for a folder for new downloads.
     PickDownloadFolder,
     /// Changes our display name and About text; `None` keeps the current one.
@@ -1767,23 +3126,110 @@ pub enum Action {
     CancelAddAccount,
     /// Unlinks an account and deletes what is stored here for it.
     RemoveAccount(AccountId),
+    /// Deletes one account's cached attachments, never its archive.
+    ClearMediaCache(AccountId),
     /// Mutes until Unix time, indefinitely with `Some(0)`, or unmutes with `None`.
     SetMuted(ChatId, Option<i64>),
     /// Moves a chat into or out of the locked folder.
     SetLocked(ChatId, bool),
     /// Sends pending attachments with the composer text as caption.
     SendPending {
+        /// Account and mentions captured when the composer queues the send.
+        account: AccountId,
         chat: ChatId,
         caption: String,
+        mentions: Vec<crate::app::ComposerMention>,
     },
     /// Removes one pending attachment.
     RemovePending(usize),
+    /// Opens the cropper on a staged picture.
+    EditPicture(crate::app::AttachmentId),
+    /// Keeps the crop and the turn, replacing the staged picture.
+    ApplyPictureEdit,
+    /// Closes the cropper, leaving the staged picture as it was.
+    CancelPictureEdit,
     /// Removes all pending attachments.
     ClearPending,
 }
 
 #[cfg(test)]
+mod storage_tests {
+    use super::StorageStats;
+
+    #[test]
+    fn cached_files_are_counted_by_kind() {
+        let mut stats = StorageStats::default();
+        for (name, bytes) in [
+            ("a.jpg", 10),
+            ("b.PNG", 5),
+            ("c.mp4", 100),
+            ("d.webp", 3),
+            ("e.pdf", 7),
+            ("f", 1),
+        ] {
+            stats.add(std::path::Path::new(name), bytes);
+        }
+        assert_eq!((stats.images, stats.image_bytes), (2, 15));
+        assert_eq!((stats.videos, stats.video_bytes), (1, 100));
+        assert_eq!((stats.stickers, stats.sticker_bytes), (1, 3));
+        assert_eq!((stats.other, stats.other_bytes), (2, 8));
+        assert_eq!(stats.bytes_total(), 126);
+        assert_eq!(stats.files_total(), 6);
+    }
+
+    /// An empty cache draws no bar instead of dividing by zero.
+    #[test]
+    fn a_storage_bar_is_empty_when_there_is_nothing_to_measure() {
+        assert_eq!(StorageStats::bar_width(0, 0, 100.0), 0.0);
+        assert_eq!(StorageStats::bar_width(50, 0, 100.0), 0.0);
+        assert_eq!(StorageStats::bar_width(50, 100, 200.0), 100.0);
+    }
+
+    #[test]
+    fn forgetting_the_cache_keeps_files_kept_elsewhere() {
+        let media = |path: &str| super::Media {
+            mime: "image/jpeg".into(),
+            size: 1,
+            width: None,
+            height: None,
+            album: None,
+            path: Some(path.into()),
+            state: super::MediaState::Idle,
+        };
+        let mut cached = super::Content::Image {
+            caption: None,
+            media: media("/cache/media/a.jpg"),
+            motion: None,
+        };
+        let mut kept = super::Content::Image {
+            caption: None,
+            media: media("/home/me/Downloads/b.jpg"),
+            motion: None,
+        };
+        for content in [&mut cached, &mut kept] {
+            content.forget_files_in(std::path::Path::new("/cache/media"));
+        }
+        assert_eq!(cached.media().unwrap().path, None);
+        assert!(kept.media().unwrap().path.is_some());
+    }
+}
+
+#[cfg(test)]
 mod tests {
+    /// Checks compatibility with older archived quotes that omitted a source chat.
+    #[test]
+    fn archived_quotes_without_a_source_chat_remain_readable() {
+        let old = r#"{"id":"original","sender":"sender@lid","sender_name":null,"summary":"Fixture","mentions":[]}"#;
+        let mut quote: super::Quoted = serde_json::from_str(old).unwrap();
+        assert_eq!(quote.chat, None);
+        quote.chat = Some("fixture@g.us".into());
+        let stored = serde_json::to_string(&quote).unwrap();
+        assert_eq!(
+            serde_json::from_str::<super::Quoted>(&stored).unwrap(),
+            quote
+        );
+    }
+
     use super::StickerCrop;
 
     #[test]
@@ -1810,6 +3256,7 @@ mod tests {
         );
         // A caption is searched too, and previewed the same way.
         let photo = super::Content::Image {
+            motion: None,
             caption: Some("a photo of a Zebra".into()),
             media: media(),
         };
@@ -1866,6 +3313,36 @@ mod tests {
     }
 
     #[test]
+    fn mentioning_everyone_is_open_to_small_groups_and_admins() {
+        let mut chat = super::Chat::new("1-2@g.us".into(), "Rust".into());
+        assert!(
+            !chat.can_mention_everyone(),
+            "an unknown member list offers nothing"
+        );
+        chat.participants = vec!["1@s.whatsapp.net".into()];
+        assert!(chat.can_mention_everyone());
+        chat.participants = (0..32).map(|n| format!("{n}@s.whatsapp.net")).collect();
+        assert!(
+            chat.can_mention_everyone(),
+            "32 people still count as small"
+        );
+        chat.participants.push("32@s.whatsapp.net".into());
+        assert!(!chat.can_mention_everyone(), "a larger group is for admins");
+        chat.admin = true;
+        assert!(chat.can_mention_everyone());
+        chat.read_only = true;
+        assert!(!chat.can_mention_everyone(), "a chat we cannot post in");
+        chat.read_only = false;
+        chat.left = true;
+        assert!(!chat.can_mention_everyone());
+
+        let mut direct = super::Chat::new("1@s.whatsapp.net".into(), "Ada".into());
+        direct.participants = vec!["1@s.whatsapp.net".into()];
+        direct.admin = true;
+        assert!(!direct.can_mention_everyone());
+    }
+
+    #[test]
     fn looks_unread_covers_counts_and_the_empty_dot() {
         let mut chat = Chat::new("1@s.whatsapp.net".into(), "A".into());
         assert!(!chat.looks_unread());
@@ -1918,7 +3395,211 @@ mod tests {
         assert_eq!(StickerCrop::centered(0, 0).side, 1);
     }
 
+    use super::{CropEdge, PictureCrop, PictureEdit, PictureSource};
+
+    #[test]
+    fn a_crop_keeps_its_size_and_stays_inside_the_picture() {
+        let full = PictureCrop::full(800, 600);
+        assert_eq!((full.x, full.y, full.width, full.height), (0, 0, 800, 600));
+        // A region larger than the picture shrinks to it and starts at the corner.
+        let huge = PictureCrop {
+            x: 900,
+            y: 900,
+            width: 4000,
+            height: 4000,
+        };
+        assert_eq!(huge.clamped(800, 600), PictureCrop::full(800, 600));
+        // A region hanging off an edge slides back, keeping its size.
+        let off = PictureCrop {
+            x: 700,
+            y: 500,
+            width: 400,
+            height: 300,
+        };
+        assert_eq!(
+            off.clamped(800, 600),
+            PictureCrop {
+                x: 400,
+                y: 300,
+                width: 400,
+                height: 300
+            }
+        );
+    }
+
+    #[test]
+    fn dragging_an_edge_moves_that_side_only() {
+        let full = PictureCrop::full(800, 600);
+        assert_eq!(
+            full.drag(CropEdge::Left, 100, 0, 800, 600),
+            PictureCrop {
+                x: 100,
+                y: 0,
+                width: 700,
+                height: 600
+            }
+        );
+        assert_eq!(
+            full.drag(CropEdge::TopLeft, 100, 50, 800, 600),
+            PictureCrop {
+                x: 100,
+                y: 50,
+                width: 700,
+                height: 550
+            }
+        );
+        // Dragging a side past the picture's edge stops at it.
+        assert_eq!(full.drag(CropEdge::Left, -100, 0, 800, 600), full);
+        // Dragging it past the far side leaves the smallest region.
+        assert_eq!(
+            full.drag(CropEdge::Left, 1000, 0, 800, 600),
+            PictureCrop {
+                x: 800 - CROP_MIN_SIDE,
+                y: 0,
+                width: CROP_MIN_SIDE,
+                height: 600
+            }
+        );
+        assert_eq!(
+            full.drag(CropEdge::BottomRight, -1000, -1000, 800, 600),
+            PictureCrop {
+                x: 0,
+                y: 0,
+                width: CROP_MIN_SIDE,
+                height: CROP_MIN_SIDE
+            }
+        );
+    }
+
+    #[test]
+    fn dragging_inside_moves_the_region_without_resizing_it() {
+        let crop = PictureCrop {
+            x: 100,
+            y: 100,
+            width: 200,
+            height: 200,
+        };
+        assert_eq!(
+            crop.drag(CropEdge::Inside, 50, 25, 800, 600),
+            PictureCrop {
+                x: 150,
+                y: 125,
+                width: 200,
+                height: 200
+            }
+        );
+        assert_eq!(
+            crop.drag(CropEdge::Inside, 1000, 1000, 800, 600),
+            PictureCrop {
+                x: 600,
+                y: 400,
+                width: 200,
+                height: 200
+            }
+        );
+        // A region filling the picture cannot go anywhere.
+        assert_eq!(
+            PictureCrop::full(800, 600).drag(CropEdge::Inside, 40, 40, 800, 600),
+            PictureCrop::full(800, 600)
+        );
+    }
+
+    #[test]
+    fn turning_carries_the_selection_round_with_the_picture() {
+        let crop = PictureCrop {
+            x: 10,
+            y: 5,
+            width: 20,
+            height: 10,
+        };
+        // Clockwise, the picture's former height becomes its width.
+        let clockwise = crop.turned_clockwise(50);
+        assert_eq!(
+            clockwise,
+            PictureCrop {
+                x: 35,
+                y: 10,
+                width: 10,
+                height: 20
+            }
+        );
+        assert!(clockwise.x + clockwise.width <= 50);
+        assert!(clockwise.y + clockwise.height <= 100);
+        let counter = crop.turned_counter_clockwise(100);
+        assert_eq!(
+            counter,
+            PictureCrop {
+                x: 5,
+                y: 70,
+                width: 10,
+                height: 20
+            }
+        );
+        assert!(counter.x + counter.width <= 50);
+        assert!(counter.y + counter.height <= 100);
+        // Turning back the other way restores the region. The picture is
+        // 50 across once it has been turned clockwise.
+        assert_eq!(clockwise.turned_counter_clockwise(50), crop);
+    }
+
+    #[test]
+    fn an_edit_turns_the_picture_underneath_the_crop() {
+        let edit = PictureEdit::new(0, PictureSource::File(PathBuf::from("photo.jpg")), 800, 600);
+        assert_eq!(edit.displayed_size(), (800, 600));
+        let turned = edit.clone().turned(true);
+        assert_eq!(turned.turns, 1);
+        assert_eq!(turned.displayed_size(), (600, 800));
+        assert_eq!(turned.crop, PictureCrop::full(600, 800));
+        // Four quarter turns come back to where it started.
+        let round = turned.clone().turned(true).turned(true).turned(true);
+        assert_eq!(round.turns, 0);
+        assert_eq!(round.displayed_size(), (800, 600));
+        assert_eq!(round.crop, PictureCrop::full(800, 600));
+        // Turning anticlockwise is the same as turning clockwise three times.
+        let left = edit.clone().turned(false);
+        assert_eq!(left.turns, 3);
+        assert_eq!(left.displayed_size(), (600, 800));
+    }
+
+    #[test]
+    fn resetting_puts_the_picture_back_the_way_it_started() {
+        let edit = PictureEdit::new(0, PictureSource::File(PathBuf::from("photo.jpg")), 800, 600)
+            .turned(true)
+            .reset();
+        assert_eq!(edit.turns, 0, "the turn goes back too");
+        assert_eq!(edit.displayed_size(), (800, 600));
+        assert_eq!(edit.crop, PictureCrop::full(800, 600));
+    }
+
     use super::*;
+
+    #[test]
+    fn list_filters_survive_their_stored_form() {
+        for chip in ChatFilter::EVERY {
+            let key = ListFilter::key(chip, None);
+            let read = key.as_deref().and_then(ListFilter::parse);
+            match chip {
+                ChatFilter::All => assert_eq!(read, None),
+                _ => assert_eq!(read, Some(ListFilter::Chip(chip))),
+            }
+        }
+        let key = ListFilter::key(ChatFilter::All, Some("label-7")).unwrap();
+        assert_eq!(
+            ListFilter::parse(&key),
+            Some(ListFilter::Label("label-7".into()))
+        );
+        assert_eq!(ListFilter::parse("something-newer"), None);
+        assert_eq!(ListFilter::parse("label:"), None);
+    }
+
+    #[test]
+    fn call_filters_survive_their_stored_form() {
+        for chip in CallFilter::EVERY {
+            assert_eq!(CallFilter::parse(chip.key().as_deref()), chip);
+        }
+        assert_eq!(CallFilter::All.key(), None);
+        assert_eq!(CallFilter::parse(Some("something-newer")), CallFilter::All);
+    }
 
     #[test]
     fn message_receipts_sort_each_recipient_into_one_list() {
@@ -1956,6 +3637,7 @@ mod tests {
         assert_eq!(unknown.remaining(), 0);
     }
 
+    /// Checks that content rederivation retains each downloaded interactive image path.
     #[test]
     fn rederived_interactive_content_keeps_every_downloaded_image() {
         let image = |path: Option<&str>| Media {
@@ -1963,6 +3645,7 @@ mod tests {
             size: 1,
             width: None,
             height: None,
+            album: None,
             path: path.map(PathBuf::from),
             state: MediaState::Idle,
         };
@@ -2009,15 +3692,47 @@ mod tests {
         assert!(draft.validated().is_err());
     }
 
+    /// Builds synthetic attachment metadata for media-state and album regression tests.
     fn media() -> Media {
         Media {
             mime: "image/jpeg".into(),
             size: 1,
             width: None,
             height: None,
+            album: None,
             path: None,
             state: MediaState::Idle,
         }
+    }
+
+    /// The album holds photos and playable clips: an image, and a video that
+    /// is not a GIF, which plays inline as an animation instead. A file the
+    /// sender attached is a document, not an album item, whatever its name.
+    #[test]
+    fn the_album_holds_photos_and_playable_clips() {
+        use super::{Content, GalleryKind};
+        let picture = Content::Image {
+            caption: None,
+            media: media(),
+            motion: None,
+        };
+        assert_eq!(picture.gallery_kind(), Some(GalleryKind::Photo));
+        let clip = |gif: bool| Content::Video {
+            caption: None,
+            media: media(),
+            seconds: None,
+            gif,
+            note: false,
+        };
+        assert_eq!(clip(false).gallery_kind(), Some(GalleryKind::Video));
+        assert_eq!(clip(true).gallery_kind(), None, "a GIF plays inline");
+        let file = Content::Document {
+            media: media(),
+            file_name: "holiday.jpg".into(),
+            caption: None,
+            pages: None,
+        };
+        assert_eq!(file.gallery_kind(), None);
     }
 
     #[test]
@@ -2078,6 +3793,7 @@ mod tests {
         assert_eq!(Content::text("hi\nthere").summary(), "hi");
         assert_eq!(
             Content::Image {
+                motion: None,
                 caption: Some("look".into()),
                 media: media()
             }
@@ -2086,6 +3802,7 @@ mod tests {
         );
         assert_eq!(
             Content::Image {
+                motion: None,
                 caption: None,
                 media: media()
             }
@@ -2105,10 +3822,88 @@ mod tests {
     }
 
     #[test]
+    fn summaries_show_their_label_in_the_interface_language() {
+        use crate::i18n::Locale;
+        let photo = Content::Image {
+            motion: None,
+            caption: Some("look".into()),
+            media: media(),
+        };
+        assert_eq!(photo.summary_in(Locale::Spanish), "Foto: look");
+        assert_eq!(photo.summary_in(Locale::English), "Photo: look");
+        let voice = Content::Audio {
+            media: media(),
+            seconds: Some(65),
+            voice_note: true,
+            waveform: Vec::new(),
+        };
+        assert_eq!(voice.summary_in(Locale::Spanish), "Mensaje de voz (1:05)");
+        // The longest label wins: a video message is not a "Video".
+        assert_eq!(
+            localized_summary(Locale::Spanish, "Video message (0:12)"),
+            "Videomensaje (0:12)"
+        );
+        // Only a whole label followed by its caption or length is one.
+        assert_eq!(
+            localized_summary(Locale::Spanish, "Photographs"),
+            "Photographs"
+        );
+        // Text is the sender's words, even when it reads like a label.
+        let text = Content::text("Location: home");
+        assert_eq!(text.summary_in(Locale::Spanish), "Location: home");
+        assert_eq!(text.full_summary_in(Locale::Spanish), "Location: home");
+    }
+
+    #[test]
+    fn stored_summaries_translate_only_their_labels() {
+        use crate::i18n::Locale;
+        let quote = |labelled| Quoted {
+            chat: None,
+            id: "quoted".into(),
+            sender: "ada@s.whatsapp.net".into(),
+            sender_name: None,
+            summary: "Photo: look".into(),
+            labelled,
+            mentions: Vec::new(),
+        };
+        assert_eq!(quote(Some(true)).summary_in(Locale::Spanish), "Foto: look");
+        assert_eq!(
+            quote(Some(false)).summary_in(Locale::Spanish),
+            "Photo: look"
+        );
+        // A quote archived before `labelled` was kept still translates.
+        assert_eq!(quote(None).summary_in(Locale::Spanish), "Foto: look");
+        let last = |labelled| LastMessage {
+            from_me: false,
+            sender: String::new(),
+            sender_name: None,
+            summary: "Photo: look".into(),
+            full: "Photo: look\nagain".into(),
+            labelled,
+            status: Delivery::Read,
+        };
+        assert_eq!(last(true).summary_in(Locale::Spanish), "Foto: look");
+        assert_eq!(last(true).full_in(Locale::Spanish), "Foto: look\nagain");
+        assert_eq!(last(false).summary_in(Locale::Spanish), "Photo: look");
+    }
+
+    /// Every label has its own literal `gettext` call, so xgettext extracts
+    /// it and a translation reaches the screen.
+    #[test]
+    fn every_summary_label_is_translated() {
+        use crate::i18n::Locale;
+        // Russian spells every label but GIF in its own script.
+        for label in SUMMARY_LABELS.into_iter().filter(|label| *label != "GIF") {
+            assert_ne!(summary_label(Locale::Russian, label), label);
+        }
+    }
+
+    #[test]
     fn full_summaries_keep_every_line_behind_the_summary_label() {
         assert_eq!(Content::text("hi\nthere").full_summary(), "hi\nthere");
         assert_eq!(
             Content::Image {
+                motion: None,
                 caption: Some("look\nat this".into()),
                 media: media()
             }
@@ -2183,6 +3978,7 @@ mod tests {
             sequence: 7,
             ended: true,
             updated: 1_700_000_000,
+            newer_on_phone: true,
         };
         let json = serde_json::to_string(&content).expect("serializes");
         let back: Content = serde_json::from_str(&json).expect("parses");
@@ -2202,6 +3998,7 @@ mod tests {
                 sequence: 0,
                 ended: false,
                 updated: 0,
+                newer_on_phone: false,
             }
         );
     }
@@ -2217,10 +4014,178 @@ mod tests {
             sequence: 1,
             ended,
             updated: 0,
+            newer_on_phone: false,
         };
         assert!(!live(false).live_location_over(1_000, 1_000 + LIVE_LOCATION_LIMIT));
         assert!(live(false).live_location_over(1_000, 1_001 + LIVE_LOCATION_LIMIT));
         assert!(live(true).live_location_over(1_000, 1_000));
         assert!(!Content::text("hi").live_location_over(0, i64::MAX));
+    }
+
+    fn row(id: &str, timestamp: i64, content: Content) -> Message {
+        Message {
+            id: id.into(),
+            chat: "1@s.whatsapp.net".into(),
+            sender: "1@s.whatsapp.net".into(),
+            sender_name: None,
+            from_me: false,
+            timestamp,
+            content,
+            status: Delivery::None,
+            delivered_at: None,
+            read_at: None,
+            quoted: None,
+            reactions: Vec::new(),
+            history_order: None,
+            edited: false,
+            mentions: Vec::new(),
+            forwarded: false,
+            thumbnail: None,
+        }
+    }
+
+    #[test]
+    fn chat_media_files_pictures_documents_and_links_newest_first() {
+        let video = |seconds| Content::Video {
+            caption: None,
+            media: media(),
+            seconds,
+            gif: false,
+            note: false,
+        };
+        let document = |name: &str| Content::Document {
+            media: media(),
+            file_name: name.into(),
+            caption: None,
+            pages: None,
+        };
+        let rows = vec![
+            row(
+                "old-photo",
+                10,
+                Content::Image {
+                    motion: None,
+                    caption: None,
+                    media: media(),
+                },
+            ),
+            row(
+                "sticker",
+                11,
+                Content::Sticker {
+                    media: media(),
+                    animated: false,
+                },
+            ),
+            row(
+                "voice",
+                12,
+                Content::Audio {
+                    media: media(),
+                    seconds: None,
+                    voice_note: true,
+                    waveform: Vec::new(),
+                },
+            ),
+            row("deleted", 13, Content::Revoked),
+            row(
+                "view-once",
+                14,
+                Content::PhoneOnly {
+                    view_once: true,
+                    live_location: false,
+                    once: None,
+                },
+            ),
+            row("plain", 15, Content::text("no link here")),
+            row("notes", 16, document("Notes.pdf")),
+            row(
+                "bare",
+                17,
+                Content::text("read engine.rocks and https://a.b/c"),
+            ),
+            row("clip", 18, video(Some(5))),
+            row(
+                "preview",
+                19,
+                Content::Text {
+                    // Typed without the scheme, previewed with it: one link.
+                    text: "see spotifast.rocks".into(),
+                    preview: Some(LinkPreview {
+                        url: "https://spotifast.rocks/".into(),
+                        title: Some("Spotifast".into()),
+                        description: None,
+                    }),
+                },
+            ),
+            row(
+                "new-photo",
+                20,
+                Content::Image {
+                    motion: None,
+                    caption: None,
+                    media: media(),
+                },
+            ),
+        ];
+        let listed = ChatMedia::collect("1@s.whatsapp.net".into(), rows, 10);
+        let ids = |rows: &[Message]| rows.iter().map(|row| row.id.clone()).collect::<Vec<_>>();
+        assert_eq!(ids(&listed.media), ["new-photo", "clip", "old-photo"]);
+        assert_eq!(ids(&listed.docs), ["notes"]);
+        assert_eq!(
+            listed
+                .links
+                .iter()
+                .map(|link| (
+                    link.message.as_str(),
+                    link.url.as_str(),
+                    link.title.as_deref()
+                ))
+                .collect::<Vec<_>>(),
+            [
+                ("preview", "https://spotifast.rocks/", Some("Spotifast")),
+                ("bare", "https://engine.rocks/", None),
+                ("bare", "https://a.b/c", None),
+            ]
+        );
+        assert!(!listed.media_truncated && !listed.docs_truncated && !listed.links_truncated);
+        // Each list is cut at the limit, and the panel is told.
+        let rows = (0..4)
+            .map(|index| {
+                row(
+                    &format!("photo-{index}"),
+                    index,
+                    Content::Image {
+                        motion: None,
+                        caption: None,
+                        media: media(),
+                    },
+                )
+            })
+            .collect();
+        let cut = ChatMedia::collect("1@s.whatsapp.net".into(), rows, 3);
+        assert_eq!(ids(&cut.media), ["photo-3", "photo-2", "photo-1"]);
+        assert!(cut.media_truncated, "the pictures were cut");
+        assert!(
+            !cut.docs_truncated && !cut.links_truncated,
+            "the others were not"
+        );
+    }
+
+    #[test]
+    fn links_are_capped_per_address_and_each_list_reports_its_own_cut() {
+        let rows = (0..300)
+            .map(|index| {
+                row(
+                    &format!("linked-{index}"),
+                    index,
+                    Content::text(format!("https://a.b/{index} and https://c.d/{index}")),
+                )
+            })
+            .collect();
+        let listed = ChatMedia::collect("1@s.whatsapp.net".into(), rows, MEDIA_LIST_LIMIT);
+        assert_eq!(listed.links.len(), MEDIA_LIST_LIMIT, "cut to what is shown");
+        assert!(listed.links_truncated, "600 addresses do not fit");
+        assert!(!listed.media_truncated && !listed.docs_truncated);
     }
 }

@@ -21,8 +21,9 @@ window instead of starting another instance.
 
 - **History.** WhatsApp replays only recent history to a fresh device.
   ZapFast archives new messages and asks the phone for older messages when
-  you scroll past the archive. The phone must be online for these requests and
-  to re-upload expired attachments.
+  you scroll past the archive, or in the background when **Fetch older
+  history** is on in Settings > Chats. The phone must be online for these
+  requests and to re-upload expired attachments.
 - **Other features.** Sending, receiving, receipts, and presence go through
   WhatsApp's servers directly; the phone can be offline for all of it.
 

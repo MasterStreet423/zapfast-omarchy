@@ -10,12 +10,14 @@ finish-args:
   - --socket=wayland
   - --socket=fallback-x11
   - --share=ipc
-  - --device=dri
+  - --device=all
   - --socket=pulseaudio
   - --share=network
   # Archive encryption key.
   - --talk-name=org.freedesktop.secrets
   - --talk-name=org.kde.StatusNotifierWatcher
+  # Desktop notifications, which Fastframe sends straight to the server.
+  - --talk-name=org.freedesktop.Notifications
   - --persist=.local/state
 modules:
   - name: zapfast

@@ -7,13 +7,23 @@ use std::collections::HashMap;
 
 use crate::app::{App, Conversation, Presence};
 use crate::backend::LinkStatus;
+use crate::calls::{CallPhase, CallUpdate};
+use crate::model::CallDirection;
 use crate::model::{
-    Chat, Contact, Content, Delivery, Dialog, LinkPreview, Media, MentionRef, Message, Page,
-    Quoted, Reaction,
+    Chat, ChatMedia, Contact, Content, Delivery, Dialog, InfoPanel, InfoView, LinkPreview, Media,
+    MediaTab, MentionRef, Message, Page, Quoted, Reaction,
 };
 use crate::settings::ThemeChoice;
 
 const ME: &str = "15550001111@s.whatsapp.net";
+/// Family, the sample group we run.
+const FAMILY: &str = "120363098765432109@g.us";
+/// A member of every sample group.
+const JONAS: &str = "491701111111@s.whatsapp.net";
+/// A contact in no group, offered by Add members.
+const DOROTHY: &str = "12025550137@s.whatsapp.net";
+/// A made-up invite link for the sample group.
+const DEMO_INVITE_LINK: &str = "https://chat.whatsapp.com/DemoFamilyInvite2026";
 
 struct Sample {
     id: &'static str,
@@ -211,12 +221,14 @@ const SAMPLES: &[Sample] = &[
     },
 ];
 
+/// Builds synthetic attachment metadata for media-state and album regression tests.
 fn media(mime: &str, size: u64, width: Option<u32>, height: Option<u32>) -> Media {
     Media {
         mime: mime.to_owned(),
         size,
         width,
         height,
+        album: None,
         path: None,
         state: Default::default(),
     }
@@ -245,7 +257,7 @@ pub const RTL_SELF_CHAT: [&str; 3] = [
 
 /// Numbers inside right-to-left text on the `rtl` page: Arabic-Indic and
 /// European digits, a time, and a phone number, each reading left to right.
-const RTL_NUMBERS: &str = "لدي ٤٥ رسالة، الساعة ١٢:٣٠\nعندي 45 رسالة\nاتصل على +49 170 1234567";
+const RTL_NUMBERS: &str = "لدي ٤٥ رسالة، الساعة ١٢:٣٠\nعندي 45 رسالة\nاتصل على +00 (00) 00000-0000";
 
 fn message(chat: &str, id: &str, from_me: bool, timestamp: i64, content: Content) -> Message {
     Message {
@@ -412,6 +424,9 @@ fn sample_files(app: &App) -> (std::path::PathBuf, std::path::PathBuf) {
 /// Loads the sample account and opens its first chat.
 pub fn populate(app: &mut App) {
     app.backend.set_offline(true);
+    // With no backend to answer them, the interface's commands are answered
+    // here instead.
+    app.backend.record_demo_commands();
     // Demo mode has no backend to handle downloads.
     app.account_mut().settings.auto_download = false;
     app.link = LinkStatus::Connected;
@@ -464,6 +479,10 @@ pub fn populate(app: &mut App) {
         chat.muted_until = sample.muted.then_some(0);
         chat.archived = sample.archived;
         chat.locked = sample.locked;
+        // Someone in Rust Berlin mentioned us among its unread messages.
+        if sample.name == "Rust Berlin" {
+            chat.unread_mention = Some(format!("{}-2", sample.id));
+        }
         let mut conversation = Conversation {
             complete: true,
             requested: true,
@@ -506,11 +525,41 @@ pub fn populate(app: &mut App) {
             // but we are an admin, and Section 8 Berlin is locked for us.
             chat.info_locked = Some(sample.name != "Rust Berlin");
             chat.admin = sample.name == "Family";
+            // Family is ours to run, with Mira as a second admin; Rust Berlin
+            // lets its members add people and share its link; Section 8
+            // Berlin is Tom's announcement group.
+            chat.group_settings = Some(match sample.name {
+                "Family" => crate::model::GroupSettings {
+                    approval: true,
+                    admins: vec![ME.to_owned(), group_members[1].0.to_owned()],
+                    super_admins: vec![ME.to_owned()],
+                    ..Default::default()
+                },
+                "Rust Berlin" => crate::model::GroupSettings {
+                    members_add: true,
+                    members_share_link: true,
+                    admins: vec![group_members[0].0.to_owned()],
+                    super_admins: vec![group_members[0].0.to_owned()],
+                    ..Default::default()
+                },
+                _ => crate::model::GroupSettings {
+                    announce: true,
+                    admins: vec![group_members[2].0.to_owned()],
+                    super_admins: vec![group_members[2].0.to_owned()],
+                    ..Default::default()
+                },
+            });
+            chat.group_description = Some(if sample.name == "Rust Berlin" {
+                "Rust meetups in Berlin 🦀\nShare projects, ask questions, and help each other learn.\nNext meetup: Thursday at 19:00.".to_owned()
+            } else {
+                String::new()
+            });
         }
         chat.last = conversation
             .messages
             .last()
             .map(|last| crate::model::LastMessage {
+                labelled: last.content.labelled(),
                 from_me: last.from_me,
                 sender: last.sender.clone(),
                 sender_name: last.sender_name.clone(),
@@ -537,6 +586,7 @@ pub fn populate(app: &mut App) {
                 false,
                 base + 30,
                 Content::Image {
+                    motion: None,
                     caption: Some("The difference engine, finally assembled".into()),
                     media: media(
                         "image/jpeg",
@@ -604,6 +654,8 @@ pub fn populate(app: &mut App) {
                 Content::text("Listened, agreed on *all three* points."),
             );
             row.quoted = Some(Quoted {
+                labelled: None,
+                chat: None,
                 id: "ada-voice".into(),
                 sender: ada.into(),
                 sender_name: Some("Ada Lovelace".into()),
@@ -674,6 +726,7 @@ pub fn populate(app: &mut App) {
                 false,
                 older + 60 * 18,
                 Content::Image {
+                    motion: None,
                     caption: None,
                     media: media(
                         "image/jpeg",
@@ -737,6 +790,7 @@ pub fn populate(app: &mut App) {
                     sequence: 1,
                     ended: false,
                     updated: 0,
+                    newer_on_phone: false,
                 },
             );
             row.thumbnail = Some(sample_map());
@@ -772,6 +826,7 @@ pub fn populate(app: &mut App) {
                 false,
                 group_base + 60,
                 Content::Image {
+                    motion: None,
                     caption: Some("Tonight's venue, doors at 18:30".into()),
                     media: media(
                         "image/jpeg",
@@ -815,6 +870,8 @@ pub fn populate(app: &mut App) {
             row.sender = mira.0.to_owned();
             row.sender_name = Some(mira.1.to_owned());
             row.quoted = Some(Quoted {
+                labelled: None,
+                chat: None,
                 id: format!("{group}-3"),
                 sender: jonas.0.into(),
                 sender_name: Some(jonas.1.into()),
@@ -825,6 +882,17 @@ pub fn populate(app: &mut App) {
                 user: jonas.0.split('@').next().unwrap_or_default().to_owned(),
                 id: jonas.0.to_owned(),
             }];
+            row
+        },
+        {
+            let mut row = message(
+                group,
+                "group-everyone",
+                true,
+                group_base + 165,
+                Content::text("Heading over @all"),
+            );
+            row.mentions = vec![crate::mentions::everyone_ref()];
             row
         },
         message(
@@ -868,6 +936,7 @@ pub fn populate(app: &mut App) {
                         chat.id.clone(),
                         last.timestamp,
                         crate::model::LastMessage {
+                            labelled: last.content.labelled(),
                             from_me: last.from_me,
                             sender: last.sender.clone(),
                             sender_name: last.sender_name.clone(),
@@ -904,6 +973,17 @@ pub fn populate(app: &mut App) {
     // The privacy rows read like a linked account, so the sample shows them
     // filled instead of disabled.
     app.account_privacy = crate::privacy::Snapshot::demo();
+    // The storage rows read like a cache in use, not an empty one.
+    app.storage_stats = Some(crate::model::StorageStats {
+        images: 12,
+        image_bytes: 8_388_608,
+        videos: 3,
+        video_bytes: 25_165_824,
+        stickers: 18,
+        sticker_bytes: 2_097_152,
+        other: 4,
+        other_bytes: 524_288,
+    });
     app.scroll_to_bottom = true;
     app.focus_composer = false;
 }
@@ -1040,6 +1120,8 @@ fn quote_sample(app: &mut App) {
             Content::text("See you there!"),
         );
         reply.quoted = Some(Quoted {
+            labelled: None,
+            chat: None,
             id: "group-reply".into(),
             sender,
             sender_name,
@@ -1072,6 +1154,8 @@ fn meta_ai_sample(app: &mut App) {
         ),
     );
     reply.quoted = Some(Quoted {
+        labelled: None,
+        chat: None,
         id: "meta-ai-question".into(),
         sender: ME.into(),
         sender_name: None,
@@ -1081,6 +1165,7 @@ fn meta_ai_sample(app: &mut App) {
     let mut chat = Chat::new(id.into(), "Meta AI".into());
     chat.last_activity = now;
     chat.last = Some(crate::model::LastMessage {
+        labelled: reply.content.labelled(),
         from_me: false,
         sender: reply.sender.clone(),
         sender_name: None,
@@ -1180,6 +1265,8 @@ fn interactive_sample(app: &mut App, with_image: bool) {
         },
     );
     reply.quoted = Some(Quoted {
+        labelled: None,
+        chat: None,
         id: "interactive-card".into(),
         sender: id.into(),
         sender_name: Some("Cedar Studio".into()),
@@ -1210,6 +1297,7 @@ fn interactive_sample(app: &mut App, with_image: bool) {
         let last = messages.last().unwrap();
         chat.last_activity = last.timestamp;
         chat.last = Some(crate::model::LastMessage {
+            labelled: last.content.labelled(),
             from_me: last.from_me,
             sender: last.sender.clone(),
             sender_name: None,
@@ -1219,6 +1307,19 @@ fn interactive_sample(app: &mut App, with_image: bool) {
         });
     }
     app.conversations.get_mut(id).unwrap().messages = messages;
+    app.open_chat = Some(id.into());
+    app.typing.clear();
+    app.scroll_to_bottom = true;
+}
+
+/// The first chat with only its last two messages: a conversation shorter
+/// than the view, which sits at its bottom.
+fn short_chat_sample(app: &mut App) {
+    let id = SAMPLES[0].id;
+    let conversation = app.conversations.get_mut(id).unwrap();
+    let keep = conversation.messages.len().saturating_sub(2);
+    conversation.messages.drain(..keep);
+    conversation.complete = true;
     app.open_chat = Some(id.into());
     app.typing.clear();
     app.scroll_to_bottom = true;
@@ -1524,6 +1625,7 @@ fn photos_sample(app: &mut App) {
         );
         media.path = Some(wide.clone());
         Content::Image {
+            motion: None,
             caption: caption.map(str::to_owned),
             media,
         }
@@ -1563,6 +1665,120 @@ fn photos_sample(app: &mut App) {
     app.conversations.entry(id.into()).or_default().messages = rows;
     app.open_chat = Some(id.into());
     app.scroll_to_bottom = true;
+}
+
+/// Runs of bubbles from both sides, for the Messages style's balloons and
+/// their tails (`bubbles,messages` and `bubbles,messages-light`): single
+/// lines, a wrapped paragraph, a message of emoji alone, a quoted reply on
+/// our own blue balloon, and a lone photo, which leaves the tail to the text
+/// after it. Only each run's last balloon curls a tail. Every row fits
+/// a 1280 by 800 window, so all four runs show at once.
+fn bubbles_sample(app: &mut App) {
+    let id = SAMPLES[0].id;
+    let now = crate::util::now();
+    let dir = app.dirs.media_cache_dir();
+    let _ = std::fs::create_dir_all(&dir);
+    let wide = stock::save_photo(&dir, stock::DUSK);
+    let photo = || {
+        let mut media = media(
+            "image/jpeg",
+            stock::DUSK.bytes.len() as u64,
+            Some(stock::DUSK.width),
+            Some(stock::DUSK.height),
+        );
+        media.path = Some(wide.clone());
+        Content::Image {
+            motion: None,
+            caption: None,
+            media,
+        }
+    };
+    let text = Content::text;
+    let mut rows = vec![
+        message(
+            id,
+            "bubbles-in-1",
+            false,
+            0,
+            text("Are you around this afternoon?"),
+        ),
+        message(
+            id,
+            "bubbles-in-2",
+            false,
+            0,
+            text(
+                "The ferry leaves at four, so if we meet at the pier by half past three \
+                 there is time for a coffee first and nobody has to run for it.",
+            ),
+        ),
+        message(id, "bubbles-out-1", true, 0, text("Yes!")),
+        message(id, "bubbles-out-2", true, 0, text("🎉🙌")),
+        message(
+            id,
+            "bubbles-out-3",
+            true,
+            0,
+            text("Half past three works for me"),
+        ),
+        message(id, "bubbles-in-3", false, 0, photo()),
+        message(
+            id,
+            "bubbles-in-4",
+            false,
+            0,
+            text("The view from the pier yesterday"),
+        ),
+        message(id, "bubbles-out-4", true, 0, text("Then coffee is on me")),
+    ];
+    rows[4].quoted = Some(crate::model::Quoted {
+        labelled: None,
+        id: "bubbles-in-2".into(),
+        sender: id.into(),
+        sender_name: None,
+        summary: "The ferry leaves at four".into(),
+        mentions: Vec::new(),
+        chat: None,
+    });
+    for (index, row) in rows.iter_mut().enumerate() {
+        row.timestamp = now - 1200 + index as i64 * 60;
+    }
+    let conversation = app.conversations.entry(id.into()).or_default();
+    conversation.messages = rows;
+    conversation.complete = true;
+    app.open_chat = Some(id.into());
+    app.typing.clear();
+    app.scroll_to_bottom = true;
+}
+
+/// A motion photo with its clip downloaded. `playing` plays it in the bubble.
+fn motion_sample(app: &mut App, playing: bool) {
+    let id = SAMPLES[0].id;
+    let dir = app.dirs.media_cache_dir();
+    let mut media = media(
+        "image/jpeg",
+        stock::LAUNCH.bytes.len() as u64,
+        Some(stock::LAUNCH.width),
+        Some(stock::LAUNCH.height),
+    );
+    media.path = Some(stock::save_photo(&dir, stock::LAUNCH));
+    let photo = Content::Image {
+        caption: Some("Liftoff, as it happened".into()),
+        media,
+        motion: Some(crate::model::Motion {
+            path: Some(stock::save(&dir, "demo-video.mp4", stock::VIDEO)),
+            ..Default::default()
+        }),
+    };
+    app.conversations.entry(id.into()).or_default().messages = vec![message(
+        id,
+        "demo-motion",
+        false,
+        crate::util::now() - 60,
+        photo,
+    )];
+    app.open_chat = Some(id.into());
+    app.motion_playing = playing.then(|| (id.into(), "demo-motion".into()));
 }
 
 /// Replaces the first chat with videos: a downloaded one, a round video
@@ -1618,6 +1834,40 @@ fn video_sample(app: &mut App, play: Option<&str>) {
     }
 }
 
+/// Replaces the first chat with a synthetic four-picture WhatsApp album.
+fn media_album_sample(app: &mut App, grouped: bool) {
+    let chat = SAMPLES[0].id;
+    let now = crate::util::now();
+    // Keep the ordinary album fixture inside today's local date, including at midnight.
+    let start = crate::util::day_key(now)
+        .and_then(crate::util::day_bounds)
+        .map_or(now - 30, |(start, _)| start);
+    let at = (now - 30).max(start);
+    let rows = (0..4)
+        .map(|index| {
+            let mut attachment =
+                media("image/jpeg", 180_000 + index * 10_000, Some(900), Some(700));
+            attachment.album = grouped.then(|| "demo-album".into());
+            let mut row = message(
+                chat,
+                &format!("album-{index}"),
+                false,
+                at + index as i64,
+                Content::Image {
+                    motion: None,
+                    caption: (index == 0).then(|| "Weekend references, all in one place".into()),
+                    media: attachment,
+                },
+            );
+            row.thumbnail = Some(sample_thumbnail(index as u32 + 10));
+            row
+        })
+        .collect();
+    app.conversations.entry(chat.into()).or_default().messages = rows;
+    app.open_chat = Some(chat.into());
+    app.scroll_to_bottom = true;
+}
+
 /// The search pane over the sample chat with the most matches for
 /// `query`, listing them newest first as the archive would.
 fn chat_search_sample(app: &mut App, query: &str) {
@@ -1642,6 +1892,25 @@ fn chat_search_sample(app: &mut App, query: &str) {
     app.chat_search_open = true;
     app.chat_search = query.into();
     app.chat_search_hits = hits;
+}
+
+/// Opens the info panel on `chat`, listed from the sample's own messages:
+/// the demo has no worker to answer for the archive.
+fn info_sample(app: &mut App, chat: &str, view: InfoView) {
+    let rows = app
+        .conversations
+        .get(chat)
+        .map(|conversation| conversation.messages.clone())
+        .unwrap_or_default();
+    app.info = Some(InfoPanel {
+        chat: chat.to_owned(),
+        view,
+    });
+    app.set_info_media(ChatMedia::collect(
+        chat.to_owned(),
+        rows,
+        crate::model::MEDIA_LIST_LIMIT,
+    ));
 }
 
 /// Three local labels worn by some of the sample chats.
@@ -1706,13 +1975,38 @@ fn wallpaper_image_sample(app: &mut App) {
     app.account_mut().settings.wallpaper_image = Some(path);
 }
 
+/// Sample stars, and the left panel that lists them. `menu` keeps one row's
+/// own context menu open, so a screenshot and a layout test can see it.
+fn starred_sample(app: &mut App, menu: Option<&str>) {
+    let chat = SAMPLES[0].id.to_owned();
+    let starred = app.conversations[&chat]
+        .messages
+        .iter()
+        .find(|row| row.id == "ada-link")
+        .cloned()
+        .expect("the sample link message");
+    app.stars
+        .insert(chat.clone(), [starred.id.clone()].into_iter().collect());
+    app.starred = vec![crate::archive::Starred {
+        message: starred,
+        starred_at: crate::util::now(),
+    }];
+    app.show_starred = true;
+    app.open_list_menu = menu.map(|id| (chat, id.to_owned()));
+}
+
+/// Configures synthetic offline demo states and appearance for tests and screenshots.
+/// Audio fixtures vary voice-note and forwarding metadata independently without playback.
 pub fn apply_flags(app: &mut App, page: Option<&str>) {
     let Some(page) = page else {
         return;
     };
     for part in page.split(',').map(str::trim) {
         match part {
+            "history-date" => history_date_sample(app),
             "chat" | "" => {}
+            "phone-menu" => phone_menu_sample(app),
+            "short-chat" => short_chat_sample(app),
             "chat-menu" => app.open_chat_menu = Some(app.chats[0].id.clone()),
             "chat-header-menu" => app.open_header_menu = app.open_chat.clone(),
             "interactive-actions" => interactive_actions_sample(app),
@@ -1727,10 +2021,23 @@ pub fn apply_flags(app: &mut App, page: Option<&str>) {
             }
             "carousel" => carousel_sample(app, 3),
             "carousel-pair" => carousel_sample(app, 2),
+            // A carousel card's picture in the viewer, among the chat's album.
+            "carousel-viewer" => {
+                carousel_sample(app, 3);
+                let chat = SAMPLES[0].id.to_owned();
+                let card = app.conversations[&chat].messages[0].clone();
+                app.viewer_media = crate::model::MediaItem::of_message(&card);
+                app.viewer_media_chat = Some(chat.clone());
+                let path = app.viewer_media.get(1).and_then(|item| item.path.clone());
+                app.image_preview = Some(
+                    crate::image_preview::PreviewState::new(path, chat, card.id).with_card(Some(1)),
+                );
+            }
             "poll-empty" => poll_sample(app, false, false),
             "poll-voted" => poll_sample(app, true, false),
             "poll-results" => poll_sample(app, true, true),
             "photos" => photos_sample(app),
+            "bubbles" => bubbles_sample(app),
             "drafts" => {
                 // Unsent text in two chats besides the open one, whose
                 // draft is in the composer.
@@ -1742,6 +2049,25 @@ pub fn apply_flags(app: &mut App, page: Option<&str>) {
                 );
                 app.composer = "Still typing this one".into();
             }
+            "motion" => motion_sample(app, false),
+            "motion-playing" => motion_sample(app, true),
+            "motion-preview" => {
+                motion_sample(app, false);
+                app.actions.push(crate::model::Action::PreviewImage {
+                    path: app.dirs.media_cache_dir().join(stock::LAUNCH.name),
+                    chat: SAMPLES[0].id.into(),
+                    message: "demo-motion".into(),
+                    card: None,
+                });
+            }
+            // The motion photo's clip playing over the photo in the viewer.
+            "motion-viewer" => {
+                motion_sample(app, false);
+                app.actions.push(crate::model::Action::ExpandVideo {
+                    message: "demo-motion".into(),
+                    path: app.dirs.media_cache_dir().join("demo-video.mp4"),
+                });
+            }
             "video" => video_sample(app, None),
             "video-playing" => video_sample(app, Some("demo-video")),
             "video-expanded" => {
@@ -1751,6 +2077,68 @@ pub fn apply_flags(app: &mut App, page: Option<&str>) {
                     path: app.dirs.media_cache_dir().join("demo-video.mp4"),
                 });
             }
+            "media-album" => media_album_sample(app, true),
+            "media-album-failed" => {
+                media_album_sample(app, true);
+                let messages = &mut app.conversations.get_mut(SAMPLES[0].id).unwrap().messages;
+                for message in &mut *messages {
+                    message.from_me = true;
+                    message.status = Delivery::Sent;
+                }
+                messages[1].status = Delivery::Failed;
+            }
+            "media-album-partial" => {
+                media_album_sample(app, true);
+                let (saved, _) = sample_files(app);
+                let messages = &mut app.conversations.get_mut(SAMPLES[0].id).unwrap().messages;
+                messages[3].content.media_at_mut(None).unwrap().path = Some(saved);
+                messages[2].quoted = Some(crate::model::Quoted {
+                    labelled: None,
+                    id: "synthetic-quoted-message".into(),
+                    sender: SAMPLES[0].id.into(),
+                    sender_name: Some("Alex".into()),
+                    summary: "A reference for the album".into(),
+                    mentions: Vec::new(),
+                    chat: None,
+                });
+            }
+            "media-album-oversized" => {
+                media_album_sample(app, true);
+                let chat = SAMPLES[0].id;
+                let messages = &mut app.conversations.get_mut(chat).unwrap().messages;
+                messages[1].content.media_at_mut(None).unwrap().size =
+                    crate::model::ATTACHMENT_DOWNLOAD_LIMIT + 1;
+                let downloads: Vec<_> = messages
+                    .iter()
+                    .map(|message| crate::model::Action::Download {
+                        // As automatic downloads would: the page shows the
+                        // limit's failure on the oversized member.
+                        manual: false,
+                        card: None,
+                        chat: chat.into(),
+                        message: message.id.clone(),
+                    })
+                    .collect();
+                app.actions.extend(downloads);
+            }
+            "media-album-midnight" => {
+                media_album_sample(app, true);
+                let midnight = crate::util::day_key(crate::util::now())
+                    .and_then(crate::util::day_bounds)
+                    .unwrap()
+                    .0;
+                for (message, offset) in app
+                    .conversations
+                    .get_mut(SAMPLES[0].id)
+                    .unwrap()
+                    .messages
+                    .iter_mut()
+                    .zip([-2, -1, 1, 2])
+                {
+                    message.timestamp = midnight + offset;
+                }
+            }
+            "media-album-before" => media_album_sample(app, false),
             "shared-contact" => {
                 let chat = SAMPLES[0].id;
                 let now = crate::util::now();
@@ -1832,6 +2220,25 @@ pub fn apply_flags(app: &mut App, page: Option<&str>) {
                 app.app_lock.form = Some(form);
             }
             "new-chat" => app.dialog = Some(crate::model::Dialog::NewChat),
+            // New group: two people picked and a third being looked for,
+            // then the group being named.
+            "new-group" | "new-group-name" | "new-group-creating" => {
+                app.dialog = Some(crate::model::Dialog::NewChat);
+                // Opened from the chat list, with no chat behind the dialog.
+                app.open_chat = None;
+                let mut draft = crate::new_group::Draft {
+                    members: vec![SAMPLES[0].id.to_owned(), SAMPLES[3].id.to_owned()],
+                    ..Default::default()
+                };
+                if part == "new-group" {
+                    app.new_chat_search = "gr".into();
+                } else {
+                    draft.stage = crate::new_group::Stage::Naming;
+                    draft.name = "Weekend in Lisbon".into();
+                    draft.creating = part == "new-group-creating";
+                }
+                app.new_group = Some(draft);
+            }
             "unnamed-group" => {
                 app.typing.clear();
                 let mut ids = Vec::new();
@@ -1877,6 +2284,20 @@ pub fn apply_flags(app: &mut App, page: Option<&str>) {
                 unlink(app);
                 app.link = LinkStatus::Failed("The archive is encrypted but its OS keyring key is missing. Restore the original keyring; the archive has not been changed".into());
             }
+            "receipts-off" => {
+                app.account_receipts_off = true;
+            }
+            "receipts-played" => {
+                let conversation = app.conversations.get_mut(SAMPLES[0].id).unwrap();
+                let message = conversation
+                    .messages
+                    .iter_mut()
+                    .find(|message| {
+                        message.from_me && matches!(message.content, Content::Audio { .. })
+                    })
+                    .unwrap();
+                message.status = crate::model::Delivery::Played;
+            }
             "message-info" => message_info_sample(app, true),
             "message-info-unknown" => message_info_sample(app, false),
             "message-info-partial" => {
@@ -1915,6 +2336,32 @@ pub fn apply_flags(app: &mut App, page: Option<&str>) {
                 app.typing.clear();
                 app.scroll_to_bottom = true;
             }
+            "disappearing-direct" => {
+                // A one-to-one chat with its own duration, so the timer shows
+                // in the contact details as well as the group's.
+                let chat = app
+                    .chats
+                    .iter_mut()
+                    .find(|chat| chat.id == SAMPLES[0].id)
+                    .unwrap();
+                chat.ephemeral_expiration = Some(604_800);
+                app.open_chat = Some(chat.id.clone());
+                app.typing.clear();
+                app.scroll_to_bottom = true;
+            }
+            "disappearing-off" => {
+                // A chat whose timer the phone turned off: the details say so
+                // rather than staying quiet about it.
+                let chat = app
+                    .chats
+                    .iter_mut()
+                    .find(|chat| chat.id == SAMPLES[2].id)
+                    .unwrap();
+                chat.ephemeral_expiration = Some(0);
+                app.open_chat = Some(chat.id.clone());
+                app.typing.clear();
+                app.scroll_to_bottom = true;
+            }
             "arabic-reply" => {
                 let chat = SAMPLES[0].id;
                 let now = crate::util::now();
@@ -1930,6 +2377,8 @@ pub fn apply_flags(app: &mut App, page: Option<&str>) {
                     let mut reply =
                         message(chat, id, own, now - 60, Content::text("Reply preview test"));
                     reply.quoted = Some(Quoted {
+                        labelled: None,
+                        chat: None,
                         id: "arabic-original".into(),
                         sender: chat.into(),
                         sender_name: Some("Demo contact".into()),
@@ -1966,6 +2415,8 @@ pub fn apply_flags(app: &mut App, page: Option<&str>) {
                         let mut reply =
                             message(id, "rtl-reply", true, now, Content::text("שלום עולם"));
                         reply.quoted = Some(Quoted {
+                            labelled: None,
+                            chat: None,
                             id: "rtl-hebrew".into(),
                             sender: SAMPLES[0].id.into(),
                             sender_name: Some("שלום עולם".into()),
@@ -1982,6 +2433,8 @@ pub fn apply_flags(app: &mut App, page: Option<&str>) {
                         let text = Content::text("עולה 3.14 ש״ח");
                         let mut reply = message(id, "rtl-digits-reply", false, now, text);
                         reply.quoted = Some(Quoted {
+                            labelled: None,
+                            chat: None,
                             id: "rtl-digits".into(),
                             sender: ME.into(),
                             sender_name: None,
@@ -2018,6 +2471,7 @@ pub fn apply_flags(app: &mut App, page: Option<&str>) {
                 let mut chat = Chat::new(ME.into(), "You".into());
                 chat.last_activity = now;
                 chat.last = messages.last().map(|last| crate::model::LastMessage {
+                    labelled: last.content.labelled(),
                     from_me: true,
                     sender: last.sender.clone(),
                     sender_name: None,
@@ -2046,6 +2500,213 @@ pub fn apply_flags(app: &mut App, page: Option<&str>) {
                 app.settings_search = choice["settings-search=".len()..].to_owned();
             }
             "wallpaper" => app.page = Page::Wallpaper,
+            // The call surface itself: the incoming call waiting to be answered, and a call that
+            // has been up for a few minutes.
+            "call" => call_sample(app, true, false),
+            "call-active" => call_sample(app, false, false),
+            // The other states of a call: dialing, muted with the device
+            // pickers open and a headset gone, its farewell, and the strip a
+            // call keeps while the reader is in a chat.
+            "call-outgoing" => {
+                call_sample(app, false, false);
+                if let Some(call) = app.call.as_mut() {
+                    call.phase = CallPhase::Ringing;
+                    call.started = None;
+                }
+            }
+            // A call whose button was just pressed: on screen at once, before
+            // its offer has gone out.
+            "call-connecting" => {
+                call_sample(app, false, false);
+                if let Some(call) = app.call.as_mut() {
+                    call.phase = CallPhase::Placing;
+                    call.started = None;
+                }
+            }
+            // A call that could not be placed, saying so before it goes.
+            "call-failed" => {
+                call_sample(app, false, false);
+                if let Some(call) = app.call.as_mut() {
+                    call.phase = CallPhase::Failed;
+                    call.started = None;
+                    call.outcome = Some(crate::calls::CallOutcome::Failed);
+                }
+            }
+            "call-devices" => {
+                call_sample(app, false, false);
+                app.call_devices = crate::calls::DeviceList {
+                    microphones: vec![crate::calls::AudioDevice {
+                        id: "studio-mic".into(),
+                        label: "Studio Microphone".into(),
+                    }],
+                    speakers: vec![crate::calls::AudioDevice {
+                        id: "desk-speakers".into(),
+                        label: "Desk Speakers".into(),
+                    }],
+                    cameras: vec![crate::calls::CameraDevice {
+                        id: "0".into(),
+                        label: "Integrated Camera".into(),
+                    }],
+                };
+                app.call_devices_open = true;
+                if let Some(call) = app.call.as_mut() {
+                    call.muted = true;
+                    call.speaker = Some("desk-speakers".into());
+                    call.lost_devices = vec![crate::calls::LostDevice {
+                        kind: crate::calls::DeviceKind::Microphone,
+                        name: "Wireless Headset".into(),
+                    }];
+                }
+            }
+            "call-ended" => {
+                call_sample(app, false, false);
+                if let Some(call) = app.call.as_mut() {
+                    call.phase = CallPhase::Ended;
+                    call.outcome = Some(crate::calls::CallOutcome::Answered);
+                }
+            }
+            // A group's call: ringing with who started it and who is on it, and
+            // up with a tile for each member, one of them only asked to it.
+            "call-group" => group_call_sample(app, true, false),
+            "call-group-active" => group_call_sample(app, false, false),
+            // A group's video call: three members' cameras on, Tom's off, and
+            // ours in the corner.
+            "call-group-video" => group_call_sample(app, false, true),
+            // A call we started in the group: nobody has joined yet, so
+            // everyone on it reads Invited while it rings.
+            "call-group-calling" => {
+                group_call_sample(app, false, false);
+                if let Some(call) = app.call.as_mut() {
+                    call.direction = crate::model::CallDirection::Outgoing;
+                    call.phase = CallPhase::Dialing;
+                    call.started = None;
+                    if let Some(group) = call.group.as_mut() {
+                        group.caller = None;
+                        for person in &mut group.participants {
+                            person.joined = false;
+                        }
+                    }
+                }
+            }
+            // While group calls are off (`calls::GROUP_CALLS_ENABLED`), a group
+            // call to us does not take the screen: the window says who is
+            // calling the group and to answer on the phone.
+            "call-group-on-phone" => {
+                group_call_sample(app, true, false);
+                if let Some(update) = app.call.take() {
+                    app.call_account = None;
+                    app.handle_phone_only_call(update);
+                }
+            }
+            // The same call with our microphone muted: our own tile says so.
+            "call-group-muted" => {
+                group_call_sample(app, false, false);
+                if let Some(call) = app.call.as_mut() {
+                    call.muted = true;
+                }
+            }
+            // A call link from a message, while the call service lets us in.
+            "call-link" => {
+                call_sample(app, false, false);
+                if let Some(call) = app.call.as_mut() {
+                    call.chat = String::new();
+                    call.phase = CallPhase::Connecting;
+                    call.started = None;
+                    call.group = Some(crate::calls::GroupCall {
+                        link: true,
+                        ..crate::calls::GroupCall::default()
+                    });
+                }
+            }
+            "call-strip" => {
+                call_sample(app, false, false);
+                app.call_surface_hidden = true;
+            }
+            "call-entries" => {
+                // Calls among the open chat's messages, as WhatsApp files them.
+                let open = app.open_chat.clone().unwrap_or_default();
+                let entries: Vec<Message> = call_entries(crate::util::now())
+                    .into_iter()
+                    .filter(|entry| entry.chat == open)
+                    .collect();
+                if let Some(conversation) = app.conversations.get_mut(&open) {
+                    conversation.messages.extend(entries);
+                    conversation
+                        .messages
+                        .sort_by_key(|message| message.timestamp);
+                }
+                app.scroll_to_bottom = true;
+            }
+            // Every kind of call entry in a group: answered with a length,
+            // unanswered, missed and declined, voice and video, ours and
+            // members' (whose names head their bubbles).
+            "call-bubbles" => call_bubbles_sample(app),
+            // The Calls tab: with no chat open, its start pane; with the
+            // chat that was open, that chat beside the history; with a row
+            // picked, that row's chat at the call.
+            // The Missed chip picked, and with no missed call to show.
+            "calls" | "calls-chat" | "calls-info" | "new-call" | "calls-missed"
+            | "calls-missed-none" | "calls-link" => {
+                app.page = Page::Calls;
+                if part != "calls-chat" {
+                    app.open_chat = None;
+                }
+                let mut log = call_entries(crate::util::now());
+                if part == "calls-link" {
+                    // A video call joined through a link half an hour ago,
+                    // which no chat holds.
+                    log.push(message(
+                        crate::model::CALL_LINK_CHAT,
+                        &format!("{}link-1", crate::model::CALL_ENTRY_PREFIX),
+                        true,
+                        crate::util::now() - 30,
+                        Content::Call {
+                            video: true,
+                            status: crate::model::CallStatus::Answered,
+                            duration: 1_260,
+                            group: true,
+                        },
+                    ));
+                }
+                if part.starts_with("calls-missed") {
+                    app.call_filter = crate::model::CallFilter::Missed;
+                }
+                if part == "calls-missed-none" {
+                    log.retain(|message| {
+                        !crate::ui::calls::Entry::of(message).is_some_and(|entry| entry.missed())
+                    });
+                }
+                log.sort_by_key(|message| std::cmp::Reverse(message.timestamp));
+                if part == "calls-info" {
+                    // The newest row, Ada's two missed calls, picked: her
+                    // chat opens at the call, filed among its messages.
+                    let (chat, id) = (log[0].chat.clone(), log[0].id.clone());
+                    if let Some(conversation) = app.conversations.get_mut(&chat) {
+                        conversation
+                            .messages
+                            .extend(log.iter().filter(|entry| entry.chat == chat).cloned());
+                        conversation
+                            .messages
+                            .sort_by_key(|message| message.timestamp);
+                    }
+                    app.actions
+                        .push(crate::model::Action::PickCall { chat, message: id });
+                }
+                app.new_call = part == "new-call";
+                app.call_log = log;
+                app.call_log_loaded = true;
+            }
+            "call-video" => call_sample(app, false, true),
+            "call-video-incoming" => call_sample(app, true, true),
+            "call-video-off" => {
+                call_sample(app, false, true);
+                if let Some(call) = app.call.as_mut() {
+                    call.remote_video = false;
+                    call.camera_on = false;
+                }
+                app.call_remote_frame = None;
+                app.call_local_frame = None;
+            }
             "wallpaper-image" => wallpaper_image_sample(app),
             "omarchy" | "omarchy-light" => {
                 let mut themes: Vec<_> = crate::theme::presets().collect();
@@ -2139,6 +2800,11 @@ pub fn apply_flags(app: &mut App, page: Option<&str>) {
                     multiple: false,
                 };
             }
+            // The location dialog, with a spot pasted in.
+            "location" => {
+                app.dialog = app.open_chat.clone().map(Dialog::SendLocation);
+                app.location_draft = "-23.5505, -46.6333".into();
+            }
             "shortcuts" => app.dialog = Some(Dialog::Shortcuts),
             "about" => app.dialog = Some(Dialog::About),
             "failed" => {
@@ -2158,8 +2824,63 @@ pub fn apply_flags(app: &mut App, page: Option<&str>) {
                     message.status = crate::model::Delivery::Failed;
                 }
             }
-            "info" => {
-                app.dialog = app.open_chat.clone().map(Dialog::ChatInfo);
+            "info" | "info-media" | "info-docs" | "info-links" => {
+                let view = match part {
+                    "info-media" => InfoView::Media(MediaTab::Media),
+                    "info-docs" => InfoView::Media(MediaTab::Docs),
+                    "info-links" => InfoView::Media(MediaTab::Links),
+                    _ => InfoView::Overview,
+                };
+                if let Some(chat) = app.open_chat.clone() {
+                    info_sample(app, &chat, view);
+                }
+            }
+            "group-admin"
+            | "group-admin-menu"
+            | "group-permissions"
+            | "group-add-members"
+            | "group-reset-link"
+            | "group-remove-member" => {
+                // Family, which we run: its invite link, its permissions, a
+                // member's menu, and the dialogs its actions open.
+                let group = FAMILY;
+                app.open_chat = Some(group.to_owned());
+                let view = if part == "group-permissions" {
+                    InfoView::Permissions
+                } else {
+                    InfoView::Overview
+                };
+                info_sample(app, group, view);
+                app.info_invite = Some((
+                    group.to_owned(),
+                    crate::group_admin::LinkState::Known(
+                        crate::group_admin::InviteLink::new(DEMO_INVITE_LINK.to_owned())
+                            .expect("a WhatsApp link"),
+                    ),
+                ));
+                match part {
+                    "group-admin-menu" => app.open_member_menu = Some(JONAS.to_owned()),
+                    "group-add-members" => {
+                        let existing = app
+                            .chat(group)
+                            .map(|chat| chat.participants.clone())
+                            .unwrap_or_default();
+                        let mut draft = crate::new_group::Draft::adding(group.to_owned(), existing);
+                        draft.toggle(DOROTHY);
+                        app.new_group = Some(draft);
+                        app.dialog = Some(Dialog::AddGroupMembers(group.to_owned()));
+                    }
+                    "group-reset-link" => {
+                        app.dialog = Some(Dialog::ConfirmResetInviteLink(group.to_owned()))
+                    }
+                    "group-remove-member" => {
+                        app.dialog = Some(Dialog::ConfirmRemoveMember {
+                            chat: group.to_owned(),
+                            member: JONAS.to_owned(),
+                        })
+                    }
+                    _ => {}
+                }
             }
             "group-info" | "group-info-rename" | "group-info-locked" | "group-info-saving" => {
                 // A group whose name and photo we may change, the same with its
@@ -2170,7 +2891,7 @@ pub fn apply_flags(app: &mut App, page: Option<&str>) {
                     SAMPLES[1].id
                 };
                 app.open_chat = Some(group.to_owned());
-                app.dialog = Some(Dialog::ChatInfo(group.to_owned()));
+                info_sample(app, group, InfoView::Overview);
                 if part == "group-info-rename" {
                     app.group_name_edit = Some("Rust Berlin 🦀".to_owned());
                 }
@@ -2178,13 +2899,44 @@ pub fn apply_flags(app: &mut App, page: Option<&str>) {
                     app.group_saving.insert(group.to_owned());
                 }
             }
-            "forward" => {
+            "forward" | "forward-selected" | "forward-review" | "forward-full" | "forward-once" => {
                 app.dialog = app.open_chat.clone().map(|chat| Dialog::Forward {
                     chat,
                     messages: vec!["ada-format".to_owned()],
                 });
+                app.forward_limit = crate::model::FORWARD_LIMIT;
+                match part {
+                    "forward-selected" | "forward-review" => {
+                        app.forward_recipients =
+                            vec![SAMPLES[0].id.to_owned(), SAMPLES[1].id.to_owned()];
+                        app.forward_reviewing = part == "forward-review";
+                    }
+                    // As many recipients as WhatsApp allows, with the note
+                    // saying so.
+                    "forward-full" => {
+                        let writable: Vec<_> = app
+                            .chats
+                            .iter()
+                            .filter(|chat| chat.can_send())
+                            .map(|chat| chat.id.clone())
+                            .collect();
+                        app.forward_recipients = writable
+                            .into_iter()
+                            .take(crate::model::FORWARD_LIMIT)
+                            .collect();
+                    }
+                    // A message forwarded many times, which goes to one chat.
+                    "forward-once" => {
+                        app.forward_limit = 1;
+                        app.forward_recipients = vec![SAMPLES[0].id.to_owned()];
+                    }
+                    _ => {}
+                }
             }
             "unlink" => app.dialog = Some(Dialog::ConfirmUnlink),
+            "clear-media" => {
+                app.dialog = Some(Dialog::ConfirmClearMediaCache(app.account().id.clone()));
+            }
             "leave-group" => {
                 let group = SAMPLES[1].id.to_owned();
                 app.open_chat = Some(group.clone());
@@ -2295,6 +3047,13 @@ pub fn apply_flags(app: &mut App, page: Option<&str>) {
                         for_everyone: true,
                     });
             }
+            "remove-pack" => {
+                apply_flags(app, Some("stickers"));
+                app.dialog = Some(Dialog::ConfirmRemoveStickerPack {
+                    name: "Happy Frogs".to_owned(),
+                    dir: std::path::PathBuf::from("Happy Frogs"),
+                });
+            }
             "delete-message-mine" => {
                 app.dialog = app
                     .open_chat
@@ -2305,7 +3064,30 @@ pub fn apply_flags(app: &mut App, page: Option<&str>) {
                         for_everyone: false,
                     });
             }
+            "select-delete" => {
+                if let Some(chat) = app.open_chat.clone() {
+                    app.selection =
+                        Some((chat, vec!["ada-format".to_owned(), "ada-reply".to_owned()]));
+                    app.open_selection_delete_menu = true;
+                }
+            }
+            "delete-selection" => {
+                if let Some(chat) = app.open_chat.clone() {
+                    let messages = vec!["ada-doc".to_owned(), "ada-reply".to_owned()];
+                    app.selection = Some((chat.clone(), messages.clone()));
+                    app.dialog = Some(Dialog::ConfirmDeleteSelection {
+                        chat,
+                        messages,
+                        for_everyone: false,
+                    });
+                }
+            }
             "new-contact" => app.dialog = Some(Dialog::NewContact),
+            // A formatted number with no name: the dialog offers Message.
+            "new-contact-number" => {
+                app.dialog = Some(Dialog::NewContact);
+                app.new_contact_phone = "+1 (555) 010-4477".to_owned();
+            }
             // The switcher under our avatar open with the one account.
             "account-menu" => app.account_menu = true,
             // A second number linked beside the first, with unread chats of
@@ -2335,8 +3117,22 @@ pub fn apply_flags(app: &mut App, page: Option<&str>) {
                 }
                 app.account_menu = part == "accounts";
             }
+            // One pinned message: its line under the chat header and its mark
+            // on the bubble.
+            "pinned" => pin_sample(app),
             "light" => {
                 app.settings.theme = ThemeChoice::Light;
+            }
+            "messages" => {
+                app.settings.theme = ThemeChoice::Messages;
+            }
+            // Messages follows the system; this shows its light side anywhere.
+            "messages-light" => {
+                app.settings.custom_theme = Some("Messages light.json".into());
+                app.settings.custom_theme_cache = Some(crate::theme::CustomTheme {
+                    filename: "Messages light.json".into(),
+                    palette: crate::theme::Palette::messages_light(),
+                });
             }
             "login" => {
                 unlink(app);
@@ -2387,6 +3183,9 @@ pub fn apply_flags(app: &mut App, page: Option<&str>) {
                         sequence: 14,
                         ended: false,
                         updated: now - 60,
+                        // The phone has posted newer positions this device
+                        // cannot read, so the card says where they are.
+                        newer_on_phone: true,
                     },
                 );
                 row.thumbnail = Some(sample_map());
@@ -2437,6 +3236,7 @@ pub fn apply_flags(app: &mut App, page: Option<&str>) {
                 let mut chat = Chat::new(ME.into(), "You".into());
                 chat.last_activity = now;
                 chat.last = messages.last().map(|last| crate::model::LastMessage {
+                    labelled: last.content.labelled(),
                     from_me: true,
                     sender: last.sender.clone(),
                     sender_name: None,
@@ -2479,6 +3279,14 @@ pub fn apply_flags(app: &mut App, page: Option<&str>) {
                 app.mention_selected = 0;
                 app.focus_composer = true;
             }
+            "mention-everyone" => {
+                let group = SAMPLES[1].id;
+                app.open_chat = Some(group.to_owned());
+                app.composer = "@".to_owned();
+                app.mention_start = Some(0);
+                app.mention_selected = 0;
+                app.focus_composer = true;
+            }
             "emoji-complete" => {
                 app.composer = "hello :gri".to_owned();
                 app.emoji_start = Some(6);
@@ -2491,6 +3299,43 @@ pub fn apply_flags(app: &mut App, page: Option<&str>) {
                 app.open_chat = Some(SAMPLES[0].id.to_owned());
                 app.reply_to = Some("ada-photo".into());
                 app.focus_composer = true;
+            }
+            "private-reply" | "private-reply-menu" | "private-reply-locked-source" => {
+                let group = SAMPLES[1].id;
+                app.open_chat = Some(group.into());
+                if part == "private-reply-menu" {
+                    app.open_message_menu = Some("group-photo".into());
+                    app.scroll_to_bottom = false;
+                    app.scroll_anchor = Some("group-photo".into());
+                } else if part == "private-reply-locked-source" {
+                    let recipient = app.conversations[group]
+                        .message("group-photo")
+                        .unwrap()
+                        .sender
+                        .clone();
+                    if !app.chats.iter().any(|chat| chat.id == recipient) {
+                        app.chats.push(Chat::new(
+                            recipient.clone(),
+                            "Private recipient fixture".into(),
+                        ));
+                    }
+                    app.conversations.entry(recipient.clone()).or_default();
+                    app.open_chat = Some(recipient);
+                    app.reply_to = Some(crate::model::ReplyTarget {
+                        id: "group-photo".into(),
+                        chat: Some(group.into()),
+                    });
+                    app.chats
+                        .iter_mut()
+                        .find(|chat| chat.id == group)
+                        .unwrap()
+                        .locked = true;
+                } else {
+                    app.actions.push(crate::model::Action::ReplyPrivately {
+                        chat: group.into(),
+                        message: "group-photo".into(),
+                    });
+                }
             }
             "edit" => {
                 let chat = SAMPLES[0].id;
@@ -2583,6 +3428,42 @@ pub fn apply_flags(app: &mut App, page: Option<&str>) {
                 hits.sort_by_key(|message| std::cmp::Reverse(message.timestamp));
                 app.search_hits = hits;
             }
+            "audio-types" => {
+                let chat = app.open_chat.clone().unwrap_or_default();
+                if let Some(conversation) = app.conversations.get_mut(&chat) {
+                    let source = conversation
+                        .messages
+                        .iter()
+                        .find(|message| message.id == "ada-voice")
+                        .cloned();
+                    if let Some(source) = source {
+                        conversation.messages = [
+                            ("audio-original", true, false, 8),
+                            ("audio-file", false, false, 52),
+                            ("audio-forwarded", false, true, 52),
+                        ]
+                        .into_iter()
+                        .enumerate()
+                        .map(|(index, (id, voice_note, forwarded, seconds))| {
+                            let mut row = source.clone();
+                            row.id = id.into();
+                            row.timestamp += index as i64;
+                            row.forwarded = forwarded;
+                            if let Content::Audio {
+                                seconds: duration,
+                                voice_note: note,
+                                ..
+                            } = &mut row.content
+                            {
+                                *duration = Some(seconds);
+                                *note = voice_note;
+                            }
+                            row
+                        })
+                        .collect();
+                    }
+                }
+            }
             "voice" => {
                 // Use a valid clip for playback tests.
                 let tone: Vec<f32> = (0..crate::voice::RATE * 6)
@@ -2619,11 +3500,74 @@ pub fn apply_flags(app: &mut App, page: Option<&str>) {
             "recording" => app.recording = Some(crate::audio::Recorder::rehearsal()),
             // Shows the native image preview over the demo chat.
             "preview" => {
-                let (photo, _) = sample_files(app);
-                app.image_preview = Some(crate::image_preview::PreviewState::new(photo));
+                // Three photos with a text between the second and the third,
+                // the viewer open on the second over the chat's album.
+                let chat = app.open_chat.clone().expect("demo chat");
+                let photos = [stock::ENGINE, stock::LAUNCH, stock::SPACEWALK];
+                let now = crate::util::now();
+                let mut rows = photos
+                    .iter()
+                    .enumerate()
+                    .map(|(index, photo)| {
+                        let mut attachment = media(
+                            "image/jpeg",
+                            photo.bytes.len() as u64,
+                            Some(photo.width),
+                            Some(photo.height),
+                        );
+                        attachment.path =
+                            Some(stock::save_photo(&app.dirs.media_cache_dir(), *photo));
+                        message(
+                            &chat,
+                            &format!("preview-{index}"),
+                            false,
+                            now + index as i64 * 2,
+                            Content::Image {
+                                motion: None,
+                                caption: None,
+                                media: attachment,
+                            },
+                        )
+                    })
+                    .collect::<Vec<_>>();
+                rows.insert(
+                    2,
+                    message(
+                        &chat,
+                        "preview-text",
+                        false,
+                        now + 3,
+                        Content::text("One more photo below."),
+                    ),
+                );
+                let selected = rows[1].content.media().unwrap().path.clone();
+                app.viewer_media = rows
+                    .iter()
+                    .flat_map(crate::model::MediaItem::of_message)
+                    .collect();
+                app.conversations.get_mut(&chat).unwrap().messages = rows;
+                app.viewer_media_chat = Some(chat.clone());
+                app.image_preview = Some(crate::image_preview::PreviewState::new(
+                    selected,
+                    chat,
+                    "preview-1".to_owned(),
+                ));
             }
             "compose-emoji" => {
                 app.composer = "Andiamo 😊 con due 👍🏽 e poi testo normale".to_owned();
+            }
+            "attachment-draft-away" | "attachment-draft-return" => {
+                apply_flags(app, Some("staged"));
+                app.actions
+                    .push(crate::model::Action::OpenChat(SAMPLES[1].id.into()));
+                if part == "attachment-draft-return" {
+                    app.actions
+                        .push(crate::model::Action::OpenChat(SAMPLES[0].id.into()));
+                }
+            }
+            "forward-portuguese" => {
+                apply_flags(app, Some("forward"));
+                app.locale = crate::i18n::Locale::PortugueseBrazil;
             }
             "staged" => {
                 let (photo, _) = sample_files(app);
@@ -2635,16 +3579,32 @@ pub fn apply_flags(app: &mut App, page: Option<&str>) {
                         [x * 5, 120, 255 - y * 5, 255]
                     })
                     .collect();
-                app.pending.push(crate::app::Pending::Picture {
+                app.stage(crate::app::Pending::Picture {
                     width: side,
                     height: side,
                     rgba: std::sync::Arc::new(rgba),
                     texture: None,
                 });
-                app.pending.push(crate::app::Pending::File(photo));
-                app.pending
-                    .push(crate::app::Pending::File("/tmp/notes.pdf".into()));
+                app.stage(crate::app::Pending::File(photo.clone()));
+                // The same picture staged to go as a document shows as a file.
+                app.stage(crate::app::Pending::Document(photo));
+                app.stage(crate::app::Pending::File("/tmp/notes.pdf".into()));
                 app.composer = "Look at these".into();
+            }
+            // Opens the cropper on a sample picture. The demo has no worker
+            // to read a picture's size, so it is read here instead.
+            "crop" => {
+                let (photo, _) = sample_files(app);
+                let (width, height) = image::image_dimensions(&photo).unwrap_or((4, 3));
+                // The photo is named by the strip, so another page having
+                // staged pictures already cannot point this at the wrong one.
+                let target = app.stage(crate::app::Pending::File(photo.clone()));
+                app.picture_edit = Some(crate::model::PictureEdit::new(
+                    target,
+                    crate::model::PictureSource::File(photo),
+                    width,
+                    height,
+                ));
             }
             "archived" => app.show_archived = true,
             "labels" | "label-chips" => labels_sample(app),
@@ -2689,6 +3649,15 @@ pub fn apply_flags(app: &mut App, page: Option<&str>) {
             "sticker-search" => sticker_sample(app, crate::model::StickerShelf::Recent, "laugh"),
             "sticker-animated" => animated_sticker_sample(app),
             "sticker-add" => sticker_sample(app, crate::model::StickerShelf::Add, ""),
+            // A received sticker shown large, not yet a favorite.
+            "sticker-view" => {
+                sticker_sample(app, crate::model::StickerShelf::Recent, "");
+                app.picker = None;
+                app.sticker_view = app
+                    .stickers_received
+                    .first()
+                    .map(|path| crate::image_preview::StickerPreview::new(path.clone()));
+            }
             "sticker-maker" => {
                 let (photo, _) = sample_files(app);
                 let crop = crate::model::StickerCrop::centered(900, 1200).resized(620, 900, 1200);
@@ -2742,6 +3711,8 @@ pub fn apply_flags(app: &mut App, page: Option<&str>) {
                     row.read_at = Some(row.timestamp + 60 * 60 * 7);
                 }
             }
+            "starred" => starred_sample(app, None),
+            "star-menu" => starred_sample(app, Some("ada-link")),
             "react-picker" => {
                 let chat = SAMPLES[0].id.to_owned();
                 app.reaction_target = Some((chat, "ada-link".into()));
@@ -2809,11 +3780,105 @@ pub fn apply_flags(app: &mut App, page: Option<&str>) {
     }
 }
 
+const PHONE_MENU_SAMPLE: &str = "Call +1 (555) 010-2040 to arrange the pickup.";
+
+fn phone_menu_sample(app: &mut App) {
+    let Some(row) = app
+        .conversations
+        .get_mut(SAMPLES[0].id)
+        .and_then(|conversation| conversation.message_mut("ada-link"))
+    else {
+        return;
+    };
+    row.content = Content::text(PHONE_MENU_SAMPLE);
+    row.from_me = false;
+    app.open_chat = Some(SAMPLES[0].id.into());
+    app.scroll_to_bottom = true;
+}
+
+pub fn phone_menu_popup_id() -> egui::Id {
+    let start = PHONE_MENU_SAMPLE.find('+').unwrap();
+    let end = start + "+1 (555) 010-2040".len();
+    crate::ui::conversation::bubble_id(SAMPLES[0].id, "ada-link")
+        .with(("phone-link", start, end, 0usize))
+        .with("popup")
+}
+
+/// Three pinned messages in the first sample chat: their lines under the
+/// header, their marks on the bubbles, and the notice each pin leaves in the
+/// transcript. Plain text, a long line that gets cut, and emoji, so one
+/// capture covers all three.
+fn pin_sample(app: &mut App) {
+    let chat = SAMPLES[0].id;
+    let now = crate::util::now();
+    // Each pin is made just after the message it names, and the list is handed
+    // over newest first, the way `chat_pins` reads it. The notices then belong
+    // one above each pinned message, rather than all at the end of the
+    // transcript, which is what the ordering bug looked like.
+    let sample = [
+        (
+            "ada-link",
+            "btw I made my own Spotify app from scratch! https://spotifast.rocks/",
+            2,
+        ),
+        ("ada-reply", "Listened, agreed on all three points.", 2),
+        ("ada-emoji", "😂🎉", 2),
+    ];
+    let mut rows = Vec::new();
+    for (id, text, after) in sample {
+        let sent_at = app
+            .conversations
+            .get(chat)
+            .and_then(|conversation| conversation.message(id))
+            .map_or(now, |message| message.timestamp);
+        app.pins.entry(chat.into()).or_default().insert(id.into());
+        rows.push(crate::archive::Pinned {
+            chat: chat.into(),
+            id: id.into(),
+            pinned_at: sent_at + after,
+            expires_at: sent_at + 7 * 24 * 60 * 60,
+            text: text.into(),
+            from_me: true,
+            sent_at,
+            pinner: crate::archive::Pinner {
+                by_me: true,
+                sender: String::new(),
+            },
+        });
+    }
+    app.chat_pins.insert(chat.into(), rows);
+}
+
 fn unlink(app: &mut App) {
     app.chats.clear();
     app.conversations.clear();
     app.open_chat = None;
     app.me = None;
+}
+
+/// Builds synthetic history rows spanning multiple dates for the scrolling-date demo.
+fn history_date_sample(app: &mut App) {
+    let chat = SAMPLES[0].id;
+    let base = crate::util::now() - 3 * 86_400;
+    let conversation = app.conversations.entry(chat.into()).or_default();
+    conversation.messages = (0..90)
+        .map(|index| {
+            message(
+                chat,
+                &format!("history-date-{index}"),
+                index % 2 == 0,
+                base + (index / 30) * 86_400 + (index % 30) * 60,
+                Content::text(format!(
+                    "Reference note {} for the design review",
+                    index + 1
+                )),
+            )
+        })
+        .collect();
+    conversation.complete = true;
+    app.open_chat = Some(chat.into());
+    app.scroll_to_bottom = false;
+    app.scroll_anchor = Some("history-date-45".into());
 }
 
 fn sample_qr() -> String {
@@ -2826,6 +3891,281 @@ fn sample_qr() -> String {
 /// Names of all sample chats.
 pub fn sample_ids() -> Vec<&'static str> {
     SAMPLES.iter().map(|sample| sample.id).collect()
+}
+
+/// Puts a synthetic call on screen, for the call previews and their layout test.
+///
+/// Demo mode has no engine, no peer, and no camera, so the surface is handed the same snapshot a
+/// real call publishes, filled in by hand: an invented call id, one of the sample chats, and a
+/// picture that is plainly a test pattern rather than anybody's room. `incoming` is the call
+/// waiting to be accepted; otherwise the call is one that has been up for a few minutes.
+/// Calls across the sample chats: answered, missed, declined and unanswered,
+/// voice and video, one in a group.
+fn call_entries(now: i64) -> Vec<Message> {
+    use crate::model::CallStatus;
+    let call = |chat: &str, id: &str, from_me: bool, minutes: i64, video, status, duration| {
+        message(
+            chat,
+            &format!("{}{id}", crate::model::CALL_ENTRY_PREFIX),
+            from_me,
+            now - minutes * 60,
+            Content::Call {
+                video,
+                status,
+                duration,
+                group: false,
+            },
+        )
+    };
+    let mut entries = vec![
+        call(
+            SAMPLES[0].id,
+            "ada-1",
+            false,
+            1,
+            false,
+            CallStatus::Missed,
+            0,
+        ),
+        // Two missed calls in a row fold into one history row.
+        call(
+            SAMPLES[0].id,
+            "ada-1b",
+            false,
+            3,
+            false,
+            CallStatus::Missed,
+            0,
+        ),
+        call(
+            SAMPLES[0].id,
+            "ada-2",
+            true,
+            5,
+            true,
+            CallStatus::Answered,
+            754,
+        ),
+        call(
+            SAMPLES[0].id,
+            "ada-3",
+            false,
+            70,
+            false,
+            CallStatus::Answered,
+            221,
+        ),
+        call(
+            SAMPLES[2].id,
+            "grace",
+            true,
+            300,
+            false,
+            CallStatus::NoAnswer,
+            0,
+        ),
+        call(
+            SAMPLES[3].id,
+            "katherine",
+            false,
+            1500,
+            true,
+            CallStatus::Declined,
+            0,
+        ),
+        call(
+            SAMPLES[5].id,
+            "margaret",
+            true,
+            3000,
+            false,
+            CallStatus::Answered,
+            3725,
+        ),
+    ];
+    let mut group = call(
+        SAMPLES[1].id,
+        "group",
+        false,
+        600,
+        true,
+        CallStatus::Missed,
+        0,
+    );
+    group.sender = SAMPLES[2].id.to_owned();
+    if let Content::Call { group, .. } = &mut group.content {
+        *group = true;
+    }
+    entries.push(group);
+    for entry in &mut entries {
+        entry.status = Delivery::None;
+    }
+    entries
+}
+
+/// Opens Rust Berlin with a run of call entries at its end, one of each
+/// kind a group's transcript files, for the `call-bubbles` page. They are
+/// the newest messages, so they share one screen.
+fn call_bubbles_sample(app: &mut App) {
+    use crate::model::CallStatus;
+    let chat = SAMPLES[1].id;
+    let now = crate::util::now();
+    let entries = [
+        // (sender, minutes ago, video, status, seconds)
+        (
+            Some(("491701111111@s.whatsapp.net", "Jonas")),
+            12,
+            true,
+            CallStatus::Answered,
+            2_173,
+        ),
+        (None, 10, true, CallStatus::NoAnswer, 0),
+        (
+            Some(("491702222222@s.whatsapp.net", "Mira")),
+            8,
+            false,
+            CallStatus::Answered,
+            36,
+        ),
+        (None, 6, false, CallStatus::Answered, 754),
+        (
+            Some(("491703333333@s.whatsapp.net", "Tom")),
+            4,
+            false,
+            CallStatus::Missed,
+            0,
+        ),
+        (
+            Some(("491701111111@s.whatsapp.net", "Jonas")),
+            2,
+            true,
+            CallStatus::Declined,
+            0,
+        ),
+    ];
+    let Some(conversation) = app.conversations.get_mut(chat) else {
+        return;
+    };
+    for (index, (sender, minutes, video, status, duration)) in entries.into_iter().enumerate() {
+        let mut entry = message(
+            chat,
+            &format!("{}bubble-{index}", crate::model::CALL_ENTRY_PREFIX),
+            sender.is_none(),
+            now - minutes * 60,
+            Content::Call {
+                video,
+                status,
+                duration,
+                group: true,
+            },
+        );
+        if let Some((id, name)) = sender {
+            entry.sender = id.to_owned();
+            entry.sender_name = Some(name.to_owned());
+        }
+        entry.status = Delivery::None;
+        conversation.messages.push(entry);
+    }
+    conversation
+        .messages
+        .sort_by_key(|message| message.timestamp);
+    app.open_chat = Some(chat.to_owned());
+    app.scroll_to_bottom = true;
+}
+
+pub fn call_sample(app: &mut App, incoming: bool, video: bool) {
+    let chat = SAMPLES[0].id;
+    app.call = Some(CallUpdate {
+        generation: 1,
+        chat: chat.to_owned(),
+        direction: if incoming {
+            CallDirection::Incoming
+        } else {
+            CallDirection::Outgoing
+        },
+        video,
+        phase: if incoming {
+            CallPhase::Incoming
+        } else {
+            CallPhase::Active
+        },
+        // A call already up for three minutes and forty-one seconds, so the previews show the
+        // duration the way a real one counts it.
+        started: (!incoming)
+            .then(|| std::time::Instant::now() - std::time::Duration::from_secs(221)),
+        muted: false,
+        camera_on: video,
+        remote_video: video && !incoming,
+        video_requested: false,
+        outcome: None,
+        peer_audio: None,
+        lost_devices: Vec::new(),
+        microphone: None,
+        speaker: None,
+        camera: None,
+        group: None,
+    });
+    app.call_account = Some(app.account().id.clone());
+    if video && !incoming {
+        app.call_remote_frame = Some(std::sync::Arc::new(stock_frame(stock::SPACEWALK, 720)));
+        app.call_local_frame = Some(std::sync::Arc::new(stock_frame(stock::DUSK, 320)));
+    }
+}
+
+/// A call in the Rust Berlin group, started by Jonas: Mira, Tom and Ada are
+/// on it, and Grace was asked and has not joined.
+pub fn group_call_sample(app: &mut App, incoming: bool, video: bool) {
+    call_sample(app, incoming, video);
+    let roster = [
+        ("491701111111@s.whatsapp.net", true),
+        ("491702222222@s.whatsapp.net", true),
+        ("491703333333@s.whatsapp.net", true),
+        (SAMPLES[0].id, true),
+        (SAMPLES[2].id, false),
+    ];
+    // Who sends a picture on a video call, and which stand-in it is.
+    let cameras = [
+        (roster[0].0, stock::VENUE),
+        (roster[1].0, stock::SPACEWALK),
+        (roster[3].0, stock::LAUNCH),
+    ];
+    let sending = |id: &str| video && cameras.iter().any(|(camera, _)| *camera == id);
+    if let Some(call) = app.call.as_mut() {
+        call.chat = SAMPLES[1].id.to_owned();
+        call.remote_video = false;
+        call.group = Some(crate::calls::GroupCall {
+            link: false,
+            caller: Some(roster[0].0.to_owned()),
+            participants: roster
+                .iter()
+                .map(|(id, joined)| crate::calls::Participant {
+                    id: (*id).to_owned(),
+                    joined: *joined,
+                    video: sending(id),
+                })
+                .collect(),
+        });
+    }
+    app.call_remote_frame = None;
+    if video && !incoming {
+        for (id, photo) in cameras {
+            app.call_member_frames
+                .insert(id.to_owned(), std::sync::Arc::new(stock_frame(photo, 360)));
+        }
+    }
+}
+
+/// A stock picture as a video frame no taller than `height`: the demo's
+/// stand-in for a camera, with no person a real call could show.
+fn stock_frame(photo: stock::Photo, height: u32) -> egui::ColorImage {
+    let picture = image::load_from_memory(photo.bytes)
+        .expect("the demo pictures decode")
+        .resize(height * 2, height, image::imageops::FilterType::Triangle)
+        .to_rgba8();
+    egui::ColorImage::from_rgba_unmultiplied(
+        [picture.width() as usize, picture.height() as usize],
+        picture.as_raw(),
+    )
 }
 
 #[allow(dead_code)]
@@ -2842,13 +4182,21 @@ mod tests {
     use crate::paths::AppDirs;
     use crate::settings::Settings;
 
+    thread_local! {
+        /// The folders of this test's apps, removed when the test's thread
+        /// ends (each test runs on a thread of its own).
+        static ROOTS: std::cell::RefCell<Vec<tempfile::TempDir>> = const {
+            std::cell::RefCell::new(Vec::new())
+        };
+    }
+
     pub(super) fn app() -> App {
-        let root = std::env::temp_dir().join(format!(
-            "zapfast-demo-{}-{:?}",
-            std::process::id(),
-            std::thread::current().id()
-        ));
-        let (mut app, _events) = App::headless(AppDirs::under(&root), Settings::default());
+        let root = tempfile::Builder::new()
+            .prefix("zapfast-demo-")
+            .tempdir()
+            .unwrap();
+        let (mut app, _events) = App::headless(AppDirs::under(root.path()), Settings::default());
+        ROOTS.with(|roots| roots.borrow_mut().push(root));
         populate(&mut app);
         app
     }
@@ -2873,10 +4221,73 @@ mod tests {
         }
     }
 
-    /// A sent message moves its chat up, and the scrolled chat list follows
-    /// it back to the top.
+    /// Two contacts typing in the open group keep the window drawing every
+    /// refresh, but only about ten times a second while a screen reader is
+    /// attached: at the display's rate its thread could not answer the
+    /// reader's window messages in time.
     #[test]
-    fn sending_a_message_scrolls_the_chat_list_back_to_the_top() {
+    fn a_contact_typing_steps_the_window_only_with_a_screen_reader() {
+        let run = |reader: bool| {
+            let mut app = app();
+            apply_flags(&mut app, Some("typers"));
+            let ctx = egui::Context::default();
+            app.attach(&ctx);
+            if reader {
+                ctx.enable_accesskit();
+            }
+            let mut delay = std::time::Duration::MAX;
+            // Avatars and media load on threads that ask for a frame when
+            // they finish; measure once three frames in a row had none
+            // pending.
+            let mut settled = 0;
+            for frame in 0..400 {
+                if ctx.has_pending_images() {
+                    settled = 0;
+                    std::thread::sleep(std::time::Duration::from_millis(10));
+                } else {
+                    settled += 1;
+                }
+                if frame >= 8 && settled > 3 {
+                    break;
+                }
+                let input = egui::RawInput {
+                    time: Some(10.0 + f64::from(frame) * 0.1),
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(1180.0, 780.0),
+                    )),
+                    ..Default::default()
+                };
+                let mut output = ctx.run_ui(input, |ui| {
+                    let ctx = ui.ctx().clone();
+                    app.background_frame(&ctx);
+                    app.frame_ui(ui);
+                });
+                output.textures_delta.clear();
+                delay = output.viewport_output[&egui::ViewportId::ROOT].repaint_delay;
+            }
+            (delay, ctx.repaint_causes())
+        };
+        let from_the_dots = |causes: &[egui::RepaintCause]| {
+            causes
+                .iter()
+                .any(|cause| cause.file.ends_with("conversation.rs"))
+        };
+        let (plain, causes) = run(false);
+        assert_eq!(plain, std::time::Duration::ZERO, "{causes:?}");
+        assert!(from_the_dots(&causes), "{causes:?}");
+        let (stepped, causes) = run(true);
+        assert!(
+            stepped > std::time::Duration::from_millis(75) && stepped <= crate::motion::STEP,
+            "{stepped:?}: {causes:?}"
+        );
+        assert!(from_the_dots(&causes), "{causes:?}");
+    }
+
+    /// A sent message moves its chat up, and a chat list within a row of the
+    /// top follows it there; a list scrolled further down keeps its place.
+    #[test]
+    fn sending_a_message_scrolls_the_chat_list_back_to_the_top_only_from_near_it() {
         let mut app = app();
         let ctx = egui::Context::default();
         app.attach(&ctx);
@@ -2902,18 +4313,77 @@ mod tests {
                 output.textures_delta.clear();
             }
         };
+        let send = |app: &mut App| {
+            let last = app.visible_chats().last().map(|chat| chat.id.clone());
+            app.actions.push(crate::model::Action::SendText {
+                chat: last.expect("sample chats"),
+                text: "Fixture".into(),
+                quoting: None,
+            });
+            render(app);
+        };
         let last = app.visible_chats().last().map(|chat| chat.id.clone());
-        app.scroll_chat_into_view.clone_from(&last);
+        app.scroll_chat_into_view = last;
         render(&mut app);
-        assert!(offset() > 0.0, "the list starts scrolled down");
+        let far = offset();
+        assert!(far > crate::theme::ROW_HEIGHT, "the list starts far down");
+        send(&mut app);
+        assert_eq!(offset(), far, "a reader far down keeps their place");
 
-        app.actions.push(crate::model::Action::SendText {
-            chat: last.expect("sample chats"),
-            text: "Fixture".into(),
-            quoting: None,
-        });
+        let near = crate::theme::ROW_HEIGHT / 2.0;
+        let id = ctx
+            .data(|data| data.get_temp::<egui::Id>(crate::ui::chats::list_offset_id().with("id")))
+            .expect("the chat list was drawn");
+        let mut state = egui::scroll_area::State::load(&ctx, id).expect("scroll state");
+        state.offset.y = near;
+        state.store(&ctx, id);
         render(&mut app);
+        assert_eq!(offset(), near, "the list is just below the top");
+        send(&mut app);
         assert_eq!(offset(), 0.0, "the list is back at the top");
+    }
+
+    /// Enter opens the batch menu while retaining the selected messages and checkbox focus.
+    #[test]
+    fn keyboard_activation_opens_batch_delete_without_changing_selection() {
+        let mut app = app();
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        app.attach(&ctx);
+        let chat = SAMPLES[0].id;
+        let selected = vec!["ada-doc".to_owned(), "ada-reply".to_owned()];
+        app.selection = Some((chat.into(), selected.clone()));
+        render(&mut app, &ctx);
+        let nodes = accessible_nodes(&mut app, &ctx, Vec::new());
+        assert!(
+            nodes
+                .iter()
+                .any(|(label, _, _)| label.starts_with("Select message from ")),
+            "selection rows have accessible labels"
+        );
+        let pick = crate::ui::conversation::bubble_id(chat, "ada-reply").with("pick");
+        ctx.memory_mut(|memory| memory.request_focus(pick));
+        frame_with(
+            &mut app,
+            &ctx,
+            vec![key(egui::Key::Enter, egui::Modifiers::NONE)],
+        );
+        render(&mut app, &ctx);
+        assert!(egui::Popup::is_id_open(&ctx, pick.with("popup")));
+        assert_eq!(app.selection.as_ref().unwrap().1, selected);
+        assert!(app.dialog.is_none(), "opening the menu never deletes");
+        let bubble = crate::ui::conversation::bubble_id(chat, "ada-reply");
+        let row_outline = ctx
+            .data(|data| data.get_temp::<crate::theme::FocusOutline>(pick.with("focus-outline")))
+            .unwrap();
+        let bubble_outline = ctx
+            .data(|data| data.get_temp::<crate::theme::FocusOutline>(bubble.with("focus-outline")))
+            .unwrap();
+        let check = ctx
+            .data(|data| data.get_temp::<egui::Rect>(bubble.with("check")))
+            .unwrap();
+        assert!(row_outline.rect.contains_rect(check));
+        assert_eq!(row_outline.rect, bubble_outline.rect);
     }
 
     /// A clicked notification lands on the message it announced and keeps it
@@ -3246,6 +4716,115 @@ mod tests {
     }
 
     #[test]
+    fn phone_number_link_opens_its_actions_from_the_keyboard() {
+        let mut app = app();
+        app.backend.record_demo_commands();
+        let chat = SAMPLES[0].id;
+        let row = app
+            .conversations
+            .get_mut(chat)
+            .unwrap()
+            .message_mut("ada-link")
+            .unwrap();
+        let body = "اتصل على +99 (999) 99999-9999";
+        row.content = Content::text(body);
+        row.from_me = false;
+
+        let ctx = egui::Context::default();
+        app.attach(&ctx);
+        render(&mut app, &ctx);
+        let run = |app: &mut App, events| {
+            let mut output = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(400.0, 780.0),
+                    )),
+                    events,
+                    ..Default::default()
+                },
+                |ui| {
+                    let ctx = ui.ctx().clone();
+                    app.background_frame(&ctx);
+                    app.frame_ui(ui);
+                },
+            );
+            output.textures_delta.clear();
+            output.platform_output.commands
+        };
+        // Register controls at the same width used by synthetic keyboard
+        // input so a wrapped link has the same hit-region id in both passes.
+        run(&mut app, vec![]);
+        let phone_links = crate::ui::focus::stops(&ctx)
+            .into_iter()
+            .filter_map(|(stop, id)| {
+                matches!(stop, crate::ui::focus::Stop::PhoneLink(_)).then_some(id)
+            })
+            .collect::<Vec<_>>();
+        assert!(
+            !phone_links.is_empty(),
+            "the phone link is keyboard reachable"
+        );
+        let phone = phone_links[0];
+        let phone_last = *phone_links.last().unwrap();
+        let previous = crate::ui::focus::control(&ctx, crate::ui::focus::Stop::Emoji).unwrap();
+        let next = crate::ui::focus::control(&ctx, crate::ui::focus::Stop::ChatSearch).unwrap();
+        let open_menu = |app: &mut App, from: egui::Id, target: egui::Id, tab: egui::Modifiers| {
+            ctx.memory_mut(|memory| memory.request_focus(from));
+            run(app, vec![key(egui::Key::Tab, tab)]);
+            assert_eq!(ctx.memory(|memory| memory.focused()), Some(target));
+            run(app, vec![key(egui::Key::Enter, egui::Modifiers::NONE)]);
+            run(app, vec![]);
+            assert!(egui::Popup::is_id_open(&ctx, target.with("popup")));
+        };
+        let click = |app: &mut App, rect: egui::Rect| {
+            let pos = rect.center();
+            let button = |pressed| egui::Event::PointerButton {
+                pos,
+                pressed,
+                button: egui::PointerButton::Primary,
+                modifiers: egui::Modifiers::NONE,
+            };
+            run(app, vec![egui::Event::PointerMoved(pos), button(true)]);
+            run(app, vec![button(false)])
+        };
+
+        open_menu(&mut app, previous, phone, egui::Modifiers::NONE);
+        let copy_rect = ctx
+            .data(|data| data.get_temp::<egui::Rect>(phone.with("test-copy-action")))
+            .unwrap();
+        let copied = click(&mut app, copy_rect)
+            .into_iter()
+            .find_map(|command| match command {
+                egui::OutputCommand::CopyText(text) => Some(text),
+                _ => None,
+            })
+            .unwrap();
+        assert_eq!(copied, "+99 (999) 99999-9999");
+
+        open_menu(&mut app, next, phone_last, egui::Modifiers::SHIFT);
+        let message_rect = ctx
+            .data(|data| data.get_temp::<egui::Rect>(phone_last.with("test-message-action")))
+            .unwrap();
+        click(&mut app, message_rect);
+        // The menu is activated through the existing NewContact command,
+        // whose worker path checks whether the number is registered.
+        assert!(
+            app.backend
+                .take_demo_commands()
+                .iter()
+                .any(|command| matches!(
+                    command,
+                    crate::backend::Command::NewContact {
+                        phone,
+                        full_name: None,
+                        ..
+                    } if phone == "99999999999999"
+                ))
+        );
+    }
+
+    #[test]
     fn interactive_lists_copy_codes_and_unavailable_actions_use_the_correct_paths() {
         let mut app = app();
         apply_flags(&mut app, Some("interactive-actions"));
@@ -3473,6 +5052,22 @@ mod tests {
         }
     }
 
+    #[test]
+    fn receipt_privacy_demo_keeps_played_voice_visible() {
+        let mut app = app();
+        apply_flags(&mut app, Some("chat,receipts-off,receipts-played"));
+        assert!(app.account_receipts_off);
+        let conversation = &app.conversations[SAMPLES[0].id];
+        assert!(conversation.messages.iter().any(|message| {
+            message.from_me
+                && matches!(message.content, Content::Audio { .. })
+                && message.status == crate::model::Delivery::Played
+        }));
+        let ctx = egui::Context::default();
+        app.attach(&ctx);
+        render(&mut app, &ctx);
+    }
+
     /// Message info grows with its content like poll results, so a short
     /// list, the note about missing receipts included, shows without
     /// scrolling.
@@ -3625,6 +5220,100 @@ mod tests {
                 assert!(app.backend.take_demo_commands().iter().any(|c| matches!(c, crate::backend::Command::VotePoll { choices, .. } if choices == &[1])));
             }
         }
+    }
+
+    /// A call in the chat is a bubble as wide as its words, on either side:
+    /// in an own bubble the row runs right to left, and its text column once
+    /// took every point the row offered, stretching across the transcript.
+    #[test]
+    fn a_call_bubble_is_as_wide_as_its_words() {
+        let mut app = app();
+        let chat = SAMPLES[0].id;
+        app.open_chat = Some(chat.to_owned());
+        let call = |id: &str, from_me: bool| {
+            message(
+                chat,
+                &format!("{}{id}", crate::model::CALL_ENTRY_PREFIX),
+                from_me,
+                crate::util::now(),
+                Content::Call {
+                    video: false,
+                    status: crate::model::CallStatus::Declined,
+                    duration: 0,
+                    group: false,
+                },
+            )
+        };
+        let conversation = app.conversations.get_mut(chat).unwrap();
+        conversation.messages.push(call("width-in", false));
+        conversation.messages.push(call("width-out", true));
+        app.scroll_to_bottom = true;
+        let ctx = egui::Context::default();
+        app.attach(&ctx);
+        render(&mut app, &ctx);
+        render(&mut app, &ctx);
+        let width = |id: &str| {
+            let id = crate::ui::conversation::bubble_id(
+                chat,
+                &format!("{}{id}", crate::model::CALL_ENTRY_PREFIX),
+            )
+            .with("rect");
+            ctx.data(|data| data.get_temp::<egui::Rect>(id))
+                .expect("the call bubble was drawn")
+                .width()
+        };
+        let incoming = width("width-in");
+        let own = width("width-out");
+        assert!(own < 240.0, "an own call bubble fits its words: {own}");
+        assert!(
+            (own - incoming).abs() < 24.0,
+            "both sides are alike: {own} and {incoming}"
+        );
+    }
+
+    /// A chat shorter than the view sits at its bottom, by the composer, as
+    /// on WhatsApp (#378), and stays there when a message arrives.
+    #[test]
+    fn a_short_chat_sits_at_the_bottom_of_the_view() {
+        let mut app = app();
+        short_chat_sample(&mut app);
+        let ctx = egui::Context::default();
+        app.attach(&ctx);
+        render(&mut app, &ctx);
+        render(&mut app, &ctx);
+        let chat = SAMPLES[0].id;
+        let rect_of = |app: &App, ctx: &egui::Context, index: usize| {
+            let message = &app.conversations[chat].messages[index];
+            let id = crate::ui::conversation::bubble_id(chat, &message.id).with("rect");
+            ctx.data(|data| data.get_temp::<egui::Rect>(id)).unwrap()
+        };
+        let first = rect_of(&app, &ctx, 0);
+        let last = rect_of(&app, &ctx, 1);
+        // The window is 780 points tall; the composer takes its foot.
+        assert!(first.top() > 300.0, "the messages moved down: {first:?}");
+        assert!(
+            last.bottom() > 600.0,
+            "the last one is by the composer: {last:?}"
+        );
+
+        let mut arrival = app.conversations[chat].messages[1].clone();
+        arrival.id = "short-arrival".into();
+        arrival.timestamp += 1;
+        app.conversations
+            .get_mut(chat)
+            .unwrap()
+            .messages
+            .push(arrival);
+        render(&mut app, &ctx);
+        let newest = rect_of(&app, &ctx, 2);
+        assert!(
+            (newest.bottom() - last.bottom()).abs() < 2.0,
+            "the newest message takes the bottom: {newest:?} {last:?}"
+        );
+        assert!(
+            rect_of(&app, &ctx, 0).top() < first.top(),
+            "older ones move up"
+        );
     }
 
     #[test]
@@ -4159,6 +5848,21 @@ mod tests {
     }
 
     #[test]
+    fn announcer_nodes_are_in_every_frame() {
+        let mut app = app();
+        let ctx = egui::Context::default();
+        app.attach(&ctx);
+        render(&mut app, &ctx);
+        app.announcer
+            .say(crate::announcer::Category::Status, "Fixture status");
+        let labels = accessible_labels(&mut app, &ctx);
+        assert!(
+            labels.iter().any(|label| label == "Fixture status"),
+            "{labels:?}"
+        );
+    }
+
+    #[test]
     fn the_lock_screen_draws_no_chat_name_or_message() {
         let mut app = app();
         let ctx = egui::Context::default();
@@ -4190,7 +5894,178 @@ mod tests {
         assert!(!leaks(&labels).is_empty());
     }
 
+    /// Lays out each synthetic demo screen and checks that its controls fit the visible surface.
     #[test]
+    fn keeping_a_crop_stages_the_cropped_picture_and_remembers_its_original() {
+        let mut app = app();
+        let ctx = egui::Context::default();
+        app.attach(&ctx);
+        apply_flags(&mut app, Some("crop"));
+        render(&mut app, &ctx);
+        let edit = app.picture_edit.clone().expect("the cropper is open");
+        // A region well inside the picture, so the size proves the crop ran.
+        app.picture_edit = Some(crate::model::PictureEdit {
+            crop: crate::model::PictureCrop {
+                x: 10,
+                y: 20,
+                width: 40,
+                height: 30,
+            },
+            ..edit
+        });
+        app.actions.push(crate::model::Action::ApplyPictureEdit);
+        render(&mut app, &ctx);
+        crate::demo::tour::respond(&mut app);
+        let staged = app.pending.first().expect("a picture is staged");
+        let path = match &staged.item {
+            crate::app::Pending::File(path) => path.clone(),
+            _ => panic!("the crop should leave a file staged"),
+        };
+        assert_eq!(image::image_dimensions(&path).expect("reads"), (40, 30));
+        assert!(
+            app.picture_origins.contains_key(&staged.id),
+            "the original is remembered against that attachment, so cropping again starts over from it"
+        );
+        assert!(app.picture_edit.is_none(), "keeping the crop closes it");
+    }
+
+    #[test]
+    fn reopening_a_cropped_pasted_picture_finds_its_pixels_again() {
+        let mut app = app();
+        let ctx = egui::Context::default();
+        app.attach(&ctx);
+        apply_flags(&mut app, Some("staged"));
+        render(&mut app, &ctx);
+        let at = app
+            .pending
+            .iter()
+            .position(|staged| matches!(staged.item, crate::app::Pending::Picture { .. }))
+            .expect("the demo stages a pasted picture");
+        let target = app.pending[at].id;
+        let (rgba, width, height) = match &app.pending[at].item {
+            crate::app::Pending::Picture {
+                width,
+                height,
+                rgba,
+                ..
+            } => (rgba.clone(), *width as u32, *height as u32),
+            _ => unreachable!(),
+        };
+        // What keeping a crop leaves behind: a file in the strip, and the
+        // pixels it came from remembered against that attachment.
+        app.pending[at].item = crate::app::Pending::File("/fixture/edited.jpg".into());
+        app.picture_origins.insert(
+            target,
+            crate::model::PictureOrigin {
+                source: crate::model::PictureSource::Pasted(rgba),
+                width,
+                height,
+                crop: crate::model::PictureCrop::full(width, height),
+                turns: 0,
+            },
+        );
+        app.actions.push(crate::model::Action::EditPicture(target));
+        render(&mut app, &ctx);
+        assert!(
+            matches!(
+                app.picture_edit.as_ref().map(|edit| &edit.source),
+                Some(crate::model::PictureSource::Pasted(_))
+            ),
+            "the cropper opened on the pixels it came from"
+        );
+        assert!(
+            app.picture_texture.is_some(),
+            "and found something to draw them with, rather than an empty frame"
+        );
+    }
+
+    #[test]
+    fn the_crop_page_opens_on_the_photo_it_stages() {
+        let mut app = app();
+        let ctx = egui::Context::default();
+        app.attach(&ctx);
+        // Both pages at once: staged fills the strip before crop adds its own.
+        apply_flags(&mut app, Some("staged,crop"));
+        render(&mut app, &ctx);
+        let edit = app.picture_edit.as_ref().expect("the cropper is open");
+        let at = app.staged_at(edit.target).expect("the target is staged");
+        let staged = match &app.pending[at].item {
+            crate::app::Pending::File(path) => path.clone(),
+            _ => panic!("the cropper points at the file it staged"),
+        };
+        assert!(
+            matches!(&edit.source, crate::model::PictureSource::File(path) if *path == staged),
+            "the editor and the staged attachment are the same picture"
+        );
+    }
+
+    #[test]
+    fn direct_delete_controls_use_the_selected_locale() {
+        for for_everyone in [false, true] {
+            let mut app = app();
+            app.locale = crate::i18n::Locale::PortugueseBrazil;
+            app.dialog = Some(crate::model::Dialog::ConfirmDeleteMessage {
+                chat: SAMPLES[0].id.to_owned(),
+                message: "fixture".into(),
+                for_everyone,
+            });
+            let ctx = egui::Context::default();
+            app.attach(&ctx);
+            let labels = accessible_labels(&mut app, &ctx);
+            for expected in [
+                if for_everyone {
+                    "Apagar para todos?"
+                } else {
+                    "Apagar para mim?"
+                },
+                "Apagar",
+                "Cancelar",
+            ] {
+                assert!(labels.iter().any(|label| label == expected), "{labels:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn deletion_dialog_distinguishes_direct_messages_from_selected_batches() {
+        for for_everyone in [false, true] {
+            for count in [0, 1, 2] {
+                let mut app = app();
+                let chat = SAMPLES[0].id.to_owned();
+                app.dialog = Some(if count == 0 {
+                    crate::model::Dialog::ConfirmDeleteMessage {
+                        chat,
+                        message: "fixture".into(),
+                        for_everyone,
+                    }
+                } else {
+                    crate::model::Dialog::ConfirmDeleteSelection {
+                        chat,
+                        messages: (0..count).map(|i| format!("fixture-{i}")).collect(),
+                        for_everyone,
+                    }
+                });
+                let ctx = egui::Context::default();
+                app.attach(&ctx);
+                let labels = accessible_labels(&mut app, &ctx);
+                let text = labels.join("\n");
+                if count == 0 {
+                    assert!(!text.contains("selected message"), "{text}");
+                } else {
+                    assert!(
+                        text.contains(&format!("{count} selected message")),
+                        "{text}"
+                    );
+                    if count == 2 {
+                        assert!(text.contains("selected messages"), "{text}");
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    /// Checks all synthetic demo surfaces fit their tested window sizes and themes.
     fn every_surface_lays_out() {
         let mut app = app();
         let ctx = egui::Context::default();
@@ -4215,6 +6090,17 @@ mod tests {
             "app-lock-settings",
             "app-lock-setup",
             "new-chat",
+            "new-group",
+            "new-group-name",
+            "new-group-creating",
+            "new-contact-number",
+            "carousel-viewer",
+            "media-album",
+            "media-album-before",
+            "media-album-oversized",
+            "media-album-oversized,light",
+            "media-album-midnight",
+            "media-album-midnight,light",
             "unnamed-group",
             "keyring",
             "interactive",
@@ -4231,6 +6117,10 @@ mod tests {
             "message-info-unknown",
             "message-info-partial",
             "message-info-direct",
+            "motion",
+            "motion-playing",
+            "motion-preview",
+            "motion-viewer",
             "video",
             "video-playing",
             "video-expanded",
@@ -4239,9 +6129,16 @@ mod tests {
             "empty",
             "rtl",
             "disappearing",
+            "disappearing-direct",
+            "disappearing-off",
+            "disappearing,group-info",
+            "disappearing-direct,info",
+            "disappearing-off,info",
             "settings",
             "settings-search=Notifications",
             "settings-search=System",
+            "settings-search=Storage",
+            "clear-media",
             "wallpaper",
             "wallpaper,light",
             "wallpaper,wallpaper-image",
@@ -4270,11 +6167,24 @@ mod tests {
             "about",
             "failed",
             "info",
+            "info-media",
+            "info-docs",
+            "info-links",
             "group-info",
             "group-info-rename",
             "group-info-locked",
             "group-info-saving",
+            "group-admin",
+            "group-admin-menu",
+            "group-permissions",
+            "group-add-members",
+            "group-reset-link",
+            "group-remove-member",
             "forward",
+            "forward-selected",
+            "forward-review",
+            "forward-full",
+            "forward-once",
             "unlink",
             "leave-group",
             "left-group",
@@ -4289,6 +6199,9 @@ mod tests {
             "select",
             "delete-message",
             "delete-message-mine",
+            "remove-pack",
+            "delete-selection",
+            "select-delete",
             "new-contact",
             "accounts",
             "accounts,light",
@@ -4313,14 +6226,22 @@ mod tests {
             "sticker-search",
             "sticker-animated",
             "sticker-add",
+            "sticker-view",
             "sticker-pack-message",
             "sticker-maker",
             "sticker-pack-view",
             "typing",
             "composer-tools",
             "mention",
+            "mention-everyone",
             "emoji-complete",
             "reply",
+            "private-reply",
+            "private-reply,light",
+            "private-reply-menu",
+            "private-reply-menu,light",
+            "private-reply-locked-source",
+            "private-reply-locked-source,light",
             "edit",
             "unsent-voice",
             "scrolled",
@@ -4330,7 +6251,11 @@ mod tests {
             "wide",
             "rail",
             "search",
+            "forward-portuguese",
             "staged",
+            "attachment-draft-away",
+            "attachment-draft-return",
+            "crop",
             "compose-emoji",
             "voice",
             "voice,voice-menu",
@@ -4339,10 +6264,42 @@ mod tests {
             "gifs",
             "gifs-badkey",
             "react-menu",
+            "starred",
+            "star-menu",
             "react-picker",
             "react-picker-empty",
             "react-custom",
             "react-other",
+            "calls",
+            "calls-chat",
+            "calls-info",
+            "calls-missed",
+            "calls-missed-none",
+            "new-call",
+            "call-entries",
+            "call-bubbles",
+            "call-bubbles,light",
+            "call",
+            "call-active",
+            "call-outgoing",
+            "call-connecting",
+            "call-failed",
+            "call-devices",
+            "call-ended",
+            "call-strip",
+            "call-group",
+            "call-group-active",
+            "call-group-video",
+            "call-group-muted",
+            "call-group-calling",
+            "call-group-on-phone",
+            "call-link",
+            "calls-link",
+            "call-video",
+            "call-video,light",
+            "call-video-incoming",
+            "call-video-off",
+            "pinned",
         ] {
             let mut app = self::app();
             apply_flags(&mut app, Some(page));
@@ -4356,10 +6313,288 @@ mod tests {
         }
     }
 
+    /// Where fastframe-titlebar draws the caption buttons for a footprint
+    /// in a window `width` wide: GNOME's round ones from 14 to 42 points
+    /// down, or Windows' square ones centred in the header's height.
+    fn caption_rects(footprint: fastframe_titlebar::Footprint, width: f32) -> Vec<egui::Rect> {
+        let linux = footprint.height < crate::theme::TOP_BAR_HEIGHT;
+        let (top, bottom) = if linux {
+            (0.0, 42.0)
+        } else {
+            (0.0, (footprint.height - 36.0) / 2.0 + 2.0 + 36.0)
+        };
+        let mut rects = Vec::new();
+        if footprint.left > 0.0 {
+            rects.push(egui::Rect::from_x_y_ranges(
+                0.0..=footprint.left,
+                top..=bottom,
+            ));
+        }
+        if footprint.right > 0.0 {
+            rects.push(egui::Rect::from_x_y_ranges(
+                width - footprint.right..=width,
+                top..=bottom,
+            ));
+        }
+        rects
+    }
+
+    /// The clickable widgets of the last frame that lie under `rects`,
+    /// leaving out what catches clicks across a whole screen or panel (the
+    /// call screen's and the viewer's backdrops).
+    fn widgets_under(ctx: &egui::Context, rects: &[egui::Rect]) -> Vec<(egui::Id, egui::Rect)> {
+        let window = ctx.content_rect();
+        ctx.viewport(|viewport| {
+            viewport
+                .prev_pass
+                .widgets
+                .layers()
+                .flat_map(|(_, widgets)| widgets.iter())
+                .filter(|widget| {
+                    widget.enabled
+                        && widget.visible
+                        && widget.sense.senses_click()
+                        && widget.interact_rect.is_positive()
+                        && widget.interact_rect.height() < window.height() / 2.0
+                        && widget.interact_rect.width() < window.width() * 0.9
+                        && rects
+                            .iter()
+                            .any(|rect| rect.intersects(widget.interact_rect.shrink(0.5)))
+                })
+                .map(|widget| (widget.id, widget.interact_rect))
+                .collect()
+        })
+    }
+
+    /// Lays out a few frames of a window `size` points big.
+    fn render_sized(app: &mut App, ctx: &egui::Context, size: egui::Vec2) {
+        for _ in 0..4 {
+            let mut output = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, size)),
+                    ..Default::default()
+                },
+                |ui| {
+                    let ctx = ui.ctx().clone();
+                    app.background_frame(&ctx);
+                    app.frame_ui(ui);
+                },
+            );
+            output.textures_delta.clear();
+        }
+    }
+
+    /// With the title bar ZapFast draws on Windows and Linux, no header
+    /// control lies under the caption buttons, at either end of the top edge
+    /// and in each layout: GNOME's buttons at the right or the left, and
+    /// Windows' taller row. Headers that reach a corner leave the buttons
+    /// room beside their own controls, or move them down when narrow.
+    ///
+    /// Not on macOS, which never draws them: its headers keep the traffic
+    /// lights' layout under any preview, and drag the window from their top
+    /// (fastframe-titlebar's drag area, which senses clicks) wherever the
+    /// caption buttons would stand.
     #[test]
+    #[cfg_attr(
+        target_os = "macos",
+        ignore = "macOS has the traffic lights, never the drawn caption buttons"
+    )]
+    fn header_controls_keep_clear_of_the_drawn_caption_buttons() {
+        use fastframe_titlebar::Footprint;
+        let footprints = [
+            // GNOME elsewhere than GNOME: minimize, maximize and close.
+            Footprint {
+                left: 0.0,
+                right: 3.0 * 36.0 + 14.0,
+                height: 41.0,
+            },
+            // A button layout on the left, such as `close,minimize,maximize:`.
+            Footprint {
+                left: 3.0 * 36.0 + 14.0,
+                right: 0.0,
+                height: 41.0,
+            },
+            // Windows: three square buttons centred in the header's height.
+            Footprint {
+                left: 0.0,
+                right: 3.0 * 36.0 + 5.0,
+                height: crate::theme::TOP_BAR_HEIGHT,
+            },
+        ];
+        let wide = egui::vec2(1180.0, 780.0);
+        let narrow = egui::vec2(480.0, 720.0);
+        let pages = [
+            ("chat", wide),
+            ("info", wide),
+            ("chat-search", wide),
+            ("empty", wide),
+            ("chat", narrow),
+            ("info", narrow),
+            ("empty", narrow),
+            ("chat", egui::vec2(700.0, 600.0)),
+            ("call-active", wide),
+            ("call", wide),
+            ("call-active", narrow),
+            ("call-group", wide),
+            ("call-group-active", wide),
+            ("call-group-active", narrow),
+            ("call-group-video", wide),
+            ("call-group-video", narrow),
+            ("call-group-muted", wide),
+            ("call-group-calling", wide),
+            ("call-group-on-phone", wide),
+            ("call-group-on-phone", narrow),
+            ("calls-link", wide),
+            ("settings", wide),
+            ("settings", narrow),
+            ("calls", wide),
+            ("calls-info", wide),
+            ("calls-info", narrow),
+            // The rail beside the list, and alone beside a hidden list.
+            ("nosidebar", wide),
+            ("settings,nosidebar", wide),
+            ("empty,nosidebar", wide),
+            ("calls,nosidebar", wide),
+            ("archived", wide),
+            ("archived,nosidebar", wide),
+            ("locked-open", wide),
+            ("app-lock", wide),
+            ("login", wide),
+            ("offline", wide),
+            ("offline,empty", wide),
+            ("offline,settings", wide),
+            ("preview", wide),
+        ];
+        for footprint in footprints {
+            for (page, size) in pages {
+                let mut app = self::app();
+                apply_flags(&mut app, Some(page));
+                let ctx = egui::Context::default();
+                app.attach(&ctx);
+                crate::theme::preview_titlebar(&ctx, footprint);
+                render_sized(&mut app, &ctx, size);
+                let under = widgets_under(&ctx, &caption_rects(footprint, size.x));
+                assert!(
+                    under.is_empty(),
+                    "{page} at {size:?} with {footprint:?}: {under:?} under the caption buttons"
+                );
+            }
+        }
+        // Without the room, the chat header's own buttons stand where the
+        // caption buttons go: the check above sees them.
+        let mut app = self::app();
+        let ctx = egui::Context::default();
+        app.attach(&ctx);
+        render_sized(&mut app, &ctx, wide);
+        assert!(!widgets_under(&ctx, &caption_rects(footprints[0], wide.x)).is_empty());
+    }
+
+    /// A header shares the caption row only at a corner it reaches: beside
+    /// the buttons when its content fits, under them otherwise, and not at
+    /// all below the row or away from the edge.
+    #[test]
+    fn a_header_makes_room_only_at_the_corner_it_reaches() {
+        use crate::ui::{CaptionRoom, caption_room};
+        let ctx = egui::Context::default();
+        crate::theme::preview_titlebar(
+            &ctx,
+            fastframe_titlebar::Footprint {
+                left: 50.0,
+                right: 122.0,
+                height: 41.0,
+            },
+        );
+        let mut output = ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    egui::vec2(1000.0, 700.0),
+                )),
+                ..Default::default()
+            },
+            |ui| {
+                let ctx = ui.ctx();
+                let rect = |x0: f32, y0: f32, x1: f32| {
+                    egui::Rect::from_min_max(egui::pos2(x0, y0), egui::pos2(x1, y0 + 44.0))
+                };
+                // The conversation header, 14 points in from the right edge.
+                assert_eq!(
+                    caption_room(ctx, rect(334.0, 8.0, 986.0), 320.0),
+                    CaptionRoom {
+                        left: 0.0,
+                        right: 108.0,
+                        top: 0.0
+                    }
+                );
+                // The chat list at the left, with the left-hand buttons.
+                assert_eq!(
+                    caption_room(ctx, rect(14.0, 8.0, 306.0), 200.0),
+                    CaptionRoom {
+                        left: 36.0,
+                        right: 0.0,
+                        top: 0.0
+                    }
+                );
+                // Too narrow for its content beside both ends: under them.
+                assert_eq!(
+                    caption_room(ctx, rect(14.0, 8.0, 986.0), 900.0),
+                    CaptionRoom {
+                        left: 0.0,
+                        right: 0.0,
+                        top: 33.0
+                    }
+                );
+                // Below the caption row, or between the corners: nothing.
+                assert_eq!(
+                    caption_room(ctx, rect(334.0, 60.0, 986.0), 320.0),
+                    CaptionRoom::default()
+                );
+                assert_eq!(
+                    caption_room(ctx, rect(334.0, 8.0, 700.0), 320.0),
+                    CaptionRoom::default()
+                );
+            },
+        );
+        output.textures_delta.clear();
+    }
+
+    /// The drawn title bar's room goes in full screen, where the buttons go.
+    #[test]
+    fn the_drawn_caption_buttons_take_no_room_in_full_screen() {
+        let ctx = egui::Context::default();
+        crate::theme::preview_titlebar(
+            &ctx,
+            fastframe_titlebar::Footprint {
+                left: 0.0,
+                right: 122.0,
+                height: 41.0,
+            },
+        );
+        assert!(crate::theme::drawn_titlebar(&ctx));
+        assert!(crate::theme::chrome_in_headers(&ctx));
+        let mut input = egui::RawInput::default();
+        input
+            .viewports
+            .get_mut(&egui::ViewportId::ROOT)
+            .unwrap()
+            .fullscreen = Some(true);
+        let mut output = ctx.run_ui(input, |ui| {
+            assert_eq!(
+                crate::theme::caption_footprint(ui.ctx()),
+                fastframe_titlebar::Footprint::default()
+            );
+            let room = crate::ui::caption_room(ui.ctx(), ui.max_rect(), 0.0);
+            assert_eq!(room, crate::ui::CaptionRoom::default());
+        });
+        output.textures_delta.clear();
+    }
+
+    #[test]
+    /// Checks header layout at different zoom levels with the sidebar shown or hidden.
     fn macos_headers_fit_when_zoomed_with_and_without_the_sidebar() {
         for zoom in [0.6, 1.0, 2.0] {
             for page in [
+                "history-date",
                 "chat",
                 "nosidebar",
                 "settings",
@@ -4399,7 +6634,7 @@ mod tests {
     }
 
     /// Runs one frame with input events.
-    fn frame_with(app: &mut App, ctx: &egui::Context, events: Vec<egui::Event>) {
+    pub(super) fn frame_with(app: &mut App, ctx: &egui::Context, events: Vec<egui::Event>) {
         let mut output = ctx.run_ui(
             egui::RawInput {
                 screen_rect: Some(egui::Rect::from_min_size(
@@ -4416,6 +6651,546 @@ mod tests {
             },
         );
         output.textures_delta.clear();
+    }
+
+    /// Runs a copy input and follow-up frame, collecting clipboard writes.
+    fn copied_text(app: &mut App, ctx: &egui::Context, event: egui::Event) -> Vec<String> {
+        let mut copied = Vec::new();
+        for events in [vec![event], Vec::new()] {
+            let mut output = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(1180.0, 780.0),
+                    )),
+                    events,
+                    ..Default::default()
+                },
+                |ui| {
+                    let ctx = ui.ctx().clone();
+                    app.background_frame(&ctx);
+                    app.frame_ui(ui);
+                },
+            );
+            output.textures_delta.clear();
+            copied.extend(
+                output
+                    .platform_output
+                    .commands
+                    .into_iter()
+                    .filter_map(|command| match command {
+                        egui::OutputCommand::CopyText(text) => Some(text),
+                        _ => None,
+                    }),
+            );
+        }
+        copied
+    }
+
+    /// Exports only selected messages in chat order, including off-screen text.
+    #[test]
+    fn selected_messages_copy_in_chat_order_including_offscreen_text() {
+        let (mut app, ctx, chat) = sweep_chat(400);
+        let conversation = app.conversations.get_mut(&chat).unwrap();
+        conversation.messages[1].content = Content::text("*First* 👨‍👩‍👧‍👦\nsecond line");
+        conversation.messages[399].content = Content::text("Last café 🇹🇷");
+        app.selection = Some((chat.clone(), vec!["m399".into(), "m001".into()]));
+        render(&mut app, &ctx);
+        assert!(
+            ctx.data(|data| data.get_temp::<egui::Rect>(
+                crate::ui::conversation::bubble_id(&chat, "m001").with("body")
+            ))
+            .is_none(),
+            "the first selected message is outside the virtualized viewport"
+        );
+        let copied = copied_text(&mut app, &ctx, egui::Event::Copy);
+        assert_eq!(copied.len(), 1, "one clipboard write per copy command");
+        let text = &copied[0];
+        assert!(text.starts_with('['), "uses transcript sharing headers");
+        assert!(text.contains("First 👨‍👩‍👧‍👦\nsecond line\n["), "{text}");
+        assert!(text.ends_with("Last café 🇹🇷"), "{text}");
+        assert!(
+            !text.contains("message number"),
+            "unselected rows are excluded"
+        );
+        assert_eq!(selected_ids(&app), ["m399", "m001"], "copy keeps selection");
+    }
+
+    /// Copy belongs to egui when the selected IDs or conversation are gone;
+    /// available messages consume native and raw shortcuts with one write.
+    #[test]
+    fn selected_messages_consume_copy_only_when_loaded_text_exists() {
+        for missing in [None, Some("messages"), Some("conversation")] {
+            for copy in [
+                vec![egui::Event::Copy],
+                vec![key(egui::Key::C, egui::Modifiers::COMMAND)],
+                vec![key(egui::Key::C, egui::Modifiers::CTRL)],
+                vec![
+                    egui::Event::Copy,
+                    key(egui::Key::C, egui::Modifiers::COMMAND),
+                ],
+            ] {
+                let (mut app, ctx, chat) = sweep_chat(2);
+                let id = if missing == Some("messages") {
+                    "deleted-message"
+                } else {
+                    "m001"
+                };
+                app.selection = Some((chat.clone(), vec![id.into()]));
+                if missing == Some("conversation") {
+                    app.conversations.remove(&chat);
+                }
+                let mut events = copy;
+                events.push(egui::Event::Text("unrelated input".into()));
+                let mut output = ctx.run_ui(
+                    egui::RawInput {
+                        events: events.clone(),
+                        ..Default::default()
+                    },
+                    |ui| {
+                        crate::ui::keys::handle(&mut app, ui.ctx());
+                        ui.ctx().input(|input| {
+                            if missing.is_some() {
+                                assert_eq!(input.events, events, "{missing:?}");
+                            } else {
+                                assert_eq!(input.events, events[events.len() - 1..]);
+                            }
+                        });
+                    },
+                );
+                output.textures_delta.clear();
+                if missing.is_some() {
+                    assert!(app.actions.is_empty(), "no selected text to copy");
+                } else {
+                    assert!(matches!(
+                        app.actions.as_slice(),
+                        [crate::model::Action::CopyText(text)]
+                            if text.ends_with("message number 1")
+                    ));
+                }
+            }
+        }
+    }
+
+    /// Whole-message exports resolve mentions and retain captions and media labels.
+    #[test]
+    fn selected_messages_copy_mentions_captions_and_media_labels() {
+        let mut app = app();
+        let chat = sample_ids()[0].to_owned();
+        let conversation = app.conversations.get_mut(&chat).unwrap();
+        let doc = conversation
+            .messages
+            .iter_mut()
+            .find(|m| m.id == "ada-doc")
+            .unwrap();
+        if let Content::Document { caption, .. } = &mut doc.content {
+            *caption = Some("*Notes* for @12345 🎉".into());
+        }
+        doc.mentions = vec![crate::model::MentionRef {
+            user: "12345".into(),
+            id: chat.clone(),
+        }];
+        app.selection = Some((chat, vec!["ada-voice".into(), "ada-doc".into()]));
+        let ctx = egui::Context::default();
+        app.attach(&ctx);
+        render(&mut app, &ctx);
+        let copied = copied_text(&mut app, &ctx, egui::Event::Copy);
+        assert_eq!(copied.len(), 1);
+        assert!(
+            copied[0].contains("[document: Notes on the Engine.pdf] Notes for @Ada Lovelace 🎉"),
+            "{}",
+            copied[0]
+        );
+        assert!(
+            copied[0].ends_with("[voice message, 0:42]"),
+            "{}",
+            copied[0]
+        );
+    }
+
+    /// Visible text-field selections retain their normal clipboard handling.
+    #[test]
+    fn selected_messages_leave_copy_available_to_focused_search_text() {
+        let (mut app, ctx, chat) = sweep_chat(2);
+        app.selection = Some((chat, vec!["m001".into()]));
+        app.search = "Ada".into();
+        app.actions.push(crate::model::Action::FocusSearch);
+        render(&mut app, &ctx);
+        assert!(ctx.text_edit_focused());
+        frame_with(
+            &mut app,
+            &ctx,
+            vec![key(egui::Key::A, egui::Modifiers::COMMAND)],
+        );
+        let copied = copied_text(&mut app, &ctx, egui::Event::Copy);
+        assert_eq!(copied, ["Ada"], "copy belongs to the focused text field");
+    }
+
+    /// Dialogs and another chat must not export selected messages.
+    #[test]
+    fn selected_messages_do_not_copy_through_dialogs_or_other_chats() {
+        let (mut app, ctx, chat) = sweep_chat(2);
+        app.selection = Some((chat, vec!["m001".into()]));
+        app.dialog = Some(crate::model::Dialog::Shortcuts);
+        render(&mut app, &ctx);
+        assert!(copied_text(&mut app, &ctx, egui::Event::Copy).is_empty());
+        app.dialog = None;
+        app.selection = Some(("another-chat".into(), vec!["m001".into()]));
+        render(&mut app, &ctx);
+        assert!(copied_text(&mut app, &ctx, egui::Event::Copy).is_empty());
+    }
+
+    /// Pasted transcript text in other messages must not add duplicate headers.
+    #[test]
+    fn selected_messages_copy_does_not_annotate_a_transcript_twice() {
+        let (mut app, ctx, chat) = sweep_chat(4);
+        let name = app.display_name(&chat);
+        let first = format!("[{}] {name}: first", crate::util::copy_stamp(1_700_000_000));
+        let second = format!(
+            "[{}] {name}: second",
+            crate::util::copy_stamp(1_700_000_001)
+        );
+        // Unselected messages contain a previously pasted transcript. The
+        // text-selection annotator must not mistake our export for their text.
+        app.conversations.get_mut(&chat).unwrap().messages = [
+            Content::text("first"),
+            Content::text("second"),
+            Content::text(&first),
+            Content::text(&second),
+        ]
+        .into_iter()
+        .enumerate()
+        .map(|(i, content)| {
+            message(
+                &chat,
+                &format!("m{i:03}"),
+                false,
+                1_700_000_000 + i as i64,
+                content,
+            )
+        })
+        .collect();
+        app.selection = Some((chat, vec!["m000".into(), "m001".into()]));
+        render(&mut app, &ctx);
+        assert_eq!(
+            copied_text(&mut app, &ctx, egui::Event::Copy),
+            [format!("{first}\n{second}")]
+        );
+    }
+
+    /// A newly hidden composer's stale focus must not delay copying the selection.
+    #[test]
+    fn selected_messages_copy_immediately_after_hiding_a_focused_composer() {
+        let (mut app, ctx, _) = sweep_chat(2);
+        app.composer = "unsent draft".into();
+        app.actions.push(crate::model::Action::FocusComposer);
+        render(&mut app, &ctx);
+        assert!(ctx.text_edit_focused());
+        app.actions
+            .push(crate::model::Action::SelectMessage("m001".into()));
+        let copied = copied_text(&mut app, &ctx, egui::Event::Copy);
+        assert_eq!(copied.len(), 1, "a hidden composer must not swallow Copy");
+        assert!(copied[0].ends_with("message number 1"));
+        assert_eq!(app.composer, "unsent draft");
+    }
+
+    #[test]
+    /// Checks recipient selection and review both use the localized singular forwarding heading.
+    fn singular_forward_headings_use_the_forwarding_translation_in_both_steps() {
+        for page in ["forward", "forward-review"] {
+            let mut app = app();
+            app.locale = crate::i18n::Locale::PortugueseBrazil;
+            apply_flags(&mut app, Some(page));
+            let ctx = egui::Context::default();
+            app.attach(&ctx);
+            let labels = accessible_labels(&mut app, &ctx);
+            assert!(
+                labels.iter().any(|label| label == "Encaminhar mensagem"),
+                "{page}: {labels:?}"
+            );
+            if page == "forward-review" {
+                assert!(labels.iter().any(|label| label == "Voltar"), "{labels:?}");
+                assert!(
+                    labels.iter().any(|label| label == "Encaminhar"),
+                    "{labels:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    /// Checks real row and checkbox clicks toggle recipients without dispatching a forward command.
+    fn forward_row_and_checkbox_clicks_select_without_sending() {
+        for light in [false, true] {
+            let mut app = app();
+            app.backend.record_demo_commands();
+            let ctx = egui::Context::default();
+            ctx.enable_accesskit();
+            app.attach(&ctx);
+            apply_flags(
+                &mut app,
+                Some(if light { "forward,light" } else { "forward" }),
+            );
+            for _ in 0..3 {
+                render(&mut app, &ctx);
+            }
+            app.backend.take_demo_commands();
+            let nodes = accessible_nodes(&mut app, &ctx, Vec::new());
+            let title = app.chat_title(app.chat(SAMPLES[0].id).unwrap());
+            assert!(
+                nodes.iter().filter(|(label, _, _)| label == &title).count() >= 2,
+                "both row and checkbox have accessible labels"
+            );
+            let id = egui::Id::new(("forward-recipient", SAMPLES[0].id));
+            let rect = ctx.data(|data| data.get_temp::<egui::Rect>(id)).unwrap();
+            for pos in [
+                rect.center(),
+                egui::pos2(rect.right() - 18.0, rect.center().y),
+            ] {
+                for pressed in [true, false] {
+                    frame_with(
+                        &mut app,
+                        &ctx,
+                        vec![
+                            egui::Event::PointerMoved(pos),
+                            egui::Event::PointerButton {
+                                pos,
+                                button: egui::PointerButton::Primary,
+                                pressed,
+                                modifiers: egui::Modifiers::NONE,
+                            },
+                        ],
+                    );
+                }
+                assert!(app.dialog.is_some());
+                assert!(
+                    !app.backend
+                        .take_demo_commands()
+                        .iter()
+                        .any(|command| matches!(command, crate::backend::Command::Forward { .. }))
+                );
+                if pos == rect.center() {
+                    assert_eq!(app.forward_recipients, [SAMPLES[0].id]);
+                } else {
+                    assert!(
+                        app.forward_recipients.is_empty(),
+                        "checkbox toggles exactly once"
+                    );
+                }
+            }
+        }
+    }
+
+    /// Presses and releases the primary button at `pos`.
+    fn press_at(app: &mut App, ctx: &egui::Context, pos: egui::Pos2) {
+        // Twice: the tooltip of the control the pointer left goes first.
+        frame_with(app, ctx, vec![egui::Event::PointerMoved(pos)]);
+        frame_with(app, ctx, Vec::new());
+        for pressed in [true, false] {
+            frame_with(
+                app,
+                ctx,
+                vec![egui::Event::PointerButton {
+                    pos,
+                    button: egui::PointerButton::Primary,
+                    pressed,
+                    modifiers: egui::Modifiers::NONE,
+                }],
+            );
+        }
+        render(app, ctx);
+    }
+
+    /// Clicks the accessible node labelled `label` with the role `role`.
+    fn press_labelled(
+        app: &mut App,
+        ctx: &egui::Context,
+        label: &str,
+        role: egui::accesskit::Role,
+    ) {
+        let nodes = accessible_nodes(app, ctx, Vec::new());
+        let pos = nodes
+            .iter()
+            .find(|(name, found, _)| name == label && *found == role)
+            .map(|(_, _, pos)| *pos)
+            .unwrap_or_else(|| panic!("no {role:?} {label:?} in {nodes:?}"));
+        press_at(app, ctx, pos);
+    }
+
+    fn new_group_dialog() -> (App, egui::Context) {
+        let mut app = app();
+        app.backend.record_demo_commands();
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        app.attach(&ctx);
+        apply_flags(&mut app, Some("new-chat"));
+        // Let the dialog's opening animation finish.
+        for _ in 0..8 {
+            render(&mut app, &ctx);
+        }
+        (app, ctx)
+    }
+
+    fn press_member(app: &mut App, ctx: &egui::Context, id: &str) {
+        // Only this frame's rows: one scrolled away keeps an old rect.
+        let ids: Vec<_> = SAMPLES
+            .iter()
+            .map(|sample| crate::ui::new_group::member_row_id(sample.id))
+            .collect();
+        ctx.data_mut(|data| {
+            for row in &ids {
+                data.remove::<egui::Rect>(*row);
+            }
+        });
+        // The dialog re-centres over a few frames when its height changes.
+        for _ in 0..4 {
+            frame_with(app, ctx, Vec::new());
+        }
+        let rect = ctx
+            .data(|data| data.get_temp::<egui::Rect>(crate::ui::new_group::member_row_id(id)))
+            .unwrap_or_else(|| panic!("{id} has no row"));
+        press_at(app, ctx, rect.center());
+    }
+
+    /// New chat's New group row gives the contacts check boxes; picked people
+    /// become chips, Next asks for the name, and Create sends the group.
+    #[test]
+    fn a_group_is_chosen_named_and_created_from_new_chat() {
+        use crate::new_group::Stage;
+        use egui::accesskit::Role;
+        let (mut app, ctx) = new_group_dialog();
+        let labels = accessible_labels(&mut app, &ctx);
+        for row in ["New group", "Add contact"] {
+            assert!(labels.iter().any(|label| label == row), "{labels:?}");
+        }
+        press_labelled(&mut app, &ctx, "New group", Role::Button);
+        assert_eq!(
+            app.new_group.as_ref().map(|draft| draft.stage),
+            Some(Stage::Choosing)
+        );
+        assert_eq!(app.dialog, Some(Dialog::NewChat), "the same dialog");
+
+        press_member(&mut app, &ctx, SAMPLES[0].id);
+        press_member(&mut app, &ctx, SAMPLES[3].id);
+        assert_eq!(
+            app.new_group.as_ref().unwrap().members,
+            [SAMPLES[0].id, SAMPLES[3].id]
+        );
+        // The chip lets its person go again.
+        let chip = format!("Remove {}", SAMPLES[3].name);
+        press_labelled(&mut app, &ctx, &chip, Role::Button);
+        assert_eq!(app.new_group.as_ref().unwrap().members, [SAMPLES[0].id]);
+
+        press_labelled(&mut app, &ctx, "Next", Role::Button);
+        assert_eq!(app.new_group.as_ref().unwrap().stage, Stage::Naming);
+        render(&mut app, &ctx);
+        assert_eq!(
+            ctx.memory(|memory| memory.focused()),
+            Some(crate::ui::new_group::name_field_id()),
+            "the name field takes the keyboard"
+        );
+        frame_with(&mut app, &ctx, vec![egui::Event::Text("Book club".into())]);
+        assert_eq!(app.new_group.as_ref().unwrap().name, "Book club");
+        app.backend.take_demo_commands();
+        press_labelled(&mut app, &ctx, "Create", Role::Button);
+        let sent: Vec<_> = app
+            .backend
+            .take_demo_commands()
+            .into_iter()
+            .filter_map(|command| match command {
+                crate::backend::Command::CreateGroup {
+                    subject, members, ..
+                } => Some((subject, members)),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            sent,
+            [("Book club".to_owned(), vec![SAMPLES[0].id.to_owned()])]
+        );
+        assert!(app.new_group.as_ref().unwrap().creating);
+    }
+
+    /// Back steps out one stage at a time, unchecking everyone leaves the
+    /// choice, and Escape closes the dialog as before.
+    #[test]
+    fn back_unchecking_and_escape_leave_the_new_group() {
+        use crate::new_group::Stage;
+        use egui::accesskit::Role;
+        let (mut app, ctx) = new_group_dialog();
+        press_labelled(&mut app, &ctx, "New group", Role::Button);
+        press_member(&mut app, &ctx, SAMPLES[0].id);
+        press_member(&mut app, &ctx, SAMPLES[0].id);
+        assert!(app.new_group.is_none(), "nobody picked: the plain list");
+        assert_eq!(app.dialog, Some(Dialog::NewChat));
+
+        press_labelled(&mut app, &ctx, "New group", Role::Button);
+        press_member(&mut app, &ctx, SAMPLES[0].id);
+        press_labelled(&mut app, &ctx, "Next", Role::Button);
+        // The pill, not the header's arrow: both say Back.
+        let nodes = accessible_nodes(&mut app, &ctx, Vec::new());
+        let back = nodes
+            .iter()
+            .filter(|(label, role, _)| label == "Back" && *role == Role::Button)
+            .map(|(_, _, pos)| *pos)
+            .max_by(|a, b| a.y.total_cmp(&b.y))
+            .unwrap();
+        press_at(&mut app, &ctx, back);
+        assert_eq!(app.new_group.as_ref().unwrap().stage, Stage::Choosing);
+        assert_eq!(app.new_group.as_ref().unwrap().members, [SAMPLES[0].id]);
+        // The header's arrow, beside the heading.
+        let nodes = accessible_nodes(&mut app, &ctx, Vec::new());
+        let heading = nodes
+            .iter()
+            .find(|(label, _, _)| label == "Add group members")
+            .map(|(_, _, pos)| *pos)
+            .unwrap();
+        let arrow = nodes
+            .iter()
+            .filter(|(label, role, _)| label == "Back" && *role == Role::Button)
+            .map(|(_, _, pos)| *pos)
+            .min_by(|a, b| a.distance(heading).total_cmp(&b.distance(heading)))
+            .unwrap();
+        press_at(&mut app, &ctx, arrow);
+        assert!(app.new_group.is_none());
+
+        press_labelled(&mut app, &ctx, "New group", Role::Button);
+        frame_with(
+            &mut app,
+            &ctx,
+            vec![egui::Event::Key {
+                key: egui::Key::Escape,
+                physical_key: None,
+                pressed: true,
+                repeat: false,
+                modifiers: egui::Modifiers::NONE,
+            }],
+        );
+        render(&mut app, &ctx);
+        assert_eq!(app.dialog, None);
+        assert!(app.new_group.is_none());
+    }
+
+    /// The choosing step's search narrows the list, and checking someone
+    /// clears it for the next name.
+    #[test]
+    fn checking_someone_clears_the_search_for_the_next_name() {
+        let (mut app, ctx) = new_group_dialog();
+        press_labelled(&mut app, &ctx, "New group", egui::accesskit::Role::Button);
+        frame_with(&mut app, &ctx, vec![egui::Event::Text("katherine".into())]);
+        render(&mut app, &ctx);
+        assert_eq!(app.new_chat_search, "katherine");
+        let listed = |ctx: &egui::Context, id: &str| {
+            ctx.data(|data| data.get_temp::<egui::Rect>(crate::ui::new_group::member_row_id(id)))
+        };
+        ctx.data_mut(|data| {
+            data.remove::<egui::Rect>(crate::ui::new_group::member_row_id(SAMPLES[0].id))
+        });
+        render(&mut app, &ctx);
+        assert!(listed(&ctx, SAMPLES[0].id).is_none(), "Ada is not a match");
+        press_member(&mut app, &ctx, SAMPLES[3].id);
+        assert!(app.new_chat_search.is_empty());
+        assert_eq!(app.new_group.as_ref().unwrap().members, [SAMPLES[3].id]);
     }
 
     /// Lets an eased key scroll's animation settle: tests advance time by the
@@ -4445,6 +7220,7 @@ mod tests {
         for chat in app.chats.iter_mut() {
             if chat.id == group || chat.id == typing {
                 chat.last = Some(crate::model::LastMessage {
+                    labelled: false,
                     from_me: false,
                     sender: sender.into(),
                     sender_name: Some("Linus Example".into()),
@@ -4454,6 +7230,7 @@ mod tests {
                 });
             } else if chat.id == direct {
                 chat.last = Some(crate::model::LastMessage {
+                    labelled: false,
                     from_me: false,
                     sender: direct.into(),
                     sender_name: None,
@@ -4566,11 +7343,98 @@ mod tests {
         }
     }
 
+    /// The panel says when a contact was last seen as the chat header does:
+    /// with the day and the time, in the reader's language.
+    #[test]
+    fn the_panel_says_when_a_contact_was_last_seen_as_the_header_does() {
+        fn texts(shape: &egui::Shape, out: &mut Vec<String>) {
+            match shape {
+                egui::Shape::Text(text) => out.push(text.galley.text().to_owned()),
+                egui::Shape::Vec(shapes) => shapes.iter().for_each(|shape| texts(shape, out)),
+                _ => {}
+            }
+        }
+        let mut app = app();
+        apply_flags(&mut app, Some("info"));
+        let chat = app.open_chat.clone().expect("a chat");
+        let seen = jiff::Timestamp::now().as_second() - 86_400;
+        app.presence.insert(
+            chat,
+            crate::app::Presence {
+                online: false,
+                last_seen: Some(seen),
+            },
+        );
+        let ctx = egui::Context::default();
+        app.attach(&ctx);
+        let mut shapes = Vec::new();
+        for _ in 0..3 {
+            shapes = frame_sized(&mut app, &ctx, 780.0, Vec::new());
+        }
+        let mut drawn = Vec::new();
+        for clipped in &shapes {
+            texts(&clipped.shape, &mut drawn);
+        }
+        let line = crate::util::last_seen(app.locale, seen);
+        assert_eq!(
+            drawn.iter().filter(|text| **text == line).count(),
+            2,
+            "the header and the panel both say {line:?}"
+        );
+    }
+
+    /// The info pages open the panel on the sample chat, listed from the
+    /// sample's own messages: the overview, and each tab of the media view,
+    /// with something to show on every one.
+    #[test]
+    fn info_pages_open_the_panel_on_each_view_with_content() {
+        use crate::model::{InfoView, MediaTab};
+        for (page, view) in [
+            ("info", InfoView::Overview),
+            ("info-media", InfoView::Media(MediaTab::Media)),
+            ("info-docs", InfoView::Media(MediaTab::Docs)),
+            ("info-links", InfoView::Media(MediaTab::Links)),
+        ] {
+            let mut app = app();
+            apply_flags(&mut app, Some(page));
+            let info = app
+                .info
+                .as_ref()
+                .unwrap_or_else(|| panic!("{page} opens the panel"));
+            assert_eq!(info.view, view, "{page}");
+            assert_eq!(info.chat, app.open_chat.clone().expect("a chat"), "{page}");
+            let listing = app.info_media.as_ref().expect("the sample is listed");
+            assert!(listing.media.len() >= 3, "{page}: pictures and a video");
+            assert!(
+                listing
+                    .media
+                    .iter()
+                    .any(|row| matches!(row.content, Content::Video { .. })),
+                "{page}: a video"
+            );
+            assert!(!listing.docs.is_empty(), "{page}: a document");
+            assert!(!listing.links.is_empty(), "{page}: a link");
+            let ctx = egui::Context::default();
+            app.attach(&ctx);
+            render(&mut app, &ctx);
+            assert_eq!(
+                ctx.data(|data| data.get_temp::<bool>(crate::ui::info::docked_id())),
+                Some(true),
+                "{page}: the panel is drawn beside the chat"
+            );
+        }
+        // The group has media of its own to show.
+        let mut app = app();
+        apply_flags(&mut app, Some("group-info"));
+        let listing = app.info_media.as_ref().expect("the group is listed");
+        assert!(!listing.media.is_empty(), "the group's photo");
+    }
+
     /// The group dialog offers the pencil and the photo menu only when we may
     /// change the group's info, and not while a change is on its way.
     #[test]
     fn group_info_offers_editing_only_when_allowed() {
-        use crate::ui::dialogs::{group_name_button_id, group_photo_id};
+        use crate::ui::info::{group_name_button_id, group_photo_id};
         for (page, offered) in [
             ("group-info", true),
             ("group-info-locked", false),
@@ -4587,13 +7451,613 @@ mod tests {
         }
     }
 
+    /// The panel offers each part of running a group to whoever may use it:
+    /// everything to an admin, adding and the link to members of a group
+    /// that lets them, and nothing to members of one that does not.
+    #[test]
+    fn group_management_is_offered_by_role() {
+        use crate::ui::info::{
+            add_members_row_id, invite_link_id, member_menu_id, permissions_row_id, reset_link_id,
+        };
+        for (page, permissions, add, link, reset, menus) in [
+            ("group-admin", true, true, true, true, true),
+            ("group-info", false, true, true, false, false),
+            ("group-info-locked", false, false, false, false, false),
+        ] {
+            let mut app = app();
+            let ctx = egui::Context::default();
+            app.attach(&ctx);
+            apply_flags(&mut app, Some(page));
+            if page != "group-admin" {
+                // The link the member's panel asks for, as WhatsApp answers.
+                let chat = app.open_chat.clone().unwrap();
+                app.info_invite = Some((
+                    chat,
+                    crate::group_admin::LinkState::Known(
+                        crate::group_admin::InviteLink::new(DEMO_INVITE_LINK.into()).unwrap(),
+                    ),
+                ));
+            }
+            render(&mut app, &ctx);
+            let drawn = |id| ctx.data(|data| data.get_temp::<egui::Rect>(id)).is_some();
+            assert_eq!(
+                drawn(permissions_row_id()),
+                permissions,
+                "{page}: permissions"
+            );
+            assert_eq!(drawn(add_members_row_id()), add, "{page}: add members");
+            assert_eq!(drawn(invite_link_id()), link, "{page}: the link");
+            assert_eq!(drawn(reset_link_id()), reset, "{page}: reset");
+            assert_eq!(drawn(member_menu_id(JONAS)), menus, "{page}: member menus");
+            assert!(
+                !drawn(member_menu_id(ME)),
+                "{page}: never a menu for ourselves"
+            );
+        }
+    }
+
+    /// The panel asks for the link once, and a member of a group that keeps
+    /// it for admins never asks.
+    #[test]
+    fn the_invite_link_is_asked_for_once_and_only_when_shared() {
+        use crate::backend::Command;
+        let mut app = app();
+        let ctx = egui::Context::default();
+        app.attach(&ctx);
+        app.backend.record_demo_commands();
+        apply_flags(&mut app, Some("group-admin"));
+        app.info_invite = None;
+        render(&mut app, &ctx);
+        render(&mut app, &ctx);
+        let asked = app
+            .backend
+            .take_demo_commands()
+            .into_iter()
+            .filter(|command| {
+                matches!(command, Command::GroupInviteLink { chat, reset: false } if chat == FAMILY)
+            })
+            .count();
+        assert_eq!(asked, 1);
+        assert_eq!(
+            app.info_invite,
+            Some((FAMILY.to_owned(), crate::group_admin::LinkState::Loading))
+        );
+
+        let mut app = self::app();
+        app.backend.record_demo_commands();
+        apply_flags(&mut app, Some("group-info-locked"));
+        app.attach(&ctx);
+        let chat = app.open_chat.clone().unwrap();
+        app.actions
+            .push(crate::model::Action::FetchInviteLink(chat));
+        render(&mut app, &ctx);
+        assert!(
+            !app.backend
+                .take_demo_commands()
+                .iter()
+                .any(|command| matches!(command, Command::GroupInviteLink { .. })),
+            "the group keeps its link for admins"
+        );
+    }
+
+    /// Copy link puts the link on the clipboard and says so; Reset link asks
+    /// first, then revokes it.
+    #[test]
+    fn the_invite_link_is_copied_and_reset_from_the_panel() {
+        use crate::backend::Command;
+        use crate::ui::info::{copy_link_id, reset_link_id};
+        let mut app = app();
+        let ctx = egui::Context::default();
+        app.attach(&ctx);
+        app.backend.record_demo_commands();
+        apply_flags(&mut app, Some("group-admin"));
+        render(&mut app, &ctx);
+        let mut copied = Vec::new();
+        let mut click =
+            |app: &mut App, id: egui::Id| {
+                let pos = ctx
+                    .data(|data| data.get_temp::<egui::Rect>(id))
+                    .expect("the control is on screen")
+                    .center();
+                let press = |pressed| egui::Event::PointerButton {
+                    pos,
+                    button: egui::PointerButton::Primary,
+                    pressed,
+                    modifiers: egui::Modifiers::NONE,
+                };
+                for events in [
+                    vec![egui::Event::PointerMoved(pos), press(true)],
+                    vec![press(false)],
+                    Vec::new(),
+                ] {
+                    let mut output = ctx.run_ui(
+                        egui::RawInput {
+                            screen_rect: Some(egui::Rect::from_min_size(
+                                egui::Pos2::ZERO,
+                                egui::vec2(1180.0, 780.0),
+                            )),
+                            events,
+                            ..Default::default()
+                        },
+                        |ui| {
+                            let ctx = ui.ctx().clone();
+                            app.background_frame(&ctx);
+                            app.frame_ui(ui);
+                        },
+                    );
+                    output.textures_delta.clear();
+                    copied.extend(output.platform_output.commands.into_iter().filter_map(
+                        |command| match command {
+                            egui::OutputCommand::CopyText(text) => Some(text),
+                            _ => None,
+                        },
+                    ));
+                }
+            };
+        click(&mut app, copy_link_id());
+        click(&mut app, reset_link_id());
+        assert_eq!(copied, [DEMO_INVITE_LINK]);
+        assert!(
+            app.toasts
+                .iter()
+                .any(|toast| toast.message == "Invite link copied"),
+            "the copy is announced"
+        );
+        assert_eq!(
+            app.dialog,
+            Some(Dialog::ConfirmResetInviteLink(FAMILY.to_owned())),
+            "a reset asks first"
+        );
+        assert!(
+            !app.backend
+                .take_demo_commands()
+                .iter()
+                .any(|command| matches!(command, Command::GroupInviteLink { reset: true, .. })),
+            "nothing is revoked before the answer"
+        );
+        app.actions
+            .push(crate::model::Action::ResetInviteLink(FAMILY.to_owned()));
+        render(&mut app, &ctx);
+        assert!(app.dialog.is_none());
+        assert!(
+            app.backend
+                .take_demo_commands()
+                .iter()
+                .any(|command| matches!(
+                    command,
+                    Command::GroupInviteLink { chat, reset: true } if chat == FAMILY
+                ))
+        );
+    }
+
+    /// Turning a permission's switch asks WhatsApp; the switch itself waits
+    /// for the answer. Every one of WhatsApp's four is there.
+    #[test]
+    fn a_permission_switch_sends_the_change() {
+        use crate::backend::Command;
+        use crate::group_admin::Permission;
+        use crate::ui::info::permission_switch_id;
+        let mut app = app();
+        let ctx = egui::Context::default();
+        app.attach(&ctx);
+        app.backend.record_demo_commands();
+        apply_flags(&mut app, Some("group-permissions"));
+        render(&mut app, &ctx);
+        for permission in Permission::ALL {
+            assert!(
+                ctx.data(|data| data.get_temp::<egui::Rect>(permission_switch_id(permission)))
+                    .is_some(),
+                "{permission:?} is drawn"
+            );
+        }
+        let pos = ctx
+            .data(|data| {
+                data.get_temp::<egui::Rect>(permission_switch_id(Permission::SendMessages))
+            })
+            .unwrap()
+            .center();
+        let press = |pressed| egui::Event::PointerButton {
+            pos,
+            button: egui::PointerButton::Primary,
+            pressed,
+            modifiers: egui::Modifiers::NONE,
+        };
+        frame_with(
+            &mut app,
+            &ctx,
+            vec![egui::Event::PointerMoved(pos), press(true)],
+        );
+        frame_with(&mut app, &ctx, vec![press(false)]);
+        render(&mut app, &ctx);
+        let sent = app.backend.take_demo_commands();
+        assert!(
+            sent.iter().any(|command| matches!(
+                command,
+                Command::SetGroupPermission {
+                    chat,
+                    permission: Permission::SendMessages,
+                    members: false,
+                } if chat == FAMILY
+            )),
+            "only admins may send now: {sent:?}"
+        );
+        assert_eq!(
+            Permission::SendMessages.value(app.chat(FAMILY).unwrap()),
+            Some(true),
+            "nothing changes before WhatsApp accepts it"
+        );
+    }
+
+    /// Add members offers only people outside the group, and Add sends the
+    /// picked ones.
+    #[test]
+    fn add_members_offers_outsiders_and_sends_the_picked() {
+        use crate::backend::Command;
+        use crate::ui::new_group::member_row_id;
+        let mut app = app();
+        let ctx = egui::Context::default();
+        app.attach(&ctx);
+        app.backend.record_demo_commands();
+        apply_flags(&mut app, Some("group-add-members"));
+        render(&mut app, &ctx);
+        let drawn = |id: &str| {
+            ctx.data(|data| data.get_temp::<egui::Rect>(member_row_id(id)))
+                .is_some()
+        };
+        assert!(drawn(DOROTHY), "someone outside the group");
+        assert!(!drawn(JONAS), "a member is not offered");
+        app.actions.push(crate::model::Action::AddGroupMembers);
+        render(&mut app, &ctx);
+        assert!(app.backend.take_demo_commands().iter().any(|command| matches!(
+            command,
+            Command::AddGroupMembers { chat, members } if chat == FAMILY && members == &[DOROTHY.to_owned()]
+        )));
+        assert!(app.new_group.as_ref().is_some_and(|draft| draft.creating));
+    }
+
+    /// The member menu offers what the member may be made: Mira is an admin,
+    /// Jonas is not. Remove asks first.
+    #[test]
+    fn the_member_menu_follows_each_members_role() {
+        use crate::group_admin::{MemberChange, member_changes};
+        fn texts(shape: &egui::Shape, out: &mut Vec<String>) {
+            match shape {
+                egui::Shape::Text(text) => out.push(text.galley.text().to_owned()),
+                egui::Shape::Vec(shapes) => shapes.iter().for_each(|shape| texts(shape, out)),
+                _ => {}
+            }
+        }
+        let mut app = app();
+        apply_flags(&mut app, Some("group-admin-menu"));
+        let chat = app.chat(FAMILY).unwrap().clone();
+        let mira = "491702222222@s.whatsapp.net";
+        assert_eq!(
+            member_changes(&chat, JONAS, &[ME]),
+            [MemberChange::Promote, MemberChange::Remove]
+        );
+        assert_eq!(
+            member_changes(&chat, mira, &[ME]),
+            [MemberChange::Demote, MemberChange::Remove]
+        );
+        let ctx = egui::Context::default();
+        app.attach(&ctx);
+        let shapes = (0..3)
+            .map(|_| frame_sized(&mut app, &ctx, 780.0, Vec::new()))
+            .last()
+            .unwrap();
+        let mut drawn = Vec::new();
+        for clipped in &shapes {
+            texts(&clipped.shape, &mut drawn);
+        }
+        for label in ["Make group admin", "Remove from group", "Group admin"] {
+            assert!(drawn.iter().any(|text| text == label), "{label}: {drawn:?}");
+        }
+    }
+
+    /// The timer line says what WhatsApp says: a duration for a chat with one,
+    /// "Off" for a chat the phone turned it off for, and nothing at all for a
+    /// chat nobody has mentioned a timer for, which includes a frame where the
+    /// row was drawn a moment ago and the chat changed under it.
+    #[test]
+    fn chat_info_says_the_timer_and_hides_what_it_does_not_know() {
+        use crate::ui::dialogs::disappearing_timer_id;
+        for (page, expected) in [
+            (
+                "disappearing,group-info",
+                Some("Disappearing messages: 24 hours"),
+            ),
+            (
+                "disappearing-direct,info",
+                Some("Disappearing messages: 7 days"),
+            ),
+            ("disappearing-off,info", Some("Disappearing messages: Off")),
+            ("group-info", None),
+            ("info", None),
+        ] {
+            let mut app = app();
+            let ctx = egui::Context::default();
+            app.attach(&ctx);
+            apply_flags(&mut app, Some(page));
+            render(&mut app, &ctx);
+            let drawn = ctx
+                .data(|data| {
+                    data.get_temp::<Option<crate::ui::dialogs::TimerRow>>(disappearing_timer_id())
+                })
+                .flatten();
+            assert_eq!(
+                drawn.as_ref().map(|row| row.text.as_str()),
+                expected,
+                "{page}: the timer row"
+            );
+            let Some(row) = drawn else { continue };
+            // The row stays inside the dialog, whatever a translation measures.
+            let width = ctx.content_rect().width();
+            assert!(
+                row.rect.width() <= width,
+                "{page}: {} wider than the window",
+                row.rect.width()
+            );
+            assert!(row.rect.height() > 0.0, "{page}: drawn with no height");
+        }
+    }
+
+    /// A chat whose timer is not known draws no row, even in the same context
+    /// that just drew one: the marker records each frame, so the last frame's
+    /// row cannot be read back as this frame's.
+    #[test]
+    fn the_timer_row_does_not_outlive_its_chat() {
+        use crate::ui::dialogs::disappearing_timer_id;
+        let mut app = app();
+        let ctx = egui::Context::default();
+        app.attach(&ctx);
+        apply_flags(&mut app, Some("disappearing-off,info"));
+        render(&mut app, &ctx);
+        let drawn = |ctx: &egui::Context| {
+            ctx.data(|data| {
+                data.get_temp::<Option<crate::ui::dialogs::TimerRow>>(disappearing_timer_id())
+            })
+            .flatten()
+        };
+        assert_eq!(
+            drawn(&ctx).map(|row| row.text),
+            Some("Disappearing messages: Off".to_owned())
+        );
+
+        // The same panel, now a chat whose timer nobody has mentioned.
+        app.open_chat = Some(SAMPLES[3].id.to_owned());
+        info_sample(&mut app, SAMPLES[3].id, InfoView::Overview);
+        render(&mut app, &ctx);
+
+        assert!(
+            drawn(&ctx).is_none(),
+            "the previous chat's row is still marked"
+        );
+    }
+
+    #[test]
+    fn group_description_is_shown_in_group_info() {
+        let mut app = app();
+        apply_flags(&mut app, Some("group-info"));
+        let ctx = egui::Context::default();
+        app.attach(&ctx);
+        let mut shapes = Vec::new();
+        for _ in 0..3 {
+            shapes = frame_sized(&mut app, &ctx, 800.0, Vec::new());
+        }
+        fn has_heading(shape: &egui::Shape) -> bool {
+            match shape {
+                egui::Shape::Text(text) => text.galley.text() == "Description",
+                egui::Shape::Vec(shapes) => shapes.iter().any(has_heading),
+                _ => false,
+            }
+        }
+        assert!(shapes.iter().any(|shape| has_heading(&shape.shape)));
+    }
+
+    #[test]
+    fn group_description_layout_handles_absent_and_long_text_in_both_themes() {
+        fn description_shape(shape: &egui::Shape) -> Option<&egui::epaint::TextShape> {
+            match shape {
+                egui::Shape::Text(text)
+                    if text.galley.text().starts_with("Description fixture") =>
+                {
+                    Some(text)
+                }
+                egui::Shape::Vec(shapes) => shapes.iter().find_map(description_shape),
+                _ => None,
+            }
+        }
+        fn has_heading(shape: &egui::Shape) -> bool {
+            match shape {
+                egui::Shape::Text(text) => text.galley.text() == "Description",
+                egui::Shape::Vec(shapes) => shapes.iter().any(has_heading),
+                _ => false,
+            }
+        }
+        let long = (0..40)
+            .map(|line| format!("Description fixture line {line} 🦀"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        for page in ["group-info", "group-info,light"] {
+            for (width, height) in [(1280.0, 800.0), (900.0, 600.0)] {
+                for description in [
+                    None,
+                    Some(""),
+                    Some("Description fixture first 🦀\nSecond line\nThird line"),
+                    Some(long.as_str()),
+                ] {
+                    let mut app = app();
+                    apply_flags(&mut app, Some(page));
+                    app.chats
+                        .iter_mut()
+                        .find(|chat| chat.id == SAMPLES[1].id)
+                        .unwrap()
+                        .group_description = description.map(str::to_owned);
+                    let ctx = egui::Context::default();
+                    app.attach(&ctx);
+                    let mut shapes = Vec::new();
+                    for _ in 0..3 {
+                        let mut output = ctx.run_ui(
+                            egui::RawInput {
+                                screen_rect: Some(egui::Rect::from_min_size(
+                                    egui::Pos2::ZERO,
+                                    egui::vec2(width, height),
+                                )),
+                                ..Default::default()
+                            },
+                            |ui| {
+                                app.background_frame(ui.ctx());
+                                app.frame_ui(ui);
+                            },
+                        );
+                        shapes = std::mem::take(&mut output.shapes);
+                        output.textures_delta.clear();
+                    }
+                    assert_eq!(
+                        shapes.iter().any(|shape| has_heading(&shape.shape)),
+                        description.is_some_and(|text| !text.is_empty()),
+                        "{page}, {width}x{height}"
+                    );
+                    if description.is_some_and(|text| !text.is_empty()) {
+                        fn footer(shape: &egui::Shape) -> Option<&egui::epaint::TextShape> {
+                            match shape {
+                                egui::Shape::Text(text) if text.galley.text() == "Archive" => {
+                                    Some(text)
+                                }
+                                egui::Shape::Vec(shapes) => shapes.iter().find_map(footer),
+                                _ => None,
+                            }
+                        }
+                        let footer = shapes
+                            .iter()
+                            .find_map(|shape| footer(&shape.shape))
+                            .expect("the panel actions are drawn");
+                        assert!(
+                            footer.pos.y >= 0.0
+                                && footer.pos.y + footer.galley.rect.max.y <= height,
+                            "the panel actions stay on screen: {page}, {width}x{height}"
+                        );
+                        let (clipped, text) = shapes
+                            .iter()
+                            .find_map(|clipped| {
+                                description_shape(&clipped.shape).map(|text| (clipped, text))
+                            })
+                            .expect("the description is drawn");
+                        if description == Some(long.as_str()) {
+                            assert!(
+                                text.galley.text().contains("line 39"),
+                                "all lines remain available to scroll"
+                            );
+                            assert!(text.galley.rows.len() >= 40);
+                        }
+                        assert!(
+                            clipped.clip_rect.height() <= 121.0,
+                            "description scroll area stays bounded"
+                        );
+                        assert!(
+                            clipped.clip_rect.min.y >= 0.0 && clipped.clip_rect.max.y <= height
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn group_description_can_be_selected_and_copied_with_line_breaks_and_emoji() {
+        let mut app = app();
+        apply_flags(&mut app, Some("group-info"));
+        let description = "Description fixture 🦀\nSecond line";
+        app.chats
+            .iter_mut()
+            .find(|chat| chat.id == SAMPLES[1].id)
+            .unwrap()
+            .group_description = Some(description.into());
+        let ctx = egui::Context::default();
+        app.attach(&ctx);
+        let draw = |app: &mut App, events| {
+            let mut output = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(1280.0, 800.0),
+                    )),
+                    events,
+                    ..Default::default()
+                },
+                |ui| {
+                    app.background_frame(ui.ctx());
+                    app.frame_ui(ui);
+                },
+            );
+            output.textures_delta.clear();
+            output
+        };
+        let mut output = draw(&mut app, Vec::new());
+        for _ in 0..2 {
+            output = draw(&mut app, Vec::new());
+        }
+        fn find(shape: &egui::Shape) -> Option<&egui::epaint::TextShape> {
+            match shape {
+                egui::Shape::Text(text)
+                    if text.galley.text().starts_with("Description fixture") =>
+                {
+                    Some(text)
+                }
+                egui::Shape::Vec(shapes) => shapes.iter().find_map(find),
+                _ => None,
+            }
+        }
+        let text = output
+            .shapes
+            .iter()
+            .find_map(|shape| find(&shape.shape))
+            .expect("description label");
+        let start = text.pos
+            + text
+                .galley
+                .rows
+                .first()
+                .unwrap()
+                .rect()
+                .left_center()
+                .to_vec2()
+            + egui::vec2(1.0, 0.0);
+        let end = text.pos
+            + text
+                .galley
+                .rows
+                .last()
+                .unwrap()
+                .rect()
+                .right_center()
+                .to_vec2()
+            + egui::vec2(4.0, 0.0);
+        let button = |pos, pressed| egui::Event::PointerButton {
+            pos,
+            button: egui::PointerButton::Primary,
+            pressed,
+            modifiers: egui::Modifiers::NONE,
+        };
+        draw(
+            &mut app,
+            vec![egui::Event::PointerMoved(start), button(start, true)],
+        );
+        draw(&mut app, vec![egui::Event::PointerMoved(end)]);
+        draw(&mut app, vec![button(end, false)]);
+        let copied = draw(&mut app, vec![egui::Event::Copy]);
+        assert!(copied.platform_output.commands.iter().any(
+            |command| matches!(command, egui::OutputCommand::CopyText(text) if text == description)
+        ));
+    }
+
     /// The pencil opens the name editor; Enter renames the group on WhatsApp,
     /// an unchanged name sends nothing, and Escape cancels without closing the
     /// dialog. The photo opens its menu.
     #[test]
     fn a_group_is_renamed_from_its_info_dialog() {
         use crate::backend::Command;
-        use crate::ui::dialogs::{group_name_button_id, group_photo_id};
+        use crate::ui::info::{group_name_button_id, group_photo_id};
         let mut app = app();
         let ctx = egui::Context::default();
         app.attach(&ctx);
@@ -4664,10 +8128,7 @@ mod tests {
         );
         render(&mut app, &ctx);
         assert!(app.group_name_edit.is_none(), "Escape cancels the rename");
-        assert!(
-            matches!(app.dialog, Some(Dialog::ChatInfo(_))),
-            "and keeps the dialog"
-        );
+        assert!(app.info.is_some(), "and keeps the panel");
 
         click(&mut app, group_photo_id());
         assert!(egui::Popup::is_any_open(&ctx), "the photo opens its menu");
@@ -4742,6 +8203,59 @@ mod tests {
                 "choosing {option}x from the menu reaches App and settings"
             );
         }
+    }
+
+    /// In a chat with its own speed, the chip and the message menu change
+    /// that chat's speed and leave the one in Settings alone.
+    #[test]
+    fn a_chat_with_its_own_speed_changes_only_its_own() {
+        let mut app = app();
+        let ctx = egui::Context::default();
+        app.attach(&ctx);
+        app.settings.voice_speed = 2.0;
+        let chat = sample_ids()[0].to_owned();
+        app.chat_mut(&chat).unwrap().voice_speed = Some(1.0);
+        let mut clip = media("audio/ogg; codecs=opus", 12_000, None, None);
+        clip.path = Some(std::path::PathBuf::from("demo/voice.ogg"));
+        app.conversations.get_mut(&chat).unwrap().messages = vec![message(
+            &chat,
+            "voice-speed",
+            false,
+            100,
+            Content::Audio {
+                media: clip,
+                seconds: Some(5),
+                voice_note: true,
+                waveform: demo_waveform(),
+            },
+        )];
+        render(&mut app, &ctx);
+        let click = |app: &mut App, id: egui::Id, button: egui::PointerButton| {
+            let pos = ctx
+                .data(|data| data.get_temp::<egui::Rect>(id))
+                .expect("the speed control is on screen")
+                .center();
+            let press = |pressed| egui::Event::PointerButton {
+                pos,
+                button,
+                pressed,
+                modifiers: egui::Modifiers::NONE,
+            };
+            frame_with(app, &ctx, vec![egui::Event::PointerMoved(pos), press(true)]);
+            frame_with(app, &ctx, vec![press(false)]);
+            frame_with(app, &ctx, Vec::new());
+        };
+        // The chip starts from the chat's 1x, not the 2x in Settings.
+        let chip = crate::ui::conversation::speed_chip_id(&chat, "voice-speed");
+        click(&mut app, chip, egui::PointerButton::Primary);
+        assert_eq!(app.chat(&chat).unwrap().voice_speed, Some(1.5));
+        assert_eq!(app.player.speed(), 1.5);
+        assert_eq!(app.settings.voice_speed, 2.0);
+        click(&mut app, chip, egui::PointerButton::Secondary);
+        let choice = crate::ui::conversation::speed_button_id(&chat, "voice-speed", 1.25);
+        click(&mut app, choice, egui::PointerButton::Primary);
+        assert_eq!(app.chat(&chat).unwrap().voice_speed, Some(1.25));
+        assert_eq!(app.settings.voice_speed, 2.0);
     }
 
     /// A refused voice message waits above its own chat's composer, where
@@ -4848,6 +8362,55 @@ mod tests {
     }
 
     #[test]
+    fn shift_insert_pastes_the_clipboard_text() {
+        let mut app = app();
+        let ctx = egui::Context::default();
+        app.attach(&ctx);
+        app.focus_composer = true;
+        render(&mut app, &ctx);
+        // The fixture keeps the test away from the system clipboard.
+        ctx.data_mut(|data| {
+            data.insert_temp(
+                egui::Id::new("fixture-clipboard-text"),
+                "ñandú ✓".to_owned(),
+            );
+        });
+        frame_with(
+            &mut app,
+            &ctx,
+            vec![key(egui::Key::Insert, egui::Modifiers::SHIFT)],
+        );
+        assert_eq!(app.composer, "ñandú ✓");
+        frame_with(
+            &mut app,
+            &ctx,
+            vec![key(egui::Key::Insert, egui::Modifiers::NONE)],
+        );
+        assert_eq!(app.composer, "ñandú ✓", "Insert alone inserts nothing");
+    }
+
+    #[test]
+    fn shift_insert_paste_keeps_its_place_among_the_frame_events() {
+        let mut app = app();
+        let ctx = egui::Context::default();
+        app.attach(&ctx);
+        app.focus_composer = true;
+        render(&mut app, &ctx);
+        ctx.data_mut(|data| {
+            data.insert_temp(egui::Id::new("fixture-clipboard-text"), "ab".to_owned());
+        });
+        frame_with(
+            &mut app,
+            &ctx,
+            vec![
+                key(egui::Key::Insert, egui::Modifiers::SHIFT),
+                egui::Event::Text("!".into()),
+            ],
+        );
+        assert_eq!(app.composer, "ab!", "the paste comes before later text");
+    }
+
+    #[test]
     fn clicking_empty_conversation_space_returns_focus_to_the_composer() {
         let mut app = app();
         let ctx = egui::Context::default();
@@ -4930,6 +8493,710 @@ mod tests {
         assert!(ctx.memory(|memory| memory.has_focus(composer)));
     }
 
+    /// Our time or ticks open "Message info"; an incoming time opens nothing.
+    #[test]
+    fn clicking_the_time_or_ticks_opens_message_info() {
+        // A fresh app per click: a dialog just closed still covers the next frame.
+        fn click_footer(from_me: bool, inset: f32) -> (String, String, Option<Dialog>) {
+            let mut app = app();
+            let ctx = egui::Context::default();
+            app.attach(&ctx);
+            let chat = app.open_chat.clone().expect("the demo opens a chat");
+            render(&mut app, &ctx);
+            render(&mut app, &ctx);
+            let viewport = app
+                .selection_view
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .expect("the message viewport is on screen");
+            let (id, footer) = app.conversations[&chat]
+                .messages
+                .iter()
+                .rev()
+                .filter(|message| message.from_me == from_me)
+                .filter(|message| {
+                    !from_me
+                        || matches!(
+                            message.status,
+                            Delivery::Delivered | Delivery::Read | Delivery::Played
+                        )
+                })
+                .find_map(|message| {
+                    let id = crate::ui::conversation::footer_id(&chat, &message.id);
+                    let rect = ctx.data(|data| data.get_temp::<egui::Rect>(id))?;
+                    viewport
+                        .contains_rect(rect)
+                        .then(|| (message.id.clone(), rect))
+                })
+                .expect("a message with its footer on screen");
+            let at = egui::pos2(footer.right() - inset, footer.center().y);
+            frame_with(
+                &mut app,
+                &ctx,
+                vec![
+                    egui::Event::PointerMoved(at),
+                    primary(at, true),
+                    primary(at, false),
+                ],
+            );
+            render(&mut app, &ctx);
+            (chat, id, app.dialog)
+        }
+
+        let (_, _, dialog) = click_footer(false, 7.5);
+        assert!(dialog.is_none(), "an incoming time is not a button");
+
+        for (part, inset) in [("ticks", 7.5), ("time", 25.0)] {
+            let (chat, id, dialog) = click_footer(true, inset);
+            assert!(
+                matches!(
+                    &dialog,
+                    Some(Dialog::MessageInfo { chat: shown, message }) if *shown == chat && *message == id
+                ),
+                "the {part} open that message's info: {dialog:?}"
+            );
+        }
+    }
+
+    /// Scrolling within a day keeps its date at the top of the transcript,
+    /// and the date fades away once the transcript stops moving.
+    #[test]
+    fn scrolling_inside_a_day_keeps_its_date_visible() {
+        fn shapes_at(
+            app: &mut App,
+            ctx: &egui::Context,
+            time: f64,
+        ) -> Vec<egui::epaint::ClippedShape> {
+            let mut output = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(1180.0, 780.0),
+                    )),
+                    time: Some(time),
+                    ..Default::default()
+                },
+                |ui| {
+                    let ctx = ui.ctx().clone();
+                    app.background_frame(&ctx);
+                    app.frame_ui(ui);
+                },
+            );
+            output.textures_delta.clear();
+            output.shapes
+        }
+        fn date_on_top(shapes: &[egui::epaint::ClippedShape], label: &str) -> bool {
+            shapes.iter().any(|shape| {
+                matches!(&shape.shape,
+                egui::Shape::Text(text) if text.galley.text() == label
+                    && text.pos.y >= shape.clip_rect.top()
+                    && text.pos.y < shape.clip_rect.top() + 40.0)
+            })
+        }
+        let mut app = app();
+        let ctx = egui::Context::default();
+        app.attach(&ctx);
+        let chat = app.open_chat.clone().unwrap();
+        let conversation = app.conversations.get_mut(&chat).unwrap();
+        let template = conversation.messages.last().unwrap().clone();
+        conversation.messages = (0..120)
+            .map(|index| {
+                let mut row = template.clone();
+                row.id = format!("date-fixture-{index}");
+                row.timestamp = 1_700_000_000 + (index / 60) * 86_400 + (index % 60) * 60;
+                row.content = Content::text(format!("History row {index}"));
+                row
+            })
+            .collect();
+        conversation.complete = true;
+        for index in [90, 30] {
+            app.actions.push(crate::model::Action::OpenMessage {
+                chat: chat.clone(),
+                message: format!("date-fixture-{index}"),
+            });
+            render(&mut app, &ctx);
+            render(&mut app, &ctx);
+            // Jumping to a message is not scrolling; turning the wheel is.
+            let label = crate::util::day_label(
+                app.locale,
+                app.conversations[&chat].messages[index].timestamp,
+            );
+            let still = ctx.input(|input| input.time) + 2.0;
+            assert!(!date_on_top(&shapes_at(&mut app, &ctx, still), &label));
+            frame_with(
+                &mut app,
+                &ctx,
+                vec![
+                    egui::Event::PointerMoved(egui::pos2(800.0, 400.0)),
+                    egui::Event::MouseWheel {
+                        unit: egui::MouseWheelUnit::Point,
+                        delta: egui::vec2(0.0, 60.0),
+                        modifiers: egui::Modifiers::NONE,
+                        phase: egui::TouchPhase::Move,
+                    },
+                ],
+            );
+            render(&mut app, &ctx);
+            let shapes = frame_sized(&mut app, &ctx, 780.0, Vec::new());
+            assert!(
+                date_on_top(&shapes, &label),
+                "the date remains at the top when its separator is off screen: {label}"
+            );
+            let now = ctx.input(|input| input.time);
+            assert!(
+                date_on_top(&shapes_at(&mut app, &ctx, now + 0.5), &label),
+                "the date stays a moment after scrolling stops"
+            );
+            // The wheel's easing may still move the view on the frames above.
+            shapes_at(&mut app, &ctx, now + 1.1);
+            shapes_at(&mut app, &ctx, now + 2.2);
+            assert!(
+                !date_on_top(&shapes_at(&mut app, &ctx, now + 3.0), &label),
+                "the date fades once the transcript has been still"
+            );
+        }
+    }
+
+    #[test]
+    fn the_send_shortcut_submits_newly_staged_images_and_files_before_message_controls() {
+        for image in [false, true] {
+            for enter_sends in [false, true] {
+                let mut app = app();
+                app.settings.enter_sends = enter_sends;
+                app.backend.record_demo_commands();
+                let ctx = egui::Context::default();
+                app.attach(&ctx);
+                render(&mut app, &ctx);
+                app.backend.take_demo_commands();
+                ctx.memory_mut(|memory| memory.request_focus(egui::Id::new("fixture-message")));
+                if image {
+                    ctx.data_mut(|data| {
+                        data.insert_temp(
+                            egui::Id::new("fixture-clipboard-image"),
+                            (2_usize, 2_usize, vec![200_u8; 16]),
+                        )
+                    });
+                } else {
+                    let (photo, _) = sample_files(&app);
+                    ctx.data_mut(|data| {
+                        data.insert_temp(egui::Id::new("fixture-clipboard-files"), vec![photo])
+                    });
+                }
+                let modifiers = if enter_sends {
+                    egui::Modifiers::NONE
+                } else {
+                    egui::Modifiers::COMMAND
+                };
+                app.actions
+                    .push(crate::model::Action::Open(crate::model::Page::Settings));
+                // Bypass background_frame and stage through the real clipboard path.
+                let mut output = ctx.run_ui(
+                    egui::RawInput {
+                        screen_rect: Some(egui::Rect::from_min_size(
+                            egui::Pos2::ZERO,
+                            egui::vec2(1180.0, 780.0),
+                        )),
+                        events: vec![
+                            egui::Event::ModifiersChanged(egui::Modifiers::COMMAND),
+                            egui::Event::Key {
+                                key: egui::Key::V,
+                                physical_key: None,
+                                pressed: false,
+                                repeat: false,
+                                modifiers: egui::Modifiers::COMMAND,
+                            },
+                            key(egui::Key::Enter, modifiers),
+                        ],
+                        ..Default::default()
+                    },
+                    |ui| app.frame_ui(ui),
+                );
+                output.textures_delta.clear();
+                let commands = app.backend.take_demo_commands();
+                assert!(
+                    commands.iter().any(|command| matches!(
+                        command,
+                        crate::backend::Command::SendImage { .. }
+                            | crate::backend::Command::SendFiles { .. }
+                    )),
+                    "image={image}, enter_sends={enter_sends}"
+                );
+                assert!(app.pending.is_empty());
+                assert!(app.image_preview.is_none());
+            }
+        }
+    }
+
+    /// New contact with a blank name messages a formatted number without
+    /// saving it, and refuses a number that formatting cannot explain.
+    #[test]
+    fn new_contact_messages_a_formatted_number_left_unnamed() {
+        let mut app = app();
+        app.backend.record_demo_commands();
+        let ctx = egui::Context::default();
+        app.attach(&ctx);
+        app.actions
+            .push(crate::model::Action::ShowDialog(Dialog::NewContact));
+        render(&mut app, &ctx);
+        app.backend.take_demo_commands();
+        let submit = |app: &mut App, phone: &str| {
+            app.new_contact_phone = phone.into();
+            ctx.memory_mut(|memory| memory.request_focus(egui::Id::new("new-contact-phone")));
+            render(app, &ctx);
+            frame_with(
+                app,
+                &ctx,
+                vec![key(egui::Key::Enter, egui::Modifiers::NONE)],
+            );
+            app.backend.take_demo_commands()
+        };
+        for refused in ["123", "+1 555 123 4567 ext. 89", "+1 (555 123-4567"] {
+            assert!(
+                !submit(&mut app, refused)
+                    .iter()
+                    .any(|command| matches!(command, crate::backend::Command::NewContact { .. })),
+                "{refused}"
+            );
+        }
+        assert!(
+            submit(&mut app, "+1 (555) 123-4567")
+                .iter()
+                .any(|command| matches!(command,
+            crate::backend::Command::NewContact { phone, full_name, first_name, .. }
+                if phone == "15551234567" && full_name.is_none() && first_name.is_none()))
+        );
+        assert!(app.new_contact_pending);
+    }
+
+    /// Checks that navigation to an individual album member scrolls its grouped row into view.
+    #[test]
+    fn a_jump_to_an_album_member_reaches_the_group_and_finishes() {
+        let mut app = app();
+        media_album_sample(&mut app, true);
+        let chat = app.open_chat.clone().unwrap();
+        let conversation = app.conversations.get_mut(&chat).unwrap();
+        let album = std::mem::take(&mut conversation.messages);
+        let at = album[0].timestamp;
+        let rows = |after: bool| {
+            let chat = &chat;
+            (0..80).map(move |index| {
+                message(
+                    chat,
+                    &format!("album-context-{after}-{index}"),
+                    false,
+                    at + if after { 100 + index } else { -100 + index },
+                    Content::text(format!("Surrounding history {index}")),
+                )
+            })
+        };
+        conversation.messages = rows(false).chain(album).chain(rows(true)).collect();
+        conversation.complete = true;
+        let ctx = egui::Context::default();
+        app.attach(&ctx);
+        render(&mut app, &ctx);
+        app.actions.push(crate::model::Action::OpenMessage {
+            chat,
+            message: "album-2".into(),
+        });
+        render(&mut app, &ctx);
+        render(&mut app, &ctx);
+        assert!(
+            app.scroll_anchor.is_none(),
+            "a member jump resolves at its album row"
+        );
+        let shapes = frame_sized(&mut app, &ctx, 780.0, Vec::new());
+        assert!(
+            shapes
+                .iter()
+                .any(|shape| matches!(&shape.shape, egui::Shape::Text(text)
+            if text.galley.text().contains("Weekend references")
+                && shape.clip_rect.contains(text.pos + egui::vec2(1.0, 1.0))))
+        );
+    }
+
+    /// A right-click on one album tile opens the menu for that member, so
+    /// Reply quotes the picture under the pointer rather than the first.
+    #[test]
+    fn the_menu_of_an_album_tile_acts_on_that_member() {
+        let mut app = app();
+        media_album_sample(&mut app, true);
+        let chat = app.open_chat.clone().unwrap();
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        app.attach(&ctx);
+        render(&mut app, &ctx);
+        render(&mut app, &ctx);
+        let tile = ctx
+            .data(|data| {
+                data.get_temp::<egui::Rect>(crate::ui::conversation::album_tile_id(
+                    &chat, "album-2",
+                ))
+            })
+            .expect("the third member's tile was drawn");
+        let press = |pressed| egui::Event::PointerButton {
+            pos: tile.center(),
+            button: egui::PointerButton::Secondary,
+            pressed,
+            modifiers: egui::Modifiers::NONE,
+        };
+        frame_with(
+            &mut app,
+            &ctx,
+            vec![egui::Event::PointerMoved(tile.center()), press(true)],
+        );
+        frame_with(&mut app, &ctx, vec![press(false)]);
+        let popup = crate::ui::conversation::bubble_id(&chat, "album-0").with("popup");
+        assert!(
+            egui::Popup::is_id_open(&ctx, popup),
+            "the album's menu opened"
+        );
+        let reply = accessible_nodes(&mut app, &ctx, Vec::new())
+            .into_iter()
+            .find(|(label, _, _)| label == "Reply")
+            .expect("the menu offers Reply")
+            .2;
+        for pressed in [true, false] {
+            frame_with(
+                &mut app,
+                &ctx,
+                vec![
+                    egui::Event::PointerMoved(reply),
+                    egui::Event::PointerButton {
+                        pos: reply,
+                        button: egui::PointerButton::Primary,
+                        pressed,
+                        modifiers: egui::Modifiers::NONE,
+                    },
+                ],
+            );
+        }
+        render(&mut app, &ctx);
+        assert_eq!(app.reply_to.as_deref(), Some("album-2"));
+    }
+
+    /// Our own albums lay their tiles out in reading order even though an
+    /// own bubble lays out from the right.
+    #[test]
+    fn our_album_tiles_keep_reading_order() {
+        let mut app = app();
+        media_album_sample(&mut app, true);
+        let chat = app.open_chat.clone().unwrap();
+        for row in &mut app.conversations.get_mut(&chat).unwrap().messages {
+            row.from_me = true;
+            row.status = crate::model::Delivery::Read;
+        }
+        let ctx = egui::Context::default();
+        app.attach(&ctx);
+        render(&mut app, &ctx);
+        render(&mut app, &ctx);
+        let tile = |id: &str| {
+            ctx.data(|data| {
+                data.get_temp::<egui::Rect>(crate::ui::conversation::album_tile_id(&chat, id))
+            })
+            .expect("the tile was drawn")
+        };
+        assert!(tile("album-0").left() < tile("album-1").left());
+        assert!(tile("album-2").left() < tile("album-3").left());
+        assert!(tile("album-1").bottom() <= tile("album-2").top());
+    }
+
+    /// A reaction to a later member shows under the album row, which
+    /// otherwise carried only the first member's reactions.
+    #[test]
+    fn album_rows_show_every_members_reactions() {
+        let mut app = app();
+        media_album_sample(&mut app, true);
+        let chat = app.open_chat.clone().unwrap();
+        let ctx = egui::Context::default();
+        app.attach(&ctx);
+        render(&mut app, &ctx);
+        render(&mut app, &ctx);
+        let bare = app.conversations[&chat].rows["album-0"].height;
+        app.conversations.get_mut(&chat).unwrap().messages[2]
+            .reactions
+            .push(Reaction {
+                sender: "fixture@s.whatsapp.net".into(),
+                from_me: false,
+                emoji: "👍".into(),
+            });
+        render(&mut app, &ctx);
+        render(&mut app, &ctx);
+        assert!(app.conversations[&chat].rows["album-0"].height > bare);
+    }
+
+    /// Checks that grouped album members remain independently selectable and actionable.
+    #[test]
+    fn selecting_messages_keeps_every_album_member_individually_accessible() {
+        let mut app = app();
+        media_album_sample(&mut app, true);
+        let chat = app.open_chat.clone().unwrap();
+        let ctx = egui::Context::default();
+        app.attach(&ctx);
+        render(&mut app, &ctx);
+        assert_eq!(app.conversations[&chat].rows["album-1"].height, 0.0);
+        app.selection = Some((chat.clone(), vec!["album-1".into()]));
+        render(&mut app, &ctx);
+        for index in 0..4 {
+            assert!(app.conversations[&chat].rows[&format!("album-{index}")].height > 0.0);
+        }
+    }
+
+    /// Download all is asked for, so it fetches every missing member whatever
+    /// its size, and leaves active or saved members alone.
+    #[test]
+    fn album_download_all_fetches_oversized_members_and_skips_active_or_saved_ones() {
+        use crate::model::MediaState;
+        let mut app = app();
+        media_album_sample(&mut app, true);
+        let chat = app.open_chat.clone().unwrap();
+        let (saved, _) = sample_files(&app);
+        let messages = &mut app.conversations.get_mut(&chat).unwrap().messages;
+        messages[1].content.media_at_mut(None).unwrap().size =
+            crate::model::ATTACHMENT_DOWNLOAD_LIMIT + 1;
+        messages[2].content.media_at_mut(None).unwrap().state = MediaState::Downloading;
+        messages[3].content.media_at_mut(None).unwrap().path = Some(saved.clone());
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        app.attach(&ctx);
+        render(&mut app, &ctx);
+        app.backend.record_demo_commands();
+        for first_click in [true, false] {
+            let nodes = accessible_nodes(&mut app, &ctx, Vec::new());
+            assert!(nodes.iter().any(|(label, _, _)| label == "Save all…"));
+            let Some(pos) = nodes
+                .iter()
+                .find(|(label, _, _)| label == "Download all")
+                .map(|(_, _, pos)| *pos)
+            else {
+                // Every member is downloading or saved: nothing is left to ask for.
+                assert!(!first_click, "the first frame offers Download all");
+                break;
+            };
+            for pressed in [true, false] {
+                accessible_nodes(
+                    &mut app,
+                    &ctx,
+                    vec![
+                        egui::Event::PointerMoved(pos),
+                        egui::Event::PointerButton {
+                            pos,
+                            pressed,
+                            button: egui::PointerButton::Primary,
+                            modifiers: egui::Modifiers::NONE,
+                        },
+                    ],
+                );
+            }
+            render(&mut app, &ctx);
+            let commands = app.backend.take_demo_commands();
+            let downloads: Vec<_> = commands
+                .iter()
+                .filter_map(|command| match command {
+                    crate::backend::Command::Download {
+                        message,
+                        manual: true,
+                        ..
+                    } => Some(message.as_str()),
+                    _ => None,
+                })
+                .collect();
+            assert_eq!(
+                downloads,
+                if first_click {
+                    vec!["album-0", "album-1"]
+                } else {
+                    vec![]
+                }
+            );
+            let rows = &app.conversations[&chat].messages;
+            assert!(matches!(
+                rows[1].content.media().unwrap().state,
+                MediaState::Downloading
+            ));
+            assert!(matches!(
+                rows[2].content.media().unwrap().state,
+                MediaState::Downloading
+            ));
+            assert_eq!(rows[3].content.media().unwrap().path.as_ref(), Some(&saved));
+        }
+    }
+
+    /// Album buttons expose their media kind and download state, including failures.
+    #[test]
+    fn album_tiles_name_each_download_state_for_screen_readers() {
+        for video in [false, true] {
+            let mut app = app();
+            media_album_sample(&mut app, true);
+            let chat = app.open_chat.clone().unwrap();
+            let rows = &mut app.conversations.get_mut(&chat).unwrap().messages;
+            for (index, row) in rows.iter_mut().enumerate() {
+                let mut media = row.content.media().unwrap().clone();
+                media.state = match index {
+                    1 => crate::model::MediaState::Downloading,
+                    2 => crate::model::MediaState::Failed("Synthetic download error".into()),
+                    _ => crate::model::MediaState::Idle,
+                };
+                if index == 3 {
+                    // A synthetic local path exercises the Open label without real media.
+                    media.path = Some(std::path::PathBuf::from("synthetic-album-file"));
+                }
+                row.content = if video {
+                    Content::Video {
+                        caption: None,
+                        media,
+                        seconds: Some(1),
+                        gif: false,
+                        note: false,
+                    }
+                } else {
+                    Content::Image {
+                        motion: None,
+                        caption: None,
+                        media,
+                    }
+                };
+                row.thumbnail = None;
+            }
+            let ctx = egui::Context::default();
+            ctx.enable_accesskit();
+            app.attach(&ctx);
+            render(&mut app, &ctx);
+            let nodes = accessible_nodes(&mut app, &ctx, Vec::new());
+            let kind = if video { "Video" } else { "Photo" };
+            for state in [
+                "Download",
+                "Downloading",
+                "Failed: Synthetic download error",
+                "Open",
+            ] {
+                let label = format!("{kind}, {state}");
+                assert!(
+                    nodes
+                        .iter()
+                        .any(|(name, role, _)| name == &label
+                            && *role == egui::accesskit::Role::Button),
+                    "{label}"
+                );
+            }
+        }
+    }
+
+    /// Earlier outgoing failures stay visible even when the album's final member was sent.
+    #[test]
+    fn albums_show_each_members_delivery_failure() {
+        for flags in ["media-album-failed", "media-album-failed,light"] {
+            let mut app = app();
+            apply_flags(&mut app, Some(flags));
+            let ctx = egui::Context::default();
+            ctx.enable_accesskit();
+            app.attach(&ctx);
+            render(&mut app, &ctx);
+            let shapes = frame_sized(&mut app, &ctx, 560.0, Vec::new());
+            assert!(
+                shapes
+                    .iter()
+                    .any(|shape| matches!(&shape.shape, egui::Shape::Text(text)
+                if text.galley.text() == "Not sent"))
+            );
+            let chat = app.open_chat.as_deref().unwrap();
+            assert!(ctx.data(|data| {
+                data.get_temp::<egui::Rect>(crate::ui::conversation::footer_id(chat, "album-1"))
+                    .is_some()
+            }));
+            let nodes = accessible_nodes(&mut app, &ctx, Vec::new());
+            assert!(
+                nodes
+                    .iter()
+                    .any(|(label, _, _)| label.contains("will not retry it"))
+            );
+        }
+    }
+
+    /// Quotes on later album members remain visible alongside partial-download actions.
+    #[test]
+    fn partially_downloaded_albums_keep_member_quotes() {
+        let mut app = app();
+        apply_flags(&mut app, Some("media-album-partial"));
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        app.attach(&ctx);
+        render(&mut app, &ctx);
+        let nodes = accessible_nodes(&mut app, &ctx, Vec::new());
+        assert!(nodes.iter().any(|(label, _, _)| label == "Save all…"));
+        assert!(nodes.iter().any(|(label, _, _)| label == "Download all"));
+        let shapes = frame_sized(&mut app, &ctx, 780.0, Vec::new());
+        assert!(
+            shapes
+                .iter()
+                .any(|shape| matches!(&shape.shape, egui::Shape::Text(text)
+            if text.galley.text().contains("A reference for the album")))
+        );
+    }
+
+    /// Both local-date dividers and both grouped rows survive an album spanning midnight.
+    #[test]
+    fn albums_crossing_midnight_keep_both_date_dividers() {
+        for light in [false, true] {
+            let mut app = app();
+            apply_flags(
+                &mut app,
+                Some(if light {
+                    "media-album-midnight,light"
+                } else {
+                    "media-album-midnight"
+                }),
+            );
+            let chat = app.open_chat.clone().unwrap();
+            let messages = &app.conversations[&chat].messages;
+            let expected = [messages[0].timestamp, messages[2].timestamp]
+                .map(|timestamp| crate::util::day_label(app.locale, timestamp));
+            let ctx = egui::Context::default();
+            app.attach(&ctx);
+            render(&mut app, &ctx);
+            let mut output = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(1180.0, 780.0),
+                    )),
+                    ..Default::default()
+                },
+                |ui| {
+                    let ctx = ui.ctx().clone();
+                    app.background_frame(&ctx);
+                    app.frame_ui(ui);
+                },
+            );
+            output.textures_delta.clear();
+            let mut labels = std::collections::HashSet::new();
+            /// Collects painted labels, including date chips drawn directly by the painter.
+            fn visit(shape: &egui::epaint::Shape, labels: &mut std::collections::HashSet<String>) {
+                match shape {
+                    egui::epaint::Shape::Vec(shapes) => {
+                        for shape in shapes {
+                            visit(shape, labels);
+                        }
+                    }
+                    egui::epaint::Shape::Text(text) => {
+                        labels.insert(text.galley.job.text.clone());
+                    }
+                    _ => {}
+                }
+            }
+            for shape in &output.shapes {
+                visit(&shape.shape, &mut labels);
+            }
+            for date in expected {
+                assert!(labels.contains(&date), "missing {date}: {labels:?}");
+            }
+            let rows = &app.conversations[&chat].rows;
+            assert!(rows["album-0"].height > 0.0);
+            assert_eq!(rows["album-1"].height, 0.0);
+            assert!(rows["album-2"].height > 0.0);
+            assert_eq!(rows["album-3"].height, 0.0);
+        }
+    }
+
     /// The composer keeps its draft while the preview is open: Enter does not
     /// send it, and Tab and Enter reach the preview's own controls instead.
     #[test]
@@ -4943,7 +9210,12 @@ mod tests {
         assert_eq!(app.composer, "draft");
 
         let (photo, _) = sample_files(&app);
-        app.actions.push(crate::model::Action::PreviewImage(photo));
+        app.actions.push(crate::model::Action::PreviewImage {
+            card: None,
+            path: photo,
+            chat: crate::demo::SAMPLES[0].id.to_owned(),
+            message: "ada-photo".to_owned(),
+        });
         // Enter in the very frame the preview opens, before egui knows about
         // the modal layer.
         frame_with(
@@ -4976,6 +9248,237 @@ mod tests {
         render(&mut app, &ctx);
         assert!(app.image_preview.is_none(), "Enter activates Close");
         assert_eq!(app.composer, "draft");
+    }
+
+    #[test]
+    fn preview_arrows_browse_photos_without_touching_the_draft() {
+        let mut app = app();
+        let ctx = egui::Context::default();
+        app.attach(&ctx);
+        apply_flags(&mut app, Some("preview"));
+        app.composer = "unsent draft".into();
+        render(&mut app, &ctx);
+        let initial = app
+            .image_preview
+            .as_ref()
+            .unwrap()
+            .path()
+            .map(std::path::Path::to_owned);
+        frame_with(
+            &mut app,
+            &ctx,
+            vec![key(egui::Key::ArrowRight, egui::Modifiers::NONE)],
+        );
+        assert_ne!(
+            app.image_preview
+                .as_ref()
+                .unwrap()
+                .path()
+                .map(std::path::Path::to_owned),
+            initial
+        );
+        frame_with(
+            &mut app,
+            &ctx,
+            vec![key(egui::Key::ArrowLeft, egui::Modifiers::NONE)],
+        );
+        assert_eq!(
+            app.image_preview
+                .as_ref()
+                .unwrap()
+                .path()
+                .map(std::path::Path::to_owned),
+            initial
+        );
+        frame_with(
+            &mut app,
+            &ctx,
+            vec![key(egui::Key::Escape, egui::Modifiers::NONE)],
+        );
+        assert!(app.image_preview.is_none());
+        assert_eq!(app.composer, "unsent draft");
+    }
+
+    /// A sticker shown large offers the favorite toggle that matches its
+    /// state, and a click on the sticker itself closes it.
+    #[test]
+    fn a_large_sticker_toggles_its_favorite_and_closes_on_click() {
+        let mut app = app();
+        let ctx = egui::Context::default();
+        app.attach(&ctx);
+        apply_flags(&mut app, Some("sticker-view"));
+        app.backend.record_demo_commands();
+        render(&mut app, &ctx);
+        let received = app.sticker_view.as_ref().expect("open").path().to_owned();
+        let click = |app: &mut App, pos: egui::Pos2| {
+            let press = |pressed| egui::Event::PointerButton {
+                pos,
+                pressed,
+                button: egui::PointerButton::Primary,
+                modifiers: egui::Modifiers::NONE,
+            };
+            frame_with(app, &ctx, vec![egui::Event::PointerMoved(pos), press(true)]);
+            frame_with(app, &ctx, vec![press(false)]);
+            render(app, &ctx);
+        };
+        let button = || {
+            ctx.data(|data| {
+                data.get_temp::<egui::Rect>(crate::ui::image_preview::sticker_favorite_id())
+            })
+            .expect("the favorite button is drawn")
+        };
+
+        click(&mut app, button().center());
+        let commands = app.backend.take_demo_commands();
+        assert!(
+            commands.iter().any(
+                |command| matches!(command, crate::backend::Command::SaveSticker { path } if *path == received)
+            ),
+            "{commands:?}"
+        );
+
+        // Once the favorite copy arrives, the same button removes it.
+        let copy = app.dirs.media_cache_dir().join(format!(
+            "{}.webp",
+            crate::backend::sticker_store::content_hash(&std::fs::read(&received).unwrap())
+        ));
+        app.stickers_saved.push(copy.clone());
+        render(&mut app, &ctx);
+        click(&mut app, button().center());
+        let commands = app.backend.take_demo_commands();
+        assert!(
+            commands.iter().any(
+                |command| matches!(command, crate::backend::Command::ForgetSticker { path } if *path == copy)
+            ),
+            "{commands:?}"
+        );
+        assert!(app.sticker_view.is_some(), "the buttons leave it open");
+
+        let above = button().center_top() - egui::vec2(0.0, 120.0);
+        click(&mut app, above);
+        assert!(
+            app.sticker_view.is_none(),
+            "a click on the sticker closes it"
+        );
+    }
+
+    /// The viewer steps through an animated sticker's frames on its own.
+    #[test]
+    fn an_animated_sticker_plays_in_the_viewer() {
+        let mut app = app();
+        let ctx = egui::Context::default();
+        app.attach(&ctx);
+        animated_sticker_sample(&mut app);
+        app.picker = None;
+        let path = app.stickers[0].clone();
+        render(&mut app, &ctx);
+        app.actions
+            .push(crate::model::Action::PreviewSticker(path.clone()));
+        let drawn = |app: &mut App| {
+            let mut output = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(1180.0, 780.0),
+                    )),
+                    ..Default::default()
+                },
+                |ui| {
+                    let ctx = ui.ctx().clone();
+                    app.background_frame(&ctx);
+                    app.frame_ui(ui);
+                },
+            );
+            output.textures_delta.clear();
+            output
+                .shapes
+                .iter()
+                .map(|clipped| clipped.shape.texture_id())
+                .collect::<std::collections::HashSet<_>>()
+        };
+        let first = drawn(&mut app);
+        assert!(app.sticker_view.as_ref().expect("open").animated());
+        let mut seen = std::collections::HashSet::new();
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        while seen.len() < 3 && std::time::Instant::now() < deadline {
+            std::thread::sleep(std::time::Duration::from_millis(30));
+            seen.extend(drawn(&mut app).difference(&first).copied());
+        }
+        assert!(
+            seen.len() >= 3,
+            "the viewer showed {} new frames",
+            seen.len()
+        );
+    }
+
+    /// Escape closes a large sticker without reaching the chat behind it.
+    #[test]
+    fn escape_closes_a_large_sticker() {
+        let mut app = app();
+        let ctx = egui::Context::default();
+        app.attach(&ctx);
+        apply_flags(&mut app, Some("sticker-view"));
+        render(&mut app, &ctx);
+        assert!(app.sticker_view.is_some());
+        frame_with(
+            &mut app,
+            &ctx,
+            vec![key(egui::Key::Escape, egui::Modifiers::NONE)],
+        );
+        render(&mut app, &ctx);
+        assert!(app.sticker_view.is_none());
+        assert!(app.open_chat.is_some(), "the chat stays open");
+    }
+
+    /// "Show in the chat" closes the viewer and brings the message it was
+    /// showing into view. Closing alone left the chat where it was, so after
+    /// stepping back through the album the message the button names stayed out
+    /// of sight.
+    #[test]
+    fn showing_the_previewed_message_in_the_chat_scrolls_to_it() {
+        use egui::accesskit::Role;
+        let mut app = app();
+        // The demo page that opens the viewer over the sample chat's album:
+        // the header's message actions only exist when the viewer has an item.
+        apply_flags(&mut app, Some("preview"));
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        app.attach(&ctx);
+        render(&mut app, &ctx);
+        assert!(app.image_preview.is_some(), "the viewer is open");
+        assert!(
+            !app.viewer_media.is_empty(),
+            "the album the actions belong to is loaded"
+        );
+
+        let at = accessible_nodes(&mut app, &ctx, Vec::new())
+            .into_iter()
+            .find(|(label, role, _)| label == "Show in the chat" && *role == Role::Button)
+            .map(|(_, _, centre)| centre)
+            .expect("the viewer offers Show in the chat");
+        let press = |pressed| egui::Event::PointerButton {
+            pos: at,
+            pressed,
+            button: egui::PointerButton::Primary,
+            modifiers: egui::Modifiers::NONE,
+        };
+        frame_with(
+            &mut app,
+            &ctx,
+            vec![egui::Event::PointerMoved(at), press(true)],
+        );
+        frame_with(&mut app, &ctx, vec![press(false)]);
+        render(&mut app, &ctx);
+
+        assert!(app.image_preview.is_none(), "the viewer closes");
+        // The anchor itself is consumed by the frame that scrolls to it, so
+        // the highlight is what still names the message here.
+        let highlight = app
+            .jump_highlight
+            .as_ref()
+            .expect("the chat is brought to the message the viewer was showing");
+        assert_eq!(highlight.message, "preview-1");
+        assert_eq!(highlight.chat, crate::demo::SAMPLES[0].id);
     }
 
     /// Ctrl++ zooms the picture, not the whole interface, including when the
@@ -5017,6 +9520,269 @@ mod tests {
         assert_eq!(ctx.zoom_factor(), interface_zoom);
     }
 
+    /// In a narrow window a long image name stays clear of the preview's
+    /// buttons: cut before the first of them, it rests at its start, scrolls
+    /// to its end, rests, and scrolls back.
+    #[test]
+    fn a_long_image_name_scrolls_beside_the_preview_buttons() {
+        long_image_name_scrolls(
+            "holiday_photo_from_the_beach_with_everyone_at_sunset.jpg",
+            false,
+        );
+    }
+
+    /// A right-to-left name begins at its right edge, so it rests there first
+    /// and scrolls towards its end on the left.
+    #[test]
+    fn a_long_right_to_left_image_name_starts_at_its_right_edge() {
+        long_image_name_scrolls("תמונה_מהחופשה_בים_עם_כל_המשפחה_בשקיעה_הארוכה.jpg", true);
+    }
+
+    fn long_image_name_scrolls(name: &str, rtl: bool) {
+        let mut app = app();
+        let ctx = egui::Context::default();
+        app.attach(&ctx);
+        let (photo, _) = sample_files(&app);
+        let long = photo.with_file_name(name);
+        std::fs::copy(&photo, &long).unwrap();
+        // A chat with no name, so the viewer's title is the file's name. The
+        // viewer shows the open chat's media and closes when it is left.
+        app.open_chat = Some("unknown@s.whatsapp.net".into());
+        app.actions.push(crate::model::Action::PreviewImage {
+            card: None,
+            path: long,
+            chat: "unknown@s.whatsapp.net".into(),
+            message: "long-name".into(),
+        });
+        let mut narrow = |time: f64| {
+            let mut output = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(360.0, 640.0),
+                    )),
+                    time: Some(time),
+                    ..Default::default()
+                },
+                |ui| {
+                    let ctx = ui.ctx().clone();
+                    app.background_frame(&ctx);
+                    app.frame_ui(ui);
+                },
+            );
+            output.textures_delta.clear();
+            output.shapes
+        };
+        // Where a text was painted, its width, and the rect it was clipped to.
+        let find = |shapes: &[egui::epaint::ClippedShape], text: &str| {
+            shapes
+                .iter()
+                .find_map(|clipped| match &clipped.shape {
+                    egui::Shape::Text(shape) if shape.galley.job.text == text => {
+                        Some((shape.pos.x, shape.galley.size().x, clipped.clip_rect))
+                    }
+                    _ => None,
+                })
+                .unwrap_or_else(|| panic!("{text} was not painted"))
+        };
+        narrow(0.0);
+        let shapes = narrow(0.0);
+        let (x, width, clip) = find(&shapes, name);
+        let (fit, _, _) = find(&shapes, "Fit");
+        assert!(clip.right() < fit, "the name runs under the buttons");
+        assert!(
+            width > clip.width(),
+            "the name should not fit in 360 points"
+        );
+        // Where the name's start and end show when the line rests at either.
+        let (start, finish) = (clip.left(), clip.right() - width);
+        let (start, finish) = if rtl {
+            (finish, start)
+        } else {
+            (start, finish)
+        };
+        assert!((x - start).abs() < 0.5, "the name starts at its start");
+
+        let travel = f64::from(width - clip.width()) / 40.0;
+        assert_eq!(find(&narrow(2.9), name).0, x, "it rests three seconds");
+        let (end, _, end_clip) = find(&narrow(3.0 + travel + 1.0), name);
+        assert!(
+            (end - finish).abs() < 0.5,
+            "the name's end shows at the far edge"
+        );
+        assert_eq!(end_clip, clip, "the name stays inside its room");
+        assert_eq!(find(&narrow(3.0 + travel + 2.9), name).0, end);
+        let (back, _, _) = find(&narrow(2.0 * (3.0 + travel) + 0.5), name);
+        assert_eq!(back, x, "and it scrolls back to its start");
+    }
+
+    #[test]
+    fn preview_navigation_overlays_the_photo_on_hover() {
+        fn controls(shapes: &[egui::epaint::ClippedShape]) -> Vec<egui::Rect> {
+            fn collect(shape: &egui::Shape, out: &mut Vec<egui::Rect>) {
+                match shape {
+                    egui::Shape::Circle(circle) if (circle.radius - 20.0).abs() < 1.1 => {
+                        out.push(egui::Rect::from_center_size(
+                            circle.center,
+                            egui::Vec2::splat(40.0),
+                        ));
+                    }
+                    egui::Shape::Vec(shapes) => {
+                        for shape in shapes {
+                            collect(shape, out);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            let mut out = Vec::new();
+            for clipped in shapes {
+                collect(&clipped.shape, &mut out);
+            }
+            out
+        }
+        let mut app = app();
+        let ctx = egui::Context::default();
+        app.attach(&ctx);
+        apply_flags(&mut app, Some("preview"));
+        render(&mut app, &ctx);
+        let paths: Vec<_> = app.conversations[app.open_chat.as_ref().unwrap()]
+            .messages
+            .iter()
+            .filter_map(|message| message.content.media()?.path.as_ref())
+            .map(|path| crate::util::image_uri(path))
+            .collect();
+        for _ in 0..200 {
+            render(&mut app, &ctx);
+            let ready = paths.iter().all(|uri| {
+                matches!(
+                    ctx.try_load_texture(
+                        uri,
+                        egui::TextureOptions::default(),
+                        egui::SizeHint::default()
+                    ),
+                    Ok(egui::load::TexturePoll::Ready { .. })
+                )
+            });
+            if ready {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        render(&mut app, &ctx);
+        app.composer = "unsent draft".into();
+        let picture = preview_frame(&mut app, &ctx, vec![]);
+        let initial = app
+            .image_preview
+            .as_ref()
+            .unwrap()
+            .path()
+            .map(std::path::Path::to_owned);
+        let hidden = frame_sized(
+            &mut app,
+            &ctx,
+            780.0,
+            vec![egui::Event::PointerMoved(egui::pos2(5.0, 5.0))],
+        );
+        assert!(
+            controls(&hidden).is_empty(),
+            "outside the modal hides the arrows"
+        );
+        let beside = egui::pos2(picture.left() - 5.0, picture.center().y);
+        let hidden = frame_sized(
+            &mut app,
+            &ctx,
+            780.0,
+            vec![egui::Event::PointerMoved(beside)],
+        );
+        assert!(
+            controls(&hidden).is_empty(),
+            "beside the photo hides the arrows"
+        );
+        frame_sized(
+            &mut app,
+            &ctx,
+            780.0,
+            vec![egui::Event::PointerMoved(picture.center())],
+        );
+        let shown = frame_sized(&mut app, &ctx, 780.0, vec![]);
+        let buttons = controls(&shown);
+        assert_eq!(buttons.len(), 2);
+        assert!(
+            buttons.iter().all(|button| picture.contains_rect(*button)),
+            "the arrows sit on the photo"
+        );
+        assert!(buttons[0].center().x < picture.center().x);
+        assert!(buttons[1].center().x > picture.center().x);
+
+        let next = buttons[1].center();
+        frame_sized(&mut app, &ctx, 780.0, vec![egui::Event::PointerMoved(next)]);
+        let hovered = frame_sized(&mut app, &ctx, 780.0, vec![]);
+        assert_eq!(
+            controls(&hovered).len(),
+            2,
+            "hovering an arrow keeps it visible"
+        );
+        frame_sized(&mut app, &ctx, 780.0, vec![primary(next, true)]);
+        frame_sized(&mut app, &ctx, 780.0, vec![primary(next, false)]);
+        assert_ne!(
+            app.image_preview
+                .as_ref()
+                .unwrap()
+                .path()
+                .map(std::path::Path::to_owned),
+            initial
+        );
+        assert!(app.image_preview.as_ref().unwrap().is_fit());
+        let other = preview_frame(
+            &mut app,
+            &ctx,
+            vec![egui::Event::PointerMoved(picture.center())],
+        );
+        let shown = frame_sized(&mut app, &ctx, 780.0, vec![]);
+        let buttons = controls(&shown);
+        assert_eq!(buttons.len(), 2);
+        assert!(
+            buttons.iter().all(|button| other.contains_rect(*button)),
+            "the arrows follow the photo on screen"
+        );
+        let previous = buttons[0].center();
+        frame_sized(
+            &mut app,
+            &ctx,
+            780.0,
+            vec![egui::Event::PointerMoved(previous)],
+        );
+        frame_sized(&mut app, &ctx, 780.0, vec![primary(previous, true)]);
+        frame_sized(&mut app, &ctx, 780.0, vec![primary(previous, false)]);
+        assert_eq!(
+            app.image_preview
+                .as_ref()
+                .unwrap()
+                .path()
+                .map(std::path::Path::to_owned),
+            initial
+        );
+        assert_eq!(app.composer, "unsent draft");
+        app.actions.push(crate::model::Action::ImageActualSize);
+        preview_frame(
+            &mut app,
+            &ctx,
+            vec![egui::Event::PointerMoved(picture.center())],
+        );
+        let zoomed = frame_sized(&mut app, &ctx, 780.0, vec![]);
+        assert_eq!(
+            controls(&zoomed).len(),
+            2,
+            "a zoomed photo keeps its arrows"
+        );
+        let gone = frame_sized(&mut app, &ctx, 780.0, vec![egui::Event::PointerGone]);
+        assert!(
+            controls(&gone).is_empty(),
+            "leaving the window hides the arrows"
+        );
+    }
+
     /// Opens the sample photo in the preview and waits for it to decode, so
     /// input meets a settled, fitted picture. Returns the fitted scale.
     fn open_sample_preview(app: &mut App, ctx: &egui::Context) -> f32 {
@@ -5024,7 +9790,12 @@ mod tests {
         render(app, ctx);
         let (photo, _) = sample_files(app);
         let uri = crate::util::image_uri(&photo);
-        app.actions.push(crate::model::Action::PreviewImage(photo));
+        app.actions.push(crate::model::Action::PreviewImage {
+            card: None,
+            path: photo,
+            chat: crate::demo::SAMPLES[0].id.to_owned(),
+            message: "ada-photo".to_owned(),
+        });
         for _ in 0..200 {
             render(app, ctx);
             if matches!(
@@ -5202,6 +9973,101 @@ mod tests {
             "{scale}, not {}",
             fitted * 1.2
         );
+    }
+
+    /// The batch-deletion demo references real messages from its chat.
+    #[test]
+    fn the_batch_delete_demo_uses_existing_messages() {
+        let mut app = app();
+        apply_flags(&mut app, Some("delete-selection"));
+        let Some(Dialog::ConfirmDeleteSelection { chat, messages, .. }) = &app.dialog else {
+            panic!("batch confirmation");
+        };
+        assert_eq!(messages.len(), 2);
+        for id in messages {
+            assert!(app.conversations[chat].message(id).is_some(), "{id}");
+        }
+    }
+
+    /// The selection bar's Delete menu opens the batch confirmation for the
+    /// whole selection, and offers Delete for everyone only when every
+    /// selected message can still be revoked.
+    #[test]
+    fn the_selection_bar_deletes_the_whole_selection() {
+        for own in [false, true] {
+            let mut app = app();
+            let chat = SAMPLES[0].id.to_owned();
+            let ids = ["ada-format", "ada-reply"];
+            if own {
+                let conversation = app.conversations.get_mut(&chat).unwrap();
+                for id in ids {
+                    let message = conversation.message_mut(id).unwrap();
+                    message.from_me = true;
+                    message.timestamp = crate::util::now();
+                }
+            }
+            app.selection = Some((chat.clone(), ids.map(str::to_owned).to_vec()));
+            let ctx = egui::Context::default();
+            ctx.enable_accesskit();
+            app.attach(&ctx);
+            for _ in 0..3 {
+                render(&mut app, &ctx);
+            }
+            let click = |app: &mut App, pos| {
+                let event = |pressed| egui::Event::PointerButton {
+                    pos,
+                    button: egui::PointerButton::Primary,
+                    pressed,
+                    modifiers: egui::Modifiers::NONE,
+                };
+                frame_with(app, &ctx, vec![egui::Event::PointerMoved(pos), event(true)]);
+                frame_with(app, &ctx, vec![event(false)]);
+            };
+            let find = |app: &mut App, label: &str| {
+                accessible_nodes(app, &ctx, Vec::new())
+                    .into_iter()
+                    .find(|(text, _, _)| text == label)
+                    .map(|(_, _, pos)| pos)
+            };
+            let delete = find(&mut app, "Delete…").expect("the selection bar offers Delete");
+            click(&mut app, delete);
+            render(&mut app, &ctx);
+            let everyone = find(&mut app, "Delete for everyone").expect("menu item");
+            click(&mut app, everyone);
+            if own {
+                assert_eq!(
+                    app.dialog,
+                    Some(Dialog::ConfirmDeleteSelection {
+                        chat: chat.clone(),
+                        messages: ids.map(str::to_owned).to_vec(),
+                        for_everyone: true,
+                    })
+                );
+                continue;
+            }
+            assert!(
+                app.dialog.is_none(),
+                "others' messages cannot be deleted for everyone"
+            );
+            render(&mut app, &ctx);
+            let pos = match find(&mut app, "Delete for me") {
+                Some(pos) => pos,
+                None => {
+                    click(&mut app, delete);
+                    render(&mut app, &ctx);
+                    find(&mut app, "Delete for me").expect("menu item")
+                }
+            };
+            click(&mut app, pos);
+            assert_eq!(
+                app.dialog,
+                Some(Dialog::ConfirmDeleteSelection {
+                    chat: chat.clone(),
+                    messages: ids.map(str::to_owned).to_vec(),
+                    for_everyone: false,
+                })
+            );
+        }
     }
 
     /// macOS and Wayland report trackpad scrolling in points; a two-finger
@@ -6013,6 +10879,601 @@ mod tests {
         assert_eq!(selected(&app), ["ada-doc", "ada-voice"]);
     }
 
+    /// While selecting, as in WhatsApp Web, every row has a check box in a
+    /// column on the left, the whole width of the row picks it, and the
+    /// selection stays open with nothing in it.
+    #[test]
+    fn while_selecting_every_row_has_a_check_box_on_the_left() {
+        let mut app = app();
+        let ctx = egui::Context::default();
+        app.attach(&ctx);
+        for _ in 0..3 {
+            render(&mut app, &ctx);
+        }
+        let chat = sample_ids()[0].to_owned();
+        let check = |message: &str| {
+            let id = crate::ui::conversation::bubble_id(&chat, message).with("check");
+            ctx.data(|data| data.get_temp::<egui::Rect>(id))
+        };
+        assert!(
+            check("ada-reply").is_none(),
+            "no check boxes outside a selection"
+        );
+        app.actions.push(crate::model::Action::StartSelection);
+        render(&mut app, &ctx);
+        render(&mut app, &ctx);
+        assert_eq!(app.selection, Some((chat.clone(), Vec::new())));
+        let rect = |message: &str| {
+            let id = crate::ui::conversation::bubble_id(&chat, message).with("rect");
+            ctx.data(|data| data.get_temp::<egui::Rect>(id))
+                .unwrap_or_else(|| panic!("{message} is on screen"))
+        };
+        for (message, own) in [
+            ("ada-voice", false),
+            ("you-voice", true),
+            ("ada-reply", false),
+        ] {
+            let boxed = check(message).unwrap_or_else(|| panic!("{message} has a check box"));
+            let bubble = rect(message);
+            assert!(
+                boxed.right() < bubble.left(),
+                "{message}'s check box sits left of its bubble"
+            );
+            assert!(bubble.y_range().contains(boxed.center().y));
+            if own {
+                assert!(
+                    bubble.right() > rect("ada-voice").right() + 50.0,
+                    "an own bubble stays on the right"
+                );
+            }
+        }
+        let click = |app: &mut App, pos: egui::Pos2| {
+            let button = |pressed| egui::Event::PointerButton {
+                pos,
+                button: egui::PointerButton::Primary,
+                pressed,
+                modifiers: egui::Modifiers::NONE,
+            };
+            frame_with(
+                app,
+                &ctx,
+                vec![egui::Event::PointerMoved(pos), button(true)],
+            );
+            frame_with(app, &ctx, vec![button(false)]);
+            render(app, &ctx);
+        };
+        click(&mut app, check("ada-voice").unwrap().center());
+        assert_eq!(selected_ids(&app), ["ada-voice"], "the check box picks");
+        // The view's margin, left of the check box.
+        let margin = check("ada-reply").unwrap().left_center() - egui::vec2(10.0, 0.0);
+        click(&mut app, margin);
+        assert_eq!(
+            selected_ids(&app),
+            ["ada-voice", "ada-reply"],
+            "the margin picks too"
+        );
+        click(&mut app, check("ada-voice").unwrap().center());
+        click(&mut app, check("ada-reply").unwrap().center());
+        assert_eq!(
+            app.selection,
+            Some((chat.clone(), Vec::new())),
+            "unticking every message keeps selecting"
+        );
+    }
+
+    #[test]
+    fn message_checkboxes_describe_the_message_and_checked_state() {
+        let mut app = app();
+        let chat = sample_ids()[0].to_owned();
+        let conversation = app.conversations.get_mut(&chat).unwrap();
+        conversation
+            .messages
+            .retain(|row| matches!(row.id.as_str(), "ada-voice" | "you-voice" | "ada-reply"));
+        app.selection = Some((chat.clone(), vec!["ada-voice".into()]));
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        app.attach(&ctx);
+        for _ in 0..3 {
+            render(&mut app, &ctx);
+        }
+        let mut output = ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    egui::vec2(1180.0, 780.0),
+                )),
+                ..Default::default()
+            },
+            |ui| app.frame_ui(ui),
+        );
+        output.textures_delta.clear();
+        let tree = output.platform_output.accesskit_update.unwrap();
+        let boxes: Vec<_> = tree
+            .nodes
+            .iter()
+            .filter(|(_, node)| node.role() == egui::accesskit::Role::CheckBox)
+            .map(|(_, node)| node)
+            .collect();
+        assert_eq!(boxes.len(), 3);
+        let labels: std::collections::HashSet<_> =
+            boxes.iter().map(|node| node.label().unwrap()).collect();
+        assert_eq!(labels.len(), 3, "each message has a distinct label");
+        for row in &app.conversations[&chat].messages {
+            let node = boxes
+                .iter()
+                .find(|node| node.label().unwrap().contains(&row.content.summary()))
+                .expect("label identifies the message content");
+            let label = node.label().unwrap();
+            let sender = if row.from_me {
+                "You".to_owned()
+            } else {
+                app.display_name_or(&row.sender, row.sender_name.as_deref())
+            };
+            assert!(label.contains(&sender), "label identifies the sender");
+            assert!(label.contains(&crate::util::moment_stamp(app.locale, row.timestamp)));
+            assert_eq!(
+                node.toggled(),
+                Some(if row.id == "ada-voice" {
+                    egui::accesskit::Toggled::True
+                } else {
+                    egui::accesskit::Toggled::False
+                })
+            );
+        }
+    }
+
+    #[test]
+    fn ineligible_messages_have_neither_selection_boxes_nor_menu_actions() {
+        for content in [
+            Content::Revoked,
+            Content::PhoneOnly {
+                view_once: true,
+                live_location: false,
+                once: None,
+            },
+            Content::Unsupported {
+                what: "Test".into(),
+            },
+            Content::Poll {
+                question: "Lunch?".into(),
+                options: vec!["Yes".into(), "No".into()],
+                state: Default::default(),
+            },
+            Content::Interactive {
+                text: "Choose an option".into(),
+                card: None,
+            },
+            Content::text("A selectable message"),
+        ] {
+            let selectable = matches!(content, Content::Text { .. });
+            let mut app = app();
+            let chat = sample_ids()[0].to_owned();
+            let conversation = app.conversations.get_mut(&chat).unwrap();
+            conversation.messages.retain(|row| row.id == "ada-reply");
+            conversation.messages[0].content = content;
+            app.selection = Some((chat.clone(), Vec::new()));
+            let ctx = egui::Context::default();
+            ctx.enable_accesskit();
+            app.attach(&ctx);
+            for _ in 0..3 {
+                render(&mut app, &ctx);
+            }
+            let check = crate::ui::conversation::bubble_id(&chat, "ada-reply").with("check");
+            assert_eq!(
+                ctx.data(|data| data.get_temp::<egui::Rect>(check).is_some()),
+                selectable
+            );
+            let pick = crate::ui::conversation::bubble_id(&chat, "ada-reply").with("pick");
+            assert_eq!(
+                ctx.read_response(pick).unwrap().sense,
+                if selectable {
+                    egui::Sense::click_and_drag()
+                } else {
+                    egui::Sense::hover()
+                },
+                "only a visible checkbox can receive focus or start a sweep"
+            );
+            app.selection = None;
+            render(&mut app, &ctx);
+            app.open_message_menu = Some("ada-reply".into());
+            render(&mut app, &ctx);
+            let nodes = accessible_nodes(&mut app, &ctx, Vec::new());
+            assert!(nodes.iter().any(|(label, _, _)| label == "Copy message ID"));
+            for action in ["Select", "Forward"] {
+                assert_eq!(
+                    nodes.iter().any(|(label, _, _)| label == action),
+                    selectable,
+                    "only eligible messages offer {action}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn message_checkboxes_reveal_keyboard_focus_and_outline_the_box() {
+        let mut app = app();
+        let chat = sample_ids()[0].to_owned();
+        let conversation = app.conversations.get_mut(&chat).unwrap();
+        let timestamp = conversation.messages.last().unwrap().timestamp;
+        conversation.messages = (0..12)
+            .map(|index| {
+                message(
+                    &chat,
+                    &format!("focus-{index}"),
+                    false,
+                    timestamp + index,
+                    Content::text("A short message for keyboard selection"),
+                )
+            })
+            .collect();
+        app.selection = Some((chat.clone(), Vec::new()));
+        let ctx = egui::Context::default();
+        app.attach(&ctx);
+        for _ in 0..3 {
+            frame_sized(&mut app, &ctx, 360.0, Vec::new());
+        }
+        frame_sized(&mut app, &ctx, 360.0, tab());
+        let (message, pick) = app.conversations[&chat]
+            .messages
+            .iter()
+            .find_map(|row| {
+                let id = crate::ui::conversation::bubble_id(&chat, &row.id).with("pick");
+                ctx.read_response(id)
+                    .filter(|response| {
+                        response.interact_rect.is_positive()
+                            && response.interact_rect.y_range() != response.rect.y_range()
+                    })
+                    .map(|response| (row.id.clone(), response))
+            })
+            .expect("a partially clipped message checkbox is laid out");
+        // Request focus inside the pass, as keyboard and accessibility
+        // events do, so egui reports gained_focus to the scroll area.
+        let mut output = ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    egui::vec2(1180.0, 360.0),
+                )),
+                ..Default::default()
+            },
+            |ui| {
+                pick.request_focus();
+                app.background_frame(ui.ctx());
+                app.frame_ui(ui);
+            },
+        );
+        output.textures_delta.clear();
+        for _ in 0..3 {
+            frame_sized(&mut app, &ctx, 360.0, Vec::new());
+        }
+        assert_eq!(ctx.memory(|memory| memory.focused()), Some(pick.id));
+        assert!(
+            !app.scroll_to_bottom,
+            "keyboard focus releases the bottom pin"
+        );
+        let focused = ctx.read_response(pick.id).unwrap();
+        assert_eq!(focused.interact_rect.y_range(), focused.rect.y_range());
+        let check = ctx
+            .data(|data| {
+                data.get_temp::<egui::Rect>(
+                    crate::ui::conversation::bubble_id(&chat, &message).with("check"),
+                )
+            })
+            .unwrap();
+        let outline = ring(&ctx).expect("keyboard focus is visible");
+        assert!(outline.contains_rect(check));
+        assert!(outline.width() < check.width() + 12.0);
+        let mut next_message = None;
+        for _ in 0..50 {
+            frame_sized(&mut app, &ctx, 360.0, tab());
+            frame_sized(&mut app, &ctx, 360.0, Vec::new());
+            let focused = ctx.memory(|memory| memory.focused());
+            next_message = app.conversations[&chat].messages.iter().find_map(|row| {
+                let id = crate::ui::conversation::bubble_id(&chat, &row.id).with("pick");
+                (focused == Some(id) && row.id != message).then(|| row.id.clone())
+            });
+            if next_message.is_some() {
+                break;
+            }
+        }
+        let next_message = next_message.expect("Tab reaches another message checkbox");
+        frame_sized(
+            &mut app,
+            &ctx,
+            360.0,
+            vec![key(egui::Key::Space, egui::Modifiers::NONE)],
+        );
+        assert_eq!(selected_ids(&app), [next_message]);
+    }
+
+    /// Where every copy of a label landed in the last frame.
+    fn painted_label_centers(ctx: &egui::Context, needle: &str) -> Vec<egui::Pos2> {
+        let mut found = Vec::new();
+        let layers: Vec<_> = ctx.memory(|memory| memory.layer_ids().collect());
+        for layer in layers {
+            let transform = ctx.layer_transform_to_global(layer).unwrap_or_default();
+            ctx.graphics(|graphics| {
+                if let Some(list) = graphics.get(layer) {
+                    for clipped in list.all_entries() {
+                        if let egui::Shape::Text(text) = &clipped.shape
+                            && text.galley.text() == needle
+                        {
+                            let rect = egui::Rect::from_min_size(text.pos, text.galley.size());
+                            found.push(transform * rect.center());
+                        }
+                    }
+                }
+            });
+        }
+        found
+    }
+
+    /// Where a label landed in the last frame, read from the shapes egui
+    /// still holds for this pass.
+    fn painted_label_center(ctx: &egui::Context, needle: &str) -> Option<egui::Pos2> {
+        let mut found = None;
+        let layers: Vec<_> = ctx.memory(|memory| memory.layer_ids().collect());
+        for layer in layers {
+            let transform = ctx.layer_transform_to_global(layer).unwrap_or_default();
+            ctx.graphics(|graphics| {
+                if let Some(list) = graphics.get(layer) {
+                    for clipped in list.all_entries() {
+                        if let egui::Shape::Text(text) = &clipped.shape
+                            && text.galley.text() == needle
+                        {
+                            let rect = egui::Rect::from_min_size(text.pos, text.galley.size());
+                            found = Some(transform * rect.center());
+                        }
+                    }
+                }
+            });
+        }
+        found
+    }
+
+    /// The pinned page shows each pin's notice beside the message it names,
+    /// rather than every notice together at the end of the transcript.
+    #[test]
+    fn the_pinned_page_spreads_its_notices_over_the_transcript() {
+        let mut app = app();
+        apply_flags(&mut app, Some("pinned"));
+        let ctx = egui::Context::default();
+        app.attach(&ctx);
+        let mut notices = Vec::new();
+        for _ in 0..3 {
+            let mut output = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(1180.0, 780.0),
+                    )),
+                    ..Default::default()
+                },
+                |ui| {
+                    let ctx = ui.ctx().clone();
+                    app.background_frame(&ctx);
+                    app.frame_ui(ui);
+                    notices = painted_label_centers(&ctx, "You pinned a message");
+                },
+            );
+            output.textures_delta.clear();
+        }
+        let mut ys: Vec<f32> = notices.iter().map(|pos| pos.y).collect();
+        ys.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+        assert!(
+            ys.len() >= 2,
+            "the page shows the notices of the pins on screen: {ys:?}"
+        );
+        assert!(
+            ys[ys.len() - 1] - ys[0] > 40.0,
+            "each notice sits with its own message, not beside the others: {ys:?}"
+        );
+    }
+
+    #[test]
+    fn the_bubble_menu_stars_the_message() {
+        let mut app = app();
+        app.backend.record_demo_commands();
+        apply_flags(&mut app, Some("react-menu"));
+        let ctx = egui::Context::default();
+        app.attach(&ctx);
+        let mut pos = None;
+        for _ in 0..3 {
+            let mut output = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(1180.0, 2400.0),
+                    )),
+                    ..Default::default()
+                },
+                |ui| {
+                    let ctx = ui.ctx().clone();
+                    app.background_frame(&ctx);
+                    app.frame_ui(ui);
+                    pos = painted_label_center(&ctx, "Star");
+                },
+            );
+            output.textures_delta.clear();
+        }
+        let pos = pos.expect("Star is on the bubble menu");
+        let button = |pressed| egui::Event::PointerButton {
+            pos,
+            button: egui::PointerButton::Primary,
+            pressed,
+            modifiers: egui::Modifiers::NONE,
+        };
+        frame_sized(
+            &mut app,
+            &ctx,
+            2400.0,
+            vec![egui::Event::PointerMoved(pos), button(true)],
+        );
+        frame_sized(&mut app, &ctx, 2400.0, vec![button(false)]);
+        let chat = sample_ids()[0].to_owned();
+        let commands = app.backend.take_demo_commands();
+        assert!(
+            commands.iter().any(|command| matches!(
+                command,
+                crate::backend::Command::SetStar {
+                    chat: starred_chat,
+                    message: starred_message,
+                    starred: true,
+                } if starred_chat == &chat && starred_message == "ada-link"
+            )),
+            "the bubble menu sends SetStar for that message: {commands:?}"
+        );
+    }
+
+    #[test]
+    fn selected_documents_use_full_rows_and_delete_the_complete_selection() {
+        for (for_everyone, switch_chat) in
+            [(true, false), (false, false), (true, true), (false, true)]
+        {
+            let mut app = app();
+            let (backend, mut commands) = crate::backend::Backend::recording();
+            app.backend = backend;
+            let chat = sample_ids()[0].to_owned();
+            let conversation = app.conversations.get_mut(&chat).unwrap();
+            let mut document = conversation.message("ada-doc").unwrap().clone();
+            if let Content::Document { media, .. } = &mut document.content {
+                // Exercise the downloaded-file control that normally opens a PDF.
+                media.path = Some(std::path::PathBuf::from("synthetic-selection-document.pdf"));
+            }
+            document.from_me = true;
+            document.timestamp = crate::util::now();
+            conversation.messages = ["pdf-1", "pdf-2", "pdf-3"]
+                .map(|id| {
+                    let mut message = document.clone();
+                    message.id = id.into();
+                    message
+                })
+                .to_vec();
+            app.selection = Some((chat.clone(), vec!["pdf-1".into()]));
+            let ctx = egui::Context::default();
+            ctx.enable_accesskit();
+            app.attach(&ctx);
+            for _ in 0..3 {
+                render(&mut app, &ctx);
+            }
+            let click = |app: &mut App, pos, button| {
+                let event = |pressed| egui::Event::PointerButton {
+                    pos,
+                    button,
+                    pressed,
+                    modifiers: egui::Modifiers::NONE,
+                };
+                frame_with(app, &ctx, vec![egui::Event::PointerMoved(pos), event(true)]);
+                frame_with(app, &ctx, vec![event(false)]);
+            };
+            let rect = |message: &str| {
+                ctx.data(|data| {
+                    data.get_temp::<egui::Rect>(
+                        crate::ui::conversation::bubble_id(&chat, message).with("rect"),
+                    )
+                })
+                .unwrap()
+            };
+            click(
+                &mut app,
+                rect("pdf-2").center(),
+                egui::PointerButton::Primary,
+            );
+            let row = ctx
+                .read_response(crate::ui::conversation::bubble_id(&chat, "pdf-3").with("pick"))
+                .unwrap()
+                .rect;
+            click(
+                &mut app,
+                egui::pos2(row.left() + 15.0, row.center().y),
+                egui::PointerButton::Primary,
+            );
+            assert_eq!(
+                app.selection.as_ref().unwrap().1,
+                ["pdf-1", "pdf-2", "pdf-3"]
+            );
+            click(
+                &mut app,
+                rect("pdf-2").center(),
+                egui::PointerButton::Secondary,
+            );
+            let label = if for_everyone {
+                "Delete for everyone"
+            } else {
+                "Delete for me"
+            };
+            let pos = accessible_nodes(&mut app, &ctx, Vec::new())
+                .into_iter()
+                .find(|(text, _, _)| text == label)
+                .unwrap()
+                .2;
+            click(&mut app, pos, egui::PointerButton::Primary);
+            assert_eq!(
+                app.dialog,
+                Some(Dialog::ConfirmDeleteSelection {
+                    chat: chat.clone(),
+                    messages: ["pdf-1", "pdf-2", "pdf-3"].map(str::to_owned).to_vec(),
+                    for_everyone,
+                })
+            );
+            assert_eq!(app.conversations[&chat].messages.len(), 3);
+            if switch_chat {
+                app.open_chat = Some(SAMPLES[1].id.to_owned());
+            }
+            let other_count = app.conversations[SAMPLES[1].id].messages.len();
+            for _ in 0..3 {
+                render(&mut app, &ctx);
+            }
+            let pos = accessible_nodes(&mut app, &ctx, Vec::new())
+                .into_iter()
+                .find(|(text, role, _)| text == "Delete" && *role == egui::accesskit::Role::Button)
+                .unwrap()
+                .2;
+            click(&mut app, pos, egui::PointerButton::Primary);
+            assert!(
+                app.dialog.is_none(),
+                "confirmation closes after Delete: {:?}",
+                app.dialog
+            );
+            if for_everyone {
+                assert!(
+                    app.conversations[&chat]
+                        .messages
+                        .iter()
+                        .all(|message| matches!(message.content, Content::Revoked))
+                );
+            } else {
+                assert_eq!(
+                    app.conversations[&chat].messages.len(),
+                    3,
+                    "local removal waits for WhatsApp acknowledgement"
+                );
+            }
+            let requested: Vec<_> = std::iter::from_fn(|| commands.try_recv().ok())
+                .filter_map(|command| match command {
+                    crate::backend::Command::DeleteLocal { chat: target, id }
+                        if !for_everyone && target == chat =>
+                    {
+                        Some(id)
+                    }
+                    crate::backend::Command::Revoke { chat: target, id }
+                        if for_everyone && target == chat =>
+                    {
+                        Some(id)
+                    }
+                    _ => None,
+                })
+                .collect();
+            assert_eq!(requested, ["pdf-1", "pdf-2", "pdf-3"]);
+            assert!(app.selection.is_none());
+            assert_eq!(
+                app.conversations[SAMPLES[1].id].messages.len(),
+                other_count,
+                "confirmation only affects the chat that owned the selection"
+            );
+        }
+    }
+
     /// One frame with AccessKit on; returns (label, role, centre) per node.
     fn accessible_nodes(
         app: &mut App,
@@ -6175,6 +11636,7 @@ mod tests {
                 false,
                 100,
                 Content::Image {
+                    motion: None,
                     caption: None,
                     media: photo,
                 },
@@ -6478,7 +11940,12 @@ mod tests {
         );
         assert!(app.reaction_target.is_none(), "a double-click never reacts");
 
-        // A right-click on the bubble still opens the context menu, not the picker.
+        // A right-click on the bubble still opens the context menu, not the
+        // picker. The reply bar made the view shorter, and the chat, which
+        // sits at the bottom of the view, moved up with it.
+        let bubble = ctx
+            .data(|data| data.get_temp::<egui::Rect>(id.with("rect")))
+            .expect("the bubble publishes its rect");
         let press = |pressed| egui::Event::PointerButton {
             pos: bubble.center(),
             button: egui::PointerButton::Secondary,
@@ -7272,6 +12739,50 @@ mod tests {
         }
     }
 
+    /// The confirmation opens over the sticker picker; answering it must not
+    /// count as a click outside the picker.
+    #[test]
+    fn confirming_a_pack_removal_keeps_the_picker_open() {
+        let mut app = app();
+        // Without the chat list the picker sits left of the centred dialog.
+        apply_flags(&mut app, Some("remove-pack,nosidebar"));
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        app.attach(&ctx);
+        render(&mut app, &ctx);
+        assert!(app.picker.is_some(), "the picker is open under the dialog");
+        let pos = accessible_nodes(&mut app, &ctx, Vec::new())
+            .into_iter()
+            .find(|(label, role, _)| label == "Remove" && *role == egui::accesskit::Role::Button)
+            .map(|(_, _, centre)| centre)
+            .expect("the confirm button is on screen");
+        let picker = ctx
+            .memory(|memory| memory.area_rect(egui::Id::new("picker")))
+            .expect("the picker is laid out");
+        assert!(
+            !picker.contains(pos),
+            "the button must lie outside the picker for this test to mean anything"
+        );
+        let press = |pressed| egui::Event::PointerButton {
+            pos,
+            button: egui::PointerButton::Primary,
+            pressed,
+            modifiers: egui::Modifiers::NONE,
+        };
+        frame_with(
+            &mut app,
+            &ctx,
+            vec![egui::Event::PointerMoved(pos), press(true)],
+        );
+        frame_with(&mut app, &ctx, vec![press(false)]);
+        assert!(app.dialog.is_none(), "the dialog closes");
+        assert_eq!(
+            app.picker,
+            Some(crate::model::PickerTab::Stickers),
+            "the picker stays open"
+        );
+    }
+
     #[test]
     fn errors_stay_until_dismissed_while_info_fades() {
         let mut app = app();
@@ -8056,31 +13567,127 @@ mod tests {
         );
     }
 
+    /// Platforms deliver only the Ctrl+V release for a picture paste, and a
+    /// quick tap lets go of Ctrl before V (#494). A typed V is never a paste.
     #[test]
-    fn a_paste_is_seen_on_the_key_release() {
-        // Platforms may deliver only the Ctrl+V key release for image paste.
+    fn a_picture_paste_is_seen_on_the_key_release() {
         let mut app = app();
         let ctx = egui::Context::default();
         app.attach(&ctx);
         render(&mut app, &ctx);
-        let release = egui::Event::Key {
+        let picture = || {
+            ctx.data_mut(|data| {
+                data.insert_temp(
+                    egui::Id::new("fixture-clipboard-image"),
+                    (2_usize, 2_usize, vec![200_u8; 16]),
+                )
+            })
+        };
+        let v = |pressed, modifiers| egui::Event::Key {
             key: egui::Key::V,
             physical_key: None,
-            pressed: false,
+            pressed,
             repeat: false,
-            modifiers: egui::Modifiers::COMMAND,
+            modifiers,
         };
-        frame_with(&mut app, &ctx, vec![release]);
-        assert!(ctx.input(crate::app::wants_paste));
-        let plain = egui::Event::Key {
-            key: egui::Key::V,
-            physical_key: None,
-            pressed: false,
-            repeat: false,
-            modifiers: egui::Modifiers::NONE,
-        };
-        frame_with(&mut app, &ctx, vec![plain]);
-        assert!(!ctx.input(crate::app::wants_paste), "a plain V is typing");
+        let command = egui::Event::ModifiersChanged(egui::Modifiers::COMMAND);
+        let none = egui::Event::ModifiersChanged(egui::Modifiers::NONE);
+        // Ctrl held until V goes up; egui-winit swallowed the press.
+        picture();
+        frame_with(&mut app, &ctx, vec![command.clone()]);
+        frame_with(
+            &mut app,
+            &ctx,
+            vec![v(false, egui::Modifiers::COMMAND), none.clone()],
+        );
+        assert_eq!(app.pending.len(), 1, "a held Ctrl+V");
+        // A quick tap: Ctrl comes up first, all within one frame.
+        picture();
+        frame_with(
+            &mut app,
+            &ctx,
+            vec![
+                command.clone(),
+                none.clone(),
+                v(false, egui::Modifiers::NONE),
+            ],
+        );
+        assert_eq!(app.pending.len(), 2, "a quick tap releasing Ctrl first");
+        // The same tap spread over frames.
+        picture();
+        frame_with(&mut app, &ctx, vec![command]);
+        frame_with(&mut app, &ctx, vec![none]);
+        frame_with(&mut app, &ctx, vec![v(false, egui::Modifiers::NONE)]);
+        assert_eq!(app.pending.len(), 3, "a tap across frames");
+        // Typing V reaches us as a press, and its release is no paste.
+        picture();
+        frame_with(&mut app, &ctx, vec![v(true, egui::Modifiers::NONE)]);
+        frame_with(&mut app, &ctx, vec![v(false, egui::Modifiers::NONE)]);
+        assert_eq!(app.pending.len(), 3, "a plain V is typing");
+    }
+
+    #[test]
+    fn switching_chats_cannot_send_another_chats_pasted_images_on_enter() {
+        use crate::model::Action;
+        let mut app = app();
+        let ctx = egui::Context::default();
+        app.attach(&ctx);
+        app.backend.record_demo_commands();
+        let first = SAMPLES[0].id.to_owned();
+        let second = SAMPLES[1].id.to_owned();
+        for color in [40, 80] {
+            app.actions.push(Action::PasteImage {
+                width: 2,
+                height: 2,
+                rgba: vec![color; 16],
+            });
+        }
+        render(&mut app, &ctx);
+        app.composer = "Pictures for the first chat".into();
+        app.actions.push(Action::OpenChat(second));
+        render(&mut app, &ctx);
+        assert!(app.pending.is_empty());
+        assert!(app.composer.is_empty());
+        app.backend.take_demo_commands();
+        frame_with(
+            &mut app,
+            &ctx,
+            vec![key(egui::Key::Enter, egui::Modifiers::NONE)],
+        );
+        assert!(
+            !app.backend
+                .take_demo_commands()
+                .iter()
+                .any(|command| matches!(
+                    command,
+                    crate::backend::Command::SendImage { .. }
+                        | crate::backend::Command::SendFiles { .. }
+                        | crate::backend::Command::SendText { .. }
+                ))
+        );
+        app.actions.push(Action::OpenChat(first.clone()));
+        render(&mut app, &ctx);
+        assert_eq!(app.pending.len(), 2);
+        assert_eq!(app.composer, "Pictures for the first chat");
+        app.backend.take_demo_commands();
+        frame_with(
+            &mut app,
+            &ctx,
+            vec![key(egui::Key::Enter, egui::Modifiers::NONE)],
+        );
+        let commands = app.backend.take_demo_commands();
+        let images: Vec<_> = commands
+            .iter()
+            .filter_map(|command| match command {
+                crate::backend::Command::SendImage { chat, caption, .. } => Some((chat, caption)),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(images.len(), 2);
+        assert!(images.iter().all(|(chat, _)| *chat == &first));
+        assert_eq!(images[0].1.as_deref(), Some("Pictures for the first chat"));
+        assert!(images[1].1.is_none());
+        assert!(app.pending.is_empty());
     }
 
     #[test]
@@ -8100,8 +13707,10 @@ mod tests {
         assert_eq!(app.pending.len(), 1, "staged, not sent");
         assert_eq!(app.conversations[&chat].messages.len(), before);
         app.actions.push(crate::model::Action::SendPending {
+            account: app.account().id.clone(),
             chat: chat.clone(),
             caption: "look".into(),
+            mentions: Vec::new(),
         });
         render(&mut app, &ctx);
         assert!(app.pending.is_empty(), "sent with the caption");
@@ -8308,6 +13917,9 @@ mod tests {
             .collect();
         let ctx = egui::Context::default();
         app.attach(&ctx);
+        // The rows near the end settle over the first frames of a long chat's
+        // first showing; the sweep starts once they have.
+        render(&mut app, &ctx);
         render(&mut app, &ctx);
         render(&mut app, &ctx);
         let body = |id: &str| {
@@ -8358,6 +13970,249 @@ mod tests {
             assert!(copied.contains(number), "{number}: {copied:?}");
         }
         assert_eq!(copied.matches("] ").count(), 3, "{copied:?}");
+    }
+
+    #[test]
+    fn message_text_selection_starts_in_the_bubble_padding() {
+        let mut app = app();
+        let chat = sample_ids()[0].to_owned();
+        app.conversations.get_mut(&chat).unwrap().messages = vec![message(
+            &chat,
+            "padding-target",
+            false,
+            1_700_000_000,
+            Content::text("A forgiving selection target"),
+        )];
+        let ctx = egui::Context::default();
+        app.attach(&ctx);
+        render(&mut app, &ctx);
+        render(&mut app, &ctx);
+
+        let id = crate::ui::conversation::bubble_id(&chat, "padding-target");
+        let body = ctx
+            .data(|data| data.get_temp::<egui::Rect>(id.with("body")))
+            .expect("the message body is on screen");
+        let target = ctx
+            .read_response(id.with("body-text"))
+            .expect("the selection target is on screen")
+            .rect;
+        let bubble = ctx
+            .data(|data| data.get_temp::<egui::Rect>(id.with("rect")))
+            .expect("the message bubble is on screen");
+        assert!(target.contains(bubble.center()));
+        let from = egui::pos2(target.right() - 2.0, target.bottom() - 2.0);
+        let to = body.center();
+        assert!(target.contains(from));
+        assert!(
+            !body.contains(from),
+            "the sweep starts outside the text: {from:?}"
+        );
+
+        let press = |pos, pressed| egui::Event::PointerButton {
+            pos,
+            button: egui::PointerButton::Primary,
+            pressed,
+            modifiers: egui::Modifiers::NONE,
+        };
+        let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1180.0, 780.0));
+        let mut copied = None;
+        for events in [
+            vec![egui::Event::PointerMoved(from), press(from, true)],
+            vec![egui::Event::PointerMoved(to)],
+            vec![press(to, false)],
+            vec![egui::Event::Copy],
+            vec![],
+        ] {
+            let input = egui::RawInput {
+                screen_rect: Some(screen),
+                events,
+                ..Default::default()
+            };
+            let mut output = ctx.run_ui(input, |ui| {
+                let ctx = ui.ctx().clone();
+                app.background_frame(&ctx);
+                app.frame_ui(ui);
+            });
+            output.textures_delta.clear();
+            for command in output.platform_output.commands {
+                if let egui::OutputCommand::CopyText(text) = command {
+                    copied = Some(text);
+                }
+            }
+        }
+
+        let copied = copied.expect("a sweep from the padding copies text");
+        assert!(!copied.trim().is_empty(), "{copied:?}");
+        assert!("A forgiving selection target".contains(copied.trim()));
+    }
+
+    /// Link navigation uses the painted text bounds, while padding remains
+    /// available for selection and reply without opening a browser.
+    #[test]
+    fn expanded_selection_padding_does_not_activate_message_links() {
+        let mut app = app();
+        let chat = SAMPLES[0].id.to_owned();
+        let row = message(
+            &chat,
+            "link-padding",
+            false,
+            1_700_000_000,
+            Content::text("https://example.com/"),
+        );
+        app.conversations.get_mut(&chat).unwrap().messages = vec![row];
+        let ctx = egui::Context::default();
+        app.attach(&ctx);
+        app.backend.record_demo_commands();
+        for _ in 0..4 {
+            render(&mut app, &ctx);
+        }
+        let id = crate::ui::conversation::bubble_id(&chat, "link-padding");
+        let body = ctx
+            .data(|data| data.get_temp::<egui::Rect>(id.with("body")))
+            .unwrap();
+        let bubble = ctx
+            .data(|data| data.get_temp::<egui::Rect>(id.with("rect")))
+            .unwrap();
+        let padding = egui::pos2(bubble.left() + 2.0, body.center().y);
+        assert!(!body.contains(padding));
+        let press = |pos, pressed| egui::Event::PointerButton {
+            pos,
+            button: egui::PointerButton::Primary,
+            pressed,
+            modifiers: egui::Modifiers::NONE,
+        };
+        let mut opened = Vec::new();
+        for pos in [padding, body.center()] {
+            for events in [
+                vec![egui::Event::PointerMoved(pos), press(pos, true)],
+                vec![press(pos, false)],
+            ] {
+                let input = egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(1180.0, 780.0),
+                    )),
+                    events,
+                    ..Default::default()
+                };
+                let mut output = ctx.run_ui(input, |ui| {
+                    app.background_frame(ui.ctx());
+                    app.frame_ui(ui);
+                });
+                output.textures_delta.clear();
+                for command in output.platform_output.commands {
+                    if let egui::OutputCommand::OpenUrl(url) = command {
+                        opened.push(url.url);
+                    }
+                }
+            }
+            if pos == padding {
+                assert!(opened.is_empty(), "padding cannot open the link");
+            }
+        }
+        assert_eq!(
+            opened,
+            ["https://example.com/"],
+            "the painted link still opens"
+        );
+    }
+
+    #[test]
+    fn expanded_text_selection_preserves_quote_and_preview_clicks() {
+        for kind in ["quote", "preview"] {
+            let mut app = app();
+            let chat = sample_ids()[0].to_owned();
+            let mut row = message(
+                &chat,
+                "cards",
+                false,
+                1_700_000_001,
+                Content::Text {
+                    text: "Text below a card".into(),
+                    preview: (kind == "preview").then(|| LinkPreview {
+                        url: "https://example.com/selection-fixture".into(),
+                        title: Some("Fixture preview".into()),
+                        description: None,
+                    }),
+                },
+            );
+            if kind == "quote" {
+                row.quoted = Some(Quoted {
+                    labelled: None,
+                    chat: None,
+                    id: "original".into(),
+                    sender: chat.clone(),
+                    sender_name: Some("Fixture".into()),
+                    summary: "Original text".into(),
+                    mentions: Vec::new(),
+                });
+            }
+            app.conversations.get_mut(&chat).unwrap().messages = vec![
+                message(
+                    &chat,
+                    "original",
+                    false,
+                    1_700_000_000,
+                    Content::text("Original text"),
+                ),
+                row,
+            ];
+            let ctx = egui::Context::default();
+            app.attach(&ctx);
+            for _ in 0..3 {
+                render(&mut app, &ctx);
+            }
+            let id = crate::ui::conversation::bubble_id(&chat, "cards");
+            let card = ctx
+                .data(|data| data.get_temp::<egui::Rect>(id.with(kind)))
+                .unwrap();
+            let target = ctx.read_response(id.with("body-text")).unwrap().rect;
+            assert!(
+                !target.contains(card.center()),
+                "{kind}: {target:?} overlaps {card:?}"
+            );
+            let pos = card.center();
+            let mut opened = Vec::new();
+            for pressed in [true, false] {
+                let mut output = ctx.run_ui(
+                    egui::RawInput {
+                        screen_rect: Some(egui::Rect::from_min_size(
+                            egui::Pos2::ZERO,
+                            egui::vec2(1180.0, 780.0),
+                        )),
+                        events: vec![
+                            egui::Event::PointerMoved(pos),
+                            egui::Event::PointerButton {
+                                pos,
+                                button: egui::PointerButton::Primary,
+                                pressed,
+                                modifiers: egui::Modifiers::NONE,
+                            },
+                        ],
+                        ..Default::default()
+                    },
+                    |ui| {
+                        let ctx = ui.ctx().clone();
+                        app.background_frame(&ctx);
+                        app.frame_ui(ui);
+                    },
+                );
+                output.textures_delta.clear();
+                opened.extend(
+                    output.platform_output.commands.into_iter().filter_map(
+                        |command| match command {
+                            egui::OutputCommand::OpenUrl(url) => Some(url.url),
+                            _ => None,
+                        },
+                    ),
+                );
+            }
+            if kind == "quote" {
+                assert_eq!(app.scroll_anchor.as_deref(), Some("original"));
+            } else {
+                assert_eq!(opened, ["https://example.com/selection-fixture"]);
+            }
+        }
     }
 
     #[test]
@@ -8470,7 +14325,7 @@ mod tests {
         ] {
             frame_with(&mut app, &ctx, events);
         }
-        app.reply_to
+        app.reply_to.map(|target| target.id)
     }
 
     #[test]
@@ -8854,6 +14709,52 @@ mod tests {
         assert_eq!(hints, 1, "exactly the failed message carries the hint");
     }
 
+    /// Every control the line under the header draws is reachable without a
+    /// pointer: the row opens its message and the pin beside it steps to the
+    /// next pin, and both are labelled buttons.
+    #[test]
+    fn the_pinned_line_is_one_button_that_names_its_place() {
+        let mut app = app();
+        apply_flags(&mut app, Some("pinned"));
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        app.attach(&ctx);
+        render(&mut app, &ctx);
+        let mut output = ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    egui::vec2(1180.0, 780.0),
+                )),
+                ..Default::default()
+            },
+            |ui| {
+                let ctx = ui.ctx().clone();
+                app.background_frame(&ctx);
+                app.frame_ui(ui);
+            },
+        );
+        output.textures_delta.clear();
+        let tree = output
+            .platform_output
+            .accesskit_update
+            .expect("accessibility tree");
+        let labels: Vec<&str> = tree
+            .nodes
+            .iter()
+            .filter_map(|(_, node)| node.label())
+            .collect();
+        let lines: Vec<&&str> = labels
+            .iter()
+            .filter(|label| label.starts_with("Pinned message "))
+            .collect();
+        assert_eq!(lines.len(), 1, "one line for all the pins: {labels:?}");
+        assert!(
+            lines[0].starts_with("Pinned message 1 of 3: "),
+            "it names the newest pin and the count: {lines:?}"
+        );
+    }
+
     /// Voice controls keep their width and order in right-aligned bubbles.
     #[test]
     fn an_own_voice_message_keeps_its_bubble_narrow() {
@@ -8975,6 +14876,11 @@ mod tests {
         render(&mut app, &ctx);
         assert_eq!(app.editing.as_deref(), Some(own.as_str()));
         assert!(!app.composer.is_empty());
+        let composer_id = egui::Id::new("composer-text");
+        let cursor = egui::TextEdit::load_state(&ctx, composer_id)
+            .and_then(|state| state.cursor.char_range())
+            .map(|range| range.primary.index.0);
+        assert_eq!(cursor, Some(app.composer.chars().count()));
         frame_with(
             &mut app,
             &ctx,
@@ -8982,6 +14888,10 @@ mod tests {
         );
         assert!(app.editing.is_none());
         assert!(app.composer.is_empty());
+        let cursor = egui::TextEdit::load_state(&ctx, composer_id)
+            .and_then(|state| state.cursor.char_range())
+            .map(|range| range.primary.index.0);
+        assert_eq!(cursor, Some(0));
     }
 
     #[test]
@@ -9012,6 +14922,11 @@ mod tests {
         );
         assert_eq!(app.editing.as_deref(), Some(expected.0.as_str()));
         assert_eq!(app.composer, expected.1);
+        let composer_id = egui::Id::new("composer-text");
+        let cursor = egui::TextEdit::load_state(&ctx, composer_id)
+            .and_then(|state| state.cursor.char_range())
+            .map(|range| range.primary.index.0);
+        assert_eq!(cursor, Some(app.composer.chars().count()));
     }
 
     #[test]
@@ -9071,6 +14986,302 @@ mod tests {
         assert_eq!(app.open_chat.as_deref(), Some(next.as_str()));
         render(&mut app, &ctx);
         assert!(ctx.memory(|memory| memory.has_focus(egui::Id::new("composer-text"))));
+    }
+
+    /// Checks that the group context menu opens the sender draft without dispatching a message.
+    #[test]
+    fn the_group_menu_opens_a_private_reply_without_sending() {
+        for light in [false, true] {
+            let ctx = egui::Context::default();
+            ctx.enable_accesskit();
+            let mut app = app();
+            apply_flags(
+                &mut app,
+                Some(if light {
+                    "private-reply-menu,light"
+                } else {
+                    "private-reply-menu"
+                }),
+            );
+            app.attach(&ctx);
+            render(&mut app, &ctx);
+            app.backend.record_demo_commands();
+            let original = app
+                .conversations
+                .get(SAMPLES[1].id)
+                .unwrap()
+                .message("group-photo")
+                .unwrap()
+                .clone();
+            let nodes = accessible_nodes(&mut app, &ctx, Vec::new());
+            let (_, _, position) = nodes
+                .iter()
+                .find(|(label, _, _)| label == "Reply privately")
+                .expect("the group menu offers private replies");
+            let position = *position;
+            let press = |pressed| egui::Event::PointerButton {
+                pos: position,
+                button: egui::PointerButton::Primary,
+                pressed,
+                modifiers: egui::Modifiers::NONE,
+            };
+            accessible_nodes(
+                &mut app,
+                &ctx,
+                vec![egui::Event::PointerMoved(position), press(true)],
+            );
+            accessible_nodes(&mut app, &ctx, vec![press(false)]);
+            render(&mut app, &ctx);
+            assert_eq!(app.open_chat.as_deref(), Some(original.sender.as_str()));
+            assert_eq!(
+                app.reply_to.as_ref().unwrap().chat.as_deref(),
+                Some(SAMPLES[1].id)
+            );
+            assert!(
+                ctx.data(
+                    |data| data.get_temp::<egui::Rect>(crate::ui::conversation::reply_strip_id())
+                )
+                .is_some(),
+                "the source-group quote remains visible in the DM"
+            );
+            assert!(
+                !app.backend
+                    .take_demo_commands()
+                    .iter()
+                    .any(|command| matches!(command, crate::backend::Command::SendText { .. })),
+                "opening the private reply sends nothing"
+            );
+        }
+    }
+    /// Checks that evicting a source page keeps the private quote target rather than silently clearing it.
+    #[test]
+    fn a_private_reply_keeps_its_quote_when_the_source_page_is_missing() {
+        let ctx = egui::Context::default();
+        let mut app = app();
+        apply_flags(&mut app, Some("private-reply"));
+        app.attach(&ctx);
+        render(&mut app, &ctx);
+        let target = app.reply_to.clone().unwrap();
+        app.conversations.remove(target.chat.as_ref().unwrap());
+        render(&mut app, &ctx);
+        assert_eq!(app.reply_to, Some(target));
+    }
+
+    /// A locked group's cached quote must not appear in the direct-chat composer.
+    #[test]
+    fn a_private_reply_hides_cached_locked_source_content() {
+        for theme in [
+            "private-reply-locked-source",
+            "private-reply-locked-source,light",
+        ] {
+            let ctx = egui::Context::default();
+            let mut app = app();
+            apply_flags(&mut app, Some(theme));
+            let target = app.reply_to.clone().unwrap();
+            let source = target.chat.as_ref().unwrap();
+            let original = app
+                .conversations
+                .get_mut(source)
+                .unwrap()
+                .messages
+                .iter_mut()
+                .find(|message| message.id == target.id)
+                .unwrap();
+            original.content = Content::text("Hidden source fixture sentinel");
+            original.sender_name = Some("Hidden sender fixture sentinel".into());
+            app.attach(&ctx);
+            let mut output = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(1180.0, 780.0),
+                    )),
+                    ..Default::default()
+                },
+                |ui| {
+                    let ctx = ui.ctx().clone();
+                    app.background_frame(&ctx);
+                    app.frame_ui(ui);
+                },
+            );
+            output.textures_delta.clear();
+            let mut stack: Vec<_> = output.shapes.iter().map(|shape| &shape.shape).collect();
+            let mut texts = Vec::new();
+            while let Some(shape) = stack.pop() {
+                match shape {
+                    egui::Shape::Text(text) => texts.push(text.galley.text().to_owned()),
+                    egui::Shape::Vec(shapes) => stack.extend(shapes),
+                    _ => {}
+                }
+            }
+            assert!(
+                texts
+                    .iter()
+                    .any(|text| text == "Original group message unavailable"),
+                "{texts:?}"
+            );
+            assert!(!texts.iter().any(|text| text.contains("fixture sentinel")));
+            assert_eq!(app.reply_to, Some(target));
+        }
+    }
+    /// Private quotes open existing source groups and ignore locally deleted sources.
+    #[test]
+    fn a_private_quote_returns_to_its_source_group() {
+        for source_present in [true, false] {
+            let ctx = egui::Context::default();
+            let mut app = app();
+            let group = SAMPLES[1].id;
+            let original = app
+                .conversations
+                .get(group)
+                .unwrap()
+                .message("group-photo")
+                .unwrap()
+                .clone();
+            let chat = original.sender.clone();
+            let mut reply = message(
+                &chat,
+                "private-reply",
+                true,
+                original.timestamp + 1,
+                Content::text("See you there"),
+            );
+            reply.quoted = Some(Quoted {
+                labelled: Some(original.content.labelled()),
+                chat: Some(group.into()),
+                id: original.id,
+                sender: original.sender,
+                sender_name: original.sender_name,
+                summary: original.content.summary(),
+                mentions: original.mentions,
+            });
+            app.chats.push(Chat::new(chat.clone(), "Tom".into()));
+            app.conversations.insert(
+                chat.clone(),
+                crate::app::Conversation {
+                    messages: vec![reply],
+                    requested: true,
+                    complete: true,
+                    ..Default::default()
+                },
+            );
+            app.open_chat = Some(chat.clone());
+            if !source_present {
+                app.chats.retain(|known| known.id != group);
+                app.conversations.remove(group);
+            }
+            app.attach(&ctx);
+            render(&mut app, &ctx);
+            let rect = ctx
+                .data(|data| {
+                    data.get_temp::<egui::Rect>(
+                        crate::ui::conversation::bubble_id(&chat, "private-reply").with("quote"),
+                    )
+                })
+                .expect("the private quote is drawn");
+            let pos = rect.center();
+            for pressed in [true, false] {
+                accessible_nodes(
+                    &mut app,
+                    &ctx,
+                    vec![
+                        egui::Event::PointerMoved(pos),
+                        egui::Event::PointerButton {
+                            pos,
+                            button: egui::PointerButton::Primary,
+                            pressed,
+                            modifiers: egui::Modifiers::NONE,
+                        },
+                    ],
+                );
+            }
+            assert_eq!(
+                app.open_chat.as_deref(),
+                Some(if source_present { group } else { &chat })
+            );
+            if source_present {
+                assert_eq!(app.scroll_anchor.as_deref(), Some("group-photo"));
+            }
+        }
+    }
+
+    /// Long translated unavailable-quote labels leave Cancel visible and clickable.
+    #[test]
+    fn an_unavailable_private_quote_keeps_cancel_inside_a_narrow_composer() {
+        for locale in [crate::i18n::Locale::English, crate::i18n::Locale::German] {
+            for width in [260.0, 360.0] {
+                let ctx = egui::Context::default();
+                ctx.enable_accesskit();
+                let mut app = app();
+                apply_flags(&mut app, Some("private-reply-locked-source"));
+                app.locale = locale;
+                app.sidebar_visible = false;
+                app.attach(&ctx);
+                let mut cancel = None;
+                let mut frame = |events| {
+                    let mut output = ctx.run_ui(
+                        egui::RawInput {
+                            screen_rect: Some(egui::Rect::from_min_size(
+                                egui::Pos2::ZERO,
+                                egui::vec2(width, 780.0),
+                            )),
+                            events,
+                            ..Default::default()
+                        },
+                        |ui| {
+                            let ctx = ui.ctx().clone();
+                            app.background_frame(&ctx);
+                            app.frame_ui(ui);
+                        },
+                    );
+                    output.textures_delta.clear();
+                    if let Some(tree) = output.platform_output.accesskit_update {
+                        for (_, node) in tree.nodes {
+                            if node.label() == Some("Cancel reply (Esc)")
+                                && let Some(bounds) = node.bounds()
+                            {
+                                let scale = ctx.pixels_per_point() as f64;
+                                cancel = Some(egui::Rect::from_min_max(
+                                    egui::pos2(
+                                        (bounds.x0 / scale) as f32,
+                                        (bounds.y0 / scale) as f32,
+                                    ),
+                                    egui::pos2(
+                                        (bounds.x1 / scale) as f32,
+                                        (bounds.y1 / scale) as f32,
+                                    ),
+                                ));
+                            }
+                        }
+                    }
+                    cancel
+                };
+                frame(vec![]);
+                let cancel = frame(vec![]).expect("the unavailable quote exposes Cancel");
+                let strip = ctx
+                    .data(|data| {
+                        data.get_temp::<egui::Rect>(crate::ui::conversation::reply_strip_id())
+                    })
+                    .unwrap();
+                assert!(
+                    strip.contains_rect(cancel),
+                    "{locale:?}: {strip:?} {cancel:?}"
+                );
+                assert!(cancel.left() >= 0.0 && cancel.right() <= width);
+                for pressed in [true, false] {
+                    frame(vec![
+                        egui::Event::PointerMoved(cancel.center()),
+                        egui::Event::PointerButton {
+                            pos: cancel.center(),
+                            button: egui::PointerButton::Primary,
+                            pressed,
+                            modifiers: egui::Modifiers::NONE,
+                        },
+                    ]);
+                }
+                assert!(app.reply_to.is_none());
+            }
+        }
     }
 
     #[test]
@@ -9460,6 +15671,7 @@ mod tests {
 
     #[test]
     fn filters_stay_on_one_line_and_locked_is_only_shown_when_needed() {
+        use crate::ui::rail::{Destination, destination_id};
         let mut app = app();
         for chat in &mut app.chats {
             chat.locked = false;
@@ -9468,21 +15680,33 @@ mod tests {
         let ctx = egui::Context::default();
         app.attach(&ctx);
         render(&mut app, &ctx);
-        let locked_id = egui::Id::new("locked-chip");
         assert!(
-            ctx.data(|data| data.get_temp::<egui::Rect>(locked_id))
-                .is_none()
+            ctx.read_response(destination_id(Destination::Locked))
+                .is_none(),
+            "no locked chats: no Locked in the rail"
         );
         app.chats[0].locked = true;
         render(&mut app, &ctx);
         let locked = ctx
-            .data(|data| data.get_temp::<egui::Rect>(locked_id))
-            .unwrap();
-        for filter in crate::model::ChatFilter::EVERY {
-            let rect = ctx
-                .data(|data| data.get_temp::<egui::Rect>(crate::ui::chats::filter_chip_id(filter)))
-                .unwrap();
-            assert!((rect.top() - locked.top()).abs() < 0.1);
+            .read_response(destination_id(Destination::Locked))
+            .expect("Locked joins the rail's bottom group")
+            .rect;
+        let settings = ctx
+            .read_response(destination_id(Destination::Settings))
+            .unwrap()
+            .rect;
+        assert!(locked.bottom() <= settings.top());
+        let chips: Vec<_> = crate::model::ChatFilter::EVERY
+            .into_iter()
+            .map(|filter| {
+                ctx.data(|data| {
+                    data.get_temp::<egui::Rect>(crate::ui::chats::filter_chip_id(filter))
+                })
+                .unwrap()
+            })
+            .collect();
+        for rect in &chips {
+            assert!((rect.top() - chips[0].top()).abs() < 0.1);
         }
     }
 
@@ -9626,6 +15850,264 @@ mod tests {
         }
     }
 
+    /// Every painted copy of `needle` in `shapes`: its ink's top and bottom
+    /// (the glyphs' own pixels, not the line box) and its galley's rect.
+    fn painted_ink(
+        shapes: &[egui::epaint::ClippedShape],
+        needle: &str,
+    ) -> Vec<(f32, f32, egui::Rect)> {
+        let mut found = Vec::new();
+        let mut stack: Vec<&egui::Shape> = shapes.iter().map(|clipped| &clipped.shape).collect();
+        while let Some(shape) = stack.pop() {
+            match shape {
+                egui::Shape::Vec(shapes) => stack.extend(shapes.iter()),
+                egui::Shape::Text(text) if text.galley.text() == needle => {
+                    let mut ink: Option<(f32, f32)> = None;
+                    for row in &text.galley.rows {
+                        for glyph in row
+                            .glyphs
+                            .iter()
+                            .filter(|glyph| !glyph.uv_rect.is_nothing())
+                        {
+                            let top = text.pos.y + row.pos.y + glyph.pos.y + glyph.uv_rect.offset.y;
+                            let bottom = top + glyph.uv_rect.size.y;
+                            ink = Some(
+                                ink.map_or((top, bottom), |(t, b)| (t.min(top), b.max(bottom))),
+                            );
+                        }
+                    }
+                    if let Some((top, bottom)) = ink {
+                        found.push((
+                            top,
+                            bottom,
+                            egui::Rect::from_min_size(text.pos, text.galley.size()),
+                        ));
+                    }
+                }
+                _ => {}
+            }
+        }
+        found
+    }
+
+    /// The chat list's search field centres a capital's ink, from its top to
+    /// the baseline, on the field and its icons at every scale; the hint sits
+    /// on the same line, and the clear button's cross on the same centre.
+    /// Centring the line box left text below the magnifier and the cross
+    /// lower still, and centring descenders too lifted most words above it.
+    #[test]
+    fn the_search_fields_text_centres_on_its_icons_at_every_scale() {
+        // A capital's ink, from its top to the baseline, centres on the field.
+        const DRAFT: &str = "H";
+        let field = egui::Id::new("chat-search");
+        for scale in [1.0_f32, 1.25, 1.333_333, 1.5, 2.0] {
+            let mut ink_at = None;
+            let mut hint_at = None;
+            for text in [DRAFT, ""] {
+                let mut app = app();
+                app.search = text.into();
+                let ctx = egui::Context::default();
+                ctx.enable_accesskit();
+                app.attach(&ctx);
+                let mut shapes = Vec::new();
+                let mut nodes = Vec::new();
+                for _ in 0..4 {
+                    let mut input = egui::RawInput {
+                        screen_rect: Some(egui::Rect::from_min_size(
+                            egui::Pos2::ZERO,
+                            egui::vec2(1180.0, 780.0),
+                        )),
+                        ..Default::default()
+                    };
+                    input
+                        .viewports
+                        .entry(egui::ViewportId::ROOT)
+                        .or_default()
+                        .native_pixels_per_point = Some(scale);
+                    let mut output = ctx.run_ui(input, |ui| {
+                        let ctx = ui.ctx().clone();
+                        app.background_frame(&ctx);
+                        app.frame_ui(ui);
+                    });
+                    output.textures_delta.clear();
+                    shapes = output.shapes;
+                    nodes = output
+                        .platform_output
+                        .accesskit_update
+                        .map(|update| {
+                            update
+                                .nodes
+                                .into_iter()
+                                .filter_map(|(_, node)| {
+                                    let label = node.label()?.to_owned();
+                                    let bounds = node.bounds()?;
+                                    Some((label, ((bounds.y0 + bounds.y1) / 2.0) as f32))
+                                })
+                                .collect::<Vec<_>>()
+                        })
+                        .unwrap_or_default();
+                }
+                let pill = ctx
+                    .read_response(field.with("pill"))
+                    .expect("the search field is drawn")
+                    .rect;
+                let centre = pill.center().y;
+                let tolerance = 1.0 / scale + 0.05;
+                let galley = ctx
+                    .data(|data| {
+                        data.get_temp::<egui::Rect>(crate::ui::widgets::search_galley_id(field))
+                    })
+                    .expect("the field publishes its text's place");
+                if text.is_empty() {
+                    let (_, _, hint) = painted_ink(&shapes, "Search")
+                        .into_iter()
+                        .find(|(_, _, rect)| pill.contains(rect.center()))
+                        .expect("the hint is painted in the field");
+                    assert!(
+                        (hint.top() - galley.top()).abs() < 0.01,
+                        "at {scale}x the hint starts at {}, typed text at {}",
+                        hint.top(),
+                        galley.top()
+                    );
+                    hint_at = Some(hint.top());
+                } else {
+                    let (top, bottom, _) = painted_ink(&shapes, DRAFT)
+                        .into_iter()
+                        .find(|(_, _, rect)| pill.contains(rect.center()))
+                        .expect("the draft is painted in the field");
+                    let middle = (top + bottom) / 2.0;
+                    assert!(
+                        (middle - centre).abs() <= tolerance,
+                        "at {scale}x the text centres on {middle}, the field on {centre}"
+                    );
+                    let clear = nodes
+                        .iter()
+                        .find(|(label, _)| label == "Clear")
+                        .map(|(_, y)| *y)
+                        .expect("the clear button is labelled");
+                    assert!(
+                        (clear - centre).abs() <= tolerance,
+                        "at {scale}x the clear button centres on {clear}, the field on {centre}"
+                    );
+                    ink_at = Some(galley.top());
+                }
+            }
+            assert_eq!(ink_at, hint_at, "at {scale}x hint and text share a line");
+        }
+    }
+
+    /// A call entry draws as WhatsApp's: the glyph's disc centred on the
+    /// title and detail together, the detail under the title at its start,
+    /// and the time on the detail's line at the bubble's end, on both sides
+    /// of a group, where a sender's name heads the bubble.
+    #[test]
+    fn a_call_entry_centres_its_glyph_and_tucks_its_time_beside_the_detail() {
+        let mut app = app();
+        apply_flags(&mut app, Some("call-bubbles"));
+        let chat = SAMPLES[1].id;
+        let ctx = egui::Context::default();
+        app.attach(&ctx);
+        let mut shapes = Vec::new();
+        for _ in 0..4 {
+            shapes = frame_sized(&mut app, &ctx, 1400.0, Vec::new());
+        }
+        let calls: Vec<Message> = app.conversations[chat]
+            .messages
+            .iter()
+            .filter(|message| matches!(message.content, Content::Call { .. }))
+            .cloned()
+            .collect();
+        assert_eq!(calls.len(), 6, "the sample files six calls");
+        let mut discs = Vec::new();
+        let mut stack: Vec<&egui::Shape> = shapes.iter().map(|clipped| &clipped.shape).collect();
+        while let Some(shape) = stack.pop() {
+            match shape {
+                egui::Shape::Vec(shapes) => stack.extend(shapes.iter()),
+                egui::Shape::Circle(circle) if (circle.radius - 18.0).abs() < 0.01 => {
+                    discs.push(circle.center);
+                }
+                _ => {}
+            }
+        }
+        for message in &calls {
+            let entry = crate::ui::calls::Entry::of(message).unwrap();
+            let bubble = ctx
+                .data(|data| {
+                    data.get_temp::<egui::Rect>(
+                        crate::ui::conversation::bubble_id(chat, &message.id).with("rect"),
+                    )
+                })
+                .unwrap_or_else(|| panic!("{} is drawn", message.id));
+            let inside = |rect: &egui::Rect| bubble.contains(rect.center());
+            let title = painted_ink(&shapes, &entry.title(app.locale))
+                .into_iter()
+                .map(|(_, _, rect)| rect)
+                .find(inside)
+                .unwrap_or_else(|| panic!("{}'s title is painted", message.id));
+            let disc = discs
+                .iter()
+                .copied()
+                .find(|centre| bubble.contains(*centre))
+                .unwrap_or_else(|| panic!("{}'s glyph sits in a disc", message.id));
+            let footer = ctx
+                .data(|data| {
+                    data.get_temp::<egui::Rect>(crate::ui::conversation::footer_id(
+                        chat,
+                        &message.id,
+                    ))
+                })
+                .expect("the time is drawn");
+            assert!(disc.x < title.left(), "{}: the disc leads", message.id);
+            assert!(
+                footer.right() <= bubble.right() - 9.0 && footer.bottom() <= bubble.bottom(),
+                "{}: the time stays inside the bubble's padding",
+                message.id
+            );
+            match entry.detail(app.locale) {
+                Some(detail) => {
+                    let detail = painted_ink(&shapes, &detail)
+                        .into_iter()
+                        .map(|(_, _, rect)| rect)
+                        .find(inside)
+                        .unwrap_or_else(|| panic!("{}'s detail is painted", message.id));
+                    assert!(
+                        (detail.left() - title.left()).abs() < 0.01,
+                        "{}: title and detail share a start",
+                        message.id
+                    );
+                    assert!(detail.top() >= title.bottom(), "{}", message.id);
+                    let block = (title.top() + detail.bottom()) / 2.0;
+                    assert!(
+                        (disc.y - block).abs() <= 1.0,
+                        "{}: the disc centres on {}, the words on {block}",
+                        message.id,
+                        disc.y
+                    );
+                    assert!(
+                        (footer.center().y - detail.center().y).abs() <= 0.5,
+                        "{}: the time sits on the detail's line",
+                        message.id
+                    );
+                    assert!(
+                        footer.left() >= detail.right() + 8.0,
+                        "{}: the time follows the detail",
+                        message.id
+                    );
+                }
+                None => {
+                    assert!(footer.top() >= title.bottom(), "{}", message.id);
+                    let block = (title.top() + footer.bottom()) / 2.0;
+                    assert!(
+                        (disc.y - block).abs() <= 1.0,
+                        "{}: the disc centres on {}, title and time on {block}",
+                        message.id,
+                        disc.y
+                    );
+                }
+            }
+        }
+    }
+
     /// The theme row links to the website's guide to writing a theme.
     #[test]
     fn the_theme_row_opens_the_guide_to_making_a_theme() {
@@ -9724,7 +16206,7 @@ mod tests {
             .conversations
             .get(&chat)
             .and_then(|conversation| conversation.messages.last())
-            .map(|message| message.id.clone());
+            .map(|message| message.id.clone().into());
         for _ in 0..4 {
             frame_sized(&mut app, &ctx, 780.0, Vec::new());
         }
@@ -10084,8 +16566,9 @@ mod tests {
                 .expect("the plus button is a tab stop");
             (id, ctx.read_response(id).unwrap().rect.center())
         };
-        // Row 0 sends files, row 1 creates a poll.
-        for row in [0.0, 1.0] {
+        // Row 0 sends files, row 1 documents, row 2 sends a location, row 3
+        // creates a poll.
+        for row in [0.0, 1.0, 2.0, 3.0] {
             let mut app = app();
             app.settings.show_shortcut_hints = false;
             let chat = app.open_chat.clone().unwrap();
@@ -10105,7 +16588,7 @@ mod tests {
             );
             let item = egui::pos2(
                 menu.center().x,
-                menu.top() + menu.height() * (1.0 + 2.0 * row) / 4.0,
+                menu.top() + menu.height() * (1.0 + 2.0 * row) / 8.0,
             );
             click(&mut app, &ctx, item);
             assert!(
@@ -10113,14 +16596,24 @@ mod tests {
                 "choosing an entry closes the menu"
             );
             let commands = app.backend.take_demo_commands();
-            let picked = commands.iter().any(
-                |command| matches!(command, crate::backend::Command::PickFiles(id) if *id == chat),
-            );
+            let picked = commands.iter().find_map(|command| match command {
+                crate::backend::Command::PickFiles {
+                    chat: id,
+                    documents,
+                } if *id == chat => Some(*documents),
+                _ => None,
+            });
             if row == 0.0 {
-                assert!(picked, "Send files opens the file picker");
+                assert_eq!(picked, Some(false), "Send files opens the file picker");
                 assert_eq!(app.dialog, None);
+            } else if row == 1.0 {
+                assert_eq!(picked, Some(true), "documents open the file picker");
+                assert_eq!(app.dialog, None);
+            } else if row == 2.0 {
+                assert_eq!(picked, None);
+                assert_eq!(app.dialog, Some(crate::model::Dialog::SendLocation(chat)));
             } else {
-                assert!(!picked);
+                assert_eq!(picked, None);
                 assert_eq!(app.dialog, Some(crate::model::Dialog::CreatePoll(chat)));
             }
         }
@@ -10272,16 +16765,23 @@ mod tests {
             for _ in 0..20 {
                 frame_sized(&mut app, &ctx, 780.0, Vec::new());
             }
-            let expected: Vec<_> = [
+            // The same on macOS: the rail carries Settings there too, beside
+            // the app menu.
+            let expected = vec![
                 Stop::Composer,
                 Stop::Send,
                 Stop::Attach,
                 Stop::Emoji,
                 Stop::ChatSearch,
-                Stop::Profile,
-                Stop::Sidebar,
-                Stop::NewChat,
+                Stop::Chats,
+                Stop::Calls,
+                Stop::Starred,
+                Stop::Archived,
+                Stop::Locked,
                 Stop::Settings,
+                Stop::Profile,
+                Stop::NewChat,
+                Stop::Sidebar,
                 Stop::Search,
                 Stop::All,
                 Stop::Unread,
@@ -10289,16 +16789,7 @@ mod tests {
                 Stop::Favorites,
                 Stop::Groups,
                 Stop::Channels,
-                Stop::Archived,
-                Stop::Locked,
-            ]
-            .into_iter()
-            .filter(|stop| {
-                // The Mac header keeps the account switcher; the settings
-                // live in the app menu there.
-                !crate::theme::macos_chrome(&ctx) || *stop != Stop::Settings
-            })
-            .collect();
+            ];
             assert_eq!(
                 crate::ui::focus::stops(&ctx)
                     .iter()
@@ -10349,7 +16840,7 @@ mod tests {
             assert!(ctx.read_response(row).unwrap().sense.is_focusable());
             for (modifiers, expected_stop) in [
                 (egui::Modifiers::NONE, Stop::Composer),
-                (egui::Modifiers::SHIFT, Stop::Locked),
+                (egui::Modifiers::SHIFT, Stop::Channels),
             ] {
                 ctx.memory_mut(|memory| memory.request_focus(row));
                 frame_sized(&mut app, &ctx, 780.0, vec![key(egui::Key::Tab, modifiers)]);
@@ -10398,6 +16889,13 @@ mod tests {
                         Stop::Attach,
                         Stop::Emoji,
                         Stop::ChatSearch,
+                        Stop::Chats,
+                        Stop::Calls,
+                        Stop::Starred,
+                        Stop::Archived,
+                        Stop::Locked,
+                        Stop::Settings,
+                        Stop::Profile,
                         Stop::Sidebar
                     ]
                 );
@@ -10428,7 +16926,14 @@ mod tests {
 
     #[test]
     fn dialogs_keep_local_navigation_and_single_focus_borders() {
-        for page in ["locked-setup", "poll-create", "new-chat"] {
+        for page in [
+            "locked-setup",
+            "poll-create",
+            "new-chat",
+            "new-group",
+            "new-group-name",
+            "location",
+        ] {
             let mut app = app();
             apply_flags(&mut app, Some(page));
             let ctx = egui::Context::default();
@@ -10668,56 +17173,73 @@ mod tests {
         assert!(reached_hidden, "Tab reached chats that were out of view");
     }
 
+    /// The same with the list hidden, at the window's least height: the
+    /// chats' avatars scroll between the rail's groups, and the macOS layout,
+    /// which starts the rail under the traffic lights, leaves them least.
     #[test]
     fn tab_scrolls_a_focused_collapsed_avatar_into_view() {
-        let mut app = app();
-        apply_flags(&mut app, Some("settings,rail"));
-        let ctx = egui::Context::default();
-        app.attach(&ctx);
-        let height = 300.0;
-        for _ in 0..3 {
-            frame_sized(&mut app, &ctx, height, Vec::new());
-        }
-        let avatar = |ctx: &egui::Context, id: &str| {
-            ctx.data(|data| data.get_temp::<egui::Rect>(crate::ui::chats::compact_chat_id(id)))
-        };
-        let ids: Vec<String> = app.chats.iter().map(|chat| chat.id.clone()).collect();
-        let hidden: Vec<&String> = ids
-            .iter()
-            .filter(|id| avatar(&ctx, id).is_none_or(|rect| rect.top() >= height))
-            .collect();
-        assert!(
-            !hidden.is_empty(),
-            "the window is short enough to hide avatars"
-        );
-        let mut reached_hidden = false;
-        for _ in 0..40 {
-            frame_sized(&mut app, &ctx, height, tab());
+        for macos in [false, true] {
+            let mut app = app();
+            apply_flags(&mut app, Some("settings,rail"));
+            let ctx = egui::Context::default();
+            app.attach(&ctx);
+            if macos {
+                crate::theme::preview_macos(&ctx);
+            }
+            // `main`'s least window height.
+            let height = 300.0;
             for _ in 0..3 {
                 frame_sized(&mut app, &ctx, height, Vec::new());
             }
-            let Some(focused) = ctx
-                .memory(|memory| memory.focused())
-                .and_then(|id| ctx.read_response(id))
-            else {
-                continue;
+            let avatar = |ctx: &egui::Context, id: &str| {
+                ctx.data(|data| data.get_temp::<egui::Rect>(crate::ui::chats::compact_chat_id(id)))
             };
-            // Settings has its own scrolling; only the rail is under test.
-            if !ids
+            let ids: Vec<String> = app.chats.iter().map(|chat| chat.id.clone()).collect();
+            let hidden: Vec<&String> = ids
                 .iter()
-                .any(|id| avatar(&ctx, id).is_some_and(|rect| rect == focused.rect))
-            {
-                continue;
-            }
-            assert_eq!(
-                focused.interact_rect, focused.rect,
-                "the focused avatar is fully visible"
+                .filter(|id| avatar(&ctx, id).is_none_or(|rect| rect.top() >= height))
+                .collect();
+            assert!(
+                !hidden.is_empty(),
+                "{macos}: the window is short enough to hide avatars"
             );
-            reached_hidden |= hidden
-                .iter()
-                .any(|id| avatar(&ctx, id).is_some_and(|rect| rect == focused.rect));
+            let mut reached_hidden = false;
+            for _ in 0..40 {
+                frame_sized(&mut app, &ctx, height, tab());
+                for _ in 0..3 {
+                    frame_sized(&mut app, &ctx, height, Vec::new());
+                }
+                let Some(focused) = ctx
+                    .memory(|memory| memory.focused())
+                    .and_then(|id| ctx.read_response(id))
+                else {
+                    continue;
+                };
+                // Settings has its own scrolling; only the rail is under test.
+                if !ids
+                    .iter()
+                    .any(|id| avatar(&ctx, id).is_some_and(|rect| rect == focused.rect))
+                {
+                    continue;
+                }
+                assert_eq!(
+                    focused.interact_rect, focused.rect,
+                    "{macos}: the focused avatar is fully visible"
+                );
+                assert!(
+                    focused.rect.bottom() <= height,
+                    "{macos}: inside the window: {:?}",
+                    focused.rect
+                );
+                reached_hidden |= hidden
+                    .iter()
+                    .any(|id| avatar(&ctx, id).is_some_and(|rect| rect == focused.rect));
+            }
+            assert!(
+                reached_hidden,
+                "{macos}: Tab reached avatars that were out of view"
+            );
         }
-        assert!(reached_hidden, "Tab reached avatars that were out of view");
     }
 
     /// Records the images the UI asks for, answering at once so a frame can be
@@ -10782,6 +17304,7 @@ mod tests {
                     false,
                     1_700_000_000 + index,
                     Content::Image {
+                        motion: None,
                         caption: None,
                         media,
                     },
@@ -11497,6 +18020,7 @@ mod picture_edge_tests {
                 let mut picture = media("image/jpeg", 402_113, None, None);
                 picture.path = Some(photo.clone());
                 row.content = Content::Image {
+                    motion: None,
                     caption: Some("Row 30 picture".into()),
                     media: picture,
                 };
@@ -11598,6 +18122,105 @@ mod bubble_detail_tests {
         ctx.data(|data| data.get_temp::<egui::Rect>(id))
     }
 
+    /// The `bubbles` page in both Messages palettes: every message of the
+    /// sample is drawn, and only each run's last balloon curls a tail out of
+    /// its side, as far as Apple's reaches at ZapFast's text size; a lone
+    /// photo leaves the tail to the balloon after it. All of it fits a 1280
+    /// by 800 window.
+    #[test]
+    fn messages_balloons_tail_only_the_last_of_each_run() {
+        // These runs belong to one day. Near midnight a real clock puts a
+        // day boundary between them, correctly giving another bubble a tail.
+        let _clock = crate::util::fixed_clock::set(crate::util::fixed_clock::Clock {
+            // 14:00 UTC on Wednesday 11 March 2026.
+            now: 1_773_237_600,
+            zone: jiff::tz::TimeZone::UTC,
+            twelve_hour: false,
+        });
+        const SIZE: egui::Vec2 = egui::vec2(1280.0, 800.0);
+        let reach = crate::ui::widgets::balloon::TIP[0] * crate::ui::widgets::MESSAGES_SCALE;
+        for page in ["bubbles,messages", "bubbles,messages-light"] {
+            let mut app = app();
+            let ctx = egui::Context::default();
+            app.attach(&ctx);
+            apply_flags(&mut app, Some(page));
+            let shapes = frames(&mut app, &ctx, SIZE);
+            let chat = SAMPLES[0].id;
+            let meshes: Vec<egui::Rect> = shapes
+                .iter()
+                .filter_map(|clipped| match &clipped.shape {
+                    egui::Shape::Mesh(mesh) if mesh.texture_id == egui::TextureId::default() => {
+                        Some(egui::Rect::from_points(
+                            &mesh.vertices.iter().map(|v| v.pos).collect::<Vec<_>>(),
+                        ))
+                    }
+                    _ => None,
+                })
+                .collect();
+            let out_past = |id: &str, own: bool| {
+                let bubble = rect(
+                    &ctx,
+                    crate::ui::conversation::bubble_id(chat, id).with("rect"),
+                )
+                .unwrap_or_else(|| panic!("{page}: {id} is drawn"));
+                let balloon = meshes
+                    .iter()
+                    .find(|mesh| {
+                        (mesh.top() - bubble.top()).abs() < 1.5
+                            && (mesh.bottom() - bubble.bottom()).abs() < 1.5
+                            && mesh.contains(bubble.center())
+                    })
+                    .unwrap_or_else(|| panic!("{page}: {id} has a balloon"));
+                if own {
+                    balloon.right() - bubble.right()
+                } else {
+                    bubble.left() - balloon.left()
+                }
+            };
+            for (id, own, tailed) in [
+                ("bubbles-in-1", false, false),
+                ("bubbles-in-2", false, true),
+                ("bubbles-out-1", true, false),
+                ("bubbles-out-2", true, false),
+                ("bubbles-out-3", true, true),
+                ("bubbles-in-4", false, true),
+                ("bubbles-out-4", true, true),
+            ] {
+                let past = out_past(id, own);
+                if tailed {
+                    assert!(
+                        (past - reach).abs() < 1.0,
+                        "{page}: {id}'s tail reaches {past}, not {reach}"
+                    );
+                } else {
+                    assert!(past < 1.0, "{page}: {id} has a tail ({past})");
+                }
+            }
+            // Every row, the lone photo included, shows in the window: the
+            // view is not scrolled past the first runs.
+            for id in [
+                "bubbles-in-1",
+                "bubbles-in-2",
+                "bubbles-out-1",
+                "bubbles-out-2",
+                "bubbles-out-3",
+                "bubbles-in-3",
+                "bubbles-in-4",
+                "bubbles-out-4",
+            ] {
+                let shown = rect(
+                    &ctx,
+                    crate::ui::conversation::bubble_id(chat, id).with("rect"),
+                )
+                .unwrap_or_else(|| panic!("{page}: {id} is drawn"));
+                assert!(
+                    shown.top() >= 0.0 && shown.bottom() <= SIZE.y,
+                    "{page}: {id} is off the 1280 by 800 window at {shown:?}"
+                );
+            }
+        }
+    }
+
     fn photos() -> (App, egui::Context) {
         let mut app = app();
         let ctx = egui::Context::default();
@@ -11605,6 +18228,71 @@ mod bubble_detail_tests {
         apply_flags(&mut app, Some("photos"));
         frames(&mut app, &ctx, egui::vec2(1180.0, 1400.0));
         (app, ctx)
+    }
+
+    /// Both audio types keep their own player treatment and forwarding label
+    /// across themes, bubble sides, download states, and narrow layouts.
+    #[test]
+    fn audio_files_have_a_track_and_music_badge_independent_of_forwarding() {
+        for light in [false, true] {
+            for from_me in [false, true] {
+                for downloaded in [false, true] {
+                    for width in [1180.0, 560.0] {
+                        let mut app = app();
+                        apply_flags(
+                            &mut app,
+                            Some(if light {
+                                "audio-types,light"
+                            } else {
+                                "audio-types"
+                            }),
+                        );
+                        let chat = app.open_chat.clone().unwrap();
+                        let audio_path = app
+                            .account()
+                            .dirs
+                            .media_cache_dir()
+                            .join("synthetic-audio.ogg");
+                        for row in &mut app.conversations.get_mut(&chat).unwrap().messages {
+                            row.from_me = from_me;
+                            if downloaded && let Content::Audio { media, .. } = &mut row.content {
+                                media.path = Some(audio_path.clone());
+                            }
+                        }
+                        let ctx = egui::Context::default();
+                        app.attach(&ctx);
+                        frames(&mut app, &ctx, egui::vec2(width, 780.0));
+                        for (id, voice, forwarded) in [
+                            ("audio-original", true, false),
+                            ("audio-file", false, false),
+                            ("audio-forwarded", false, true),
+                        ] {
+                            let bubble = crate::ui::conversation::bubble_id(&chat, id);
+                            let frame =
+                                rect(&ctx, bubble.with("rect")).expect("audio bubble drawn");
+                            assert_eq!(rect(&ctx, bubble.with("voice-waveform")).is_some(), voice);
+                            assert_eq!(rect(&ctx, bubble.with("audio-track")).is_some(), !voice);
+                            let badge = rect(&ctx, bubble.with("audio-file"));
+                            assert_eq!(badge.is_some(), !voice);
+                            if let Some(badge) = badge {
+                                assert!(frame.contains_rect(badge), "music badge fits in bubble");
+                            }
+                            let chip =
+                                rect(&ctx, crate::ui::conversation::speed_chip_id(&chat, id));
+                            assert_eq!(
+                                chip.is_some(),
+                                downloaded,
+                                "playable audio retains speed control"
+                            );
+                            if let Some(chip) = chip {
+                                assert!(frame.contains_rect(chip), "speed control fits in bubble");
+                            }
+                            assert_eq!(rect(&ctx, bubble.with("forwarded")).is_some(), forwarded);
+                        }
+                    }
+                }
+            }
+        }
     }
 
     /// "Forwarded" sits at the start of the bubble, just under its top, on
@@ -11678,6 +18366,39 @@ mod bubble_detail_tests {
             footer.top() >= picture.bottom(),
             "with a caption the time stays below the picture ({footer:?}, {picture:?})"
         );
+    }
+
+    /// A voice message carries its time and ticks on the duration's line,
+    /// as on the phone, rather than on a line of their own under it.
+    #[test]
+    fn a_voice_message_keeps_its_time_on_the_duration_line() {
+        let mut app = app();
+        let ctx = egui::Context::default();
+        app.attach(&ctx);
+        apply_flags(&mut app, Some("voice"));
+        frames(&mut app, &ctx, egui::vec2(1180.0, 1400.0));
+        let chat = SAMPLES[0].id;
+        for id in ["ada-voice", "you-voice"] {
+            let frame = rect(
+                &ctx,
+                crate::ui::conversation::bubble_id(chat, id).with("rect"),
+            )
+            .expect("the bubble was drawn");
+            let footer = rect(&ctx, crate::ui::conversation::footer_id(chat, id))
+                .expect("the time was drawn");
+            assert!(
+                frame.contains_rect(footer),
+                "{id}: the time is inside the bubble ({footer:?} in {frame:?})"
+            );
+            assert!(
+                frame.bottom() - footer.bottom() <= 8.0,
+                "{id}: the bubble closes under the time ({footer:?} in {frame:?})"
+            );
+            assert!(
+                frame.height() <= 60.0,
+                "{id}: no line of its own for the time ({footer:?} in {frame:?})"
+            );
+        }
     }
 
     /// A chat with unsent text shows it in its row, after an accent
@@ -11762,5 +18483,1254 @@ mod bubble_detail_tests {
         // A narrow page keeps the usual margins instead.
         frames(&mut app, &ctx, egui::vec2(900.0, 900.0));
         assert!(column(&ctx).span() < 640.0, "{:?}", column(&ctx));
+    }
+
+    /// The background history row's title fits on its line in every
+    /// language, instead of ending in an ellipsis. Checked in a window
+    /// narrower than the default (where the longer earlier title was already
+    /// cut short here), so a wider system font still has room.
+    #[test]
+    fn the_older_history_title_fits_in_every_language() {
+        /// Every text drawn, and whether it was cut short with an ellipsis.
+        fn texts(shape: &egui::Shape, out: &mut Vec<(String, bool)>) {
+            match shape {
+                egui::Shape::Text(text) => {
+                    out.push((text.galley.text().to_owned(), text.galley.elided))
+                }
+                egui::Shape::Vec(shapes) => shapes.iter().for_each(|shape| texts(shape, out)),
+                _ => {}
+            }
+        }
+        for locale in crate::i18n::Locale::ALL {
+            let mut app = app();
+            let ctx = egui::Context::default();
+            app.attach(&ctx);
+            let title = crate::i18n::gettext(locale, "Fetch older history").into_owned();
+            apply_flags(&mut app, Some("settings"));
+            app.locale = locale;
+            app.settings_search = title.clone();
+            let mut drawn = Vec::new();
+            // The rail takes 60 points of the old 900.
+            for clipped in &frames(&mut app, &ctx, egui::vec2(960.0, 780.0)) {
+                texts(&clipped.shape, &mut drawn);
+            }
+            let titles: Vec<bool> = drawn
+                .iter()
+                .filter(|(text, _)| *text == title)
+                .map(|(_, elided)| *elided)
+                .collect();
+            assert!(!titles.is_empty(), "{locale:?}: {title:?} is not drawn");
+            assert!(
+                !titles.contains(&true),
+                "{locale:?}: {title:?} is cut short"
+            );
+        }
+    }
+}
+
+/// The call screen as a window: what opens it, what puts it aside without ending the call, and the
+/// one control that does end it.
+#[cfg(test)]
+mod call_surface_tests {
+    use super::tests::{app, frame_with};
+    use super::*;
+    use crate::model::Action;
+
+    /// A key press, as egui reports one.
+    fn key(key: egui::Key) -> egui::Event {
+        egui::Event::Key {
+            key,
+            physical_key: None,
+            pressed: true,
+            repeat: false,
+            modifiers: egui::Modifiers::NONE,
+        }
+    }
+
+    /// A running call takes the screen, with the window attached to it.
+    fn on_a_call() -> (App, egui::Context) {
+        let mut app = app();
+        apply_flags(&mut app, Some("call-active"));
+        let ctx = egui::Context::default();
+        app.attach(&ctx);
+        (app, ctx)
+    }
+
+    /// The labels one frame publishes to a screen reader, after the surface has settled.
+    fn labels(app: &mut App, ctx: &egui::Context) -> Vec<String> {
+        labelled(app, ctx)
+            .into_iter()
+            .map(|(label, _)| label)
+            .collect()
+    }
+
+    /// The labels one frame publishes, with whether each control is disabled.
+    fn labelled(app: &mut App, ctx: &egui::Context) -> Vec<(String, bool)> {
+        let mut labels = Vec::new();
+        for _ in 0..3 {
+            let mut output = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(1180.0, 780.0),
+                    )),
+                    ..Default::default()
+                },
+                |ui| {
+                    let ctx = ui.ctx().clone();
+                    app.background_frame(&ctx);
+                    app.frame_ui(ui);
+                },
+            );
+            output.textures_delta.clear();
+            labels = output
+                .platform_output
+                .accesskit_update
+                .expect("accessibility tree")
+                .nodes
+                .iter()
+                .filter_map(|(_, node)| {
+                    node.label()
+                        .map(|label| (label.to_owned(), node.is_disabled()))
+                })
+                .collect();
+        }
+        labels
+    }
+
+    #[test]
+    fn escape_leaves_full_screen_before_it_puts_the_call_aside() {
+        let (mut app, ctx) = on_a_call();
+        app.actions.push(Action::ToggleCallFullscreen);
+        frame_with(&mut app, &ctx, Vec::new());
+        assert!(app.call_fullscreen, "the surface takes the whole screen");
+        assert!(!app.call_surface_hidden);
+
+        frame_with(&mut app, &ctx, vec![key(egui::Key::Escape)]);
+        assert!(!app.call_fullscreen, "escape leaves full screen");
+        assert!(
+            !app.call_surface_hidden,
+            "and the call screen is still the screen"
+        );
+        assert_eq!(
+            app.call.as_ref().map(|call| call.phase),
+            Some(CallPhase::Active),
+            "a window state is not a call state"
+        );
+
+        frame_with(&mut app, &ctx, vec![key(egui::Key::Escape)]);
+        assert!(
+            app.call_surface_hidden,
+            "a second escape is the same move the back button makes"
+        );
+        assert_eq!(
+            app.call.as_ref().map(|call| call.phase),
+            Some(CallPhase::Active),
+            "and the call runs on behind the bar"
+        );
+    }
+
+    #[test]
+    fn only_the_hang_up_button_ends_a_call() {
+        let (mut app, ctx) = on_a_call();
+        app.backend.record_demo_commands();
+        app.actions.push(Action::ToggleCallFullscreen);
+        frame_with(&mut app, &ctx, Vec::new());
+        // Everything a reader can do to the window short of hanging up.
+        frame_with(&mut app, &ctx, vec![key(egui::Key::Escape)]);
+        frame_with(&mut app, &ctx, vec![key(egui::Key::Escape)]);
+        app.actions.push(Action::ReturnToCall);
+        frame_with(&mut app, &ctx, Vec::new());
+        app.actions.push(Action::ToggleCallFullscreen);
+        frame_with(&mut app, &ctx, Vec::new());
+        frame_with(&mut app, &ctx, vec![key(egui::Key::Escape)]);
+        let hang_ups = |commands: Vec<crate::backend::Command>| {
+            commands
+                .into_iter()
+                .filter(|command| matches!(command, crate::backend::Command::HangupCall))
+                .count()
+        };
+        assert_eq!(
+            hang_ups(app.backend.take_demo_commands()),
+            0,
+            "stepping away, returning, and full screen never hang up"
+        );
+        app.actions.push(Action::HangupCall);
+        frame_with(&mut app, &ctx, Vec::new());
+        assert_eq!(
+            hang_ups(app.backend.take_demo_commands()),
+            1,
+            "the hang-up button is the one that ends the call"
+        );
+    }
+
+    #[test]
+    fn an_incoming_call_stays_on_screen_until_it_is_answered_or_declined() {
+        let mut app = app();
+        apply_flags(&mut app, Some("call"));
+        let ctx = egui::Context::default();
+        app.attach(&ctx);
+        app.backend.record_demo_commands();
+        // Escape is not an answer and not a refusal, so the ringing call stays where it can be
+        // answered.
+        frame_with(&mut app, &ctx, vec![key(egui::Key::Escape)]);
+        assert!(!app.call_surface_hidden, "the ringing call is still there");
+        assert_eq!(
+            app.call.as_ref().map(|call| call.phase),
+            Some(CallPhase::Incoming)
+        );
+        assert!(
+            !app.backend
+                .take_demo_commands()
+                .iter()
+                .any(|command| matches!(
+                    command,
+                    crate::backend::Command::AnswerCall | crate::backend::Command::DeclineCall
+                )),
+            "escape neither answers nor declines"
+        );
+    }
+
+    #[test]
+    fn the_bar_brings_the_call_screen_back() {
+        let (mut app, ctx) = on_a_call();
+        ctx.enable_accesskit();
+        app.actions.push(Action::LeaveCallSurface);
+        let bar = labels(&mut app, &ctx);
+        assert!(
+            bar.contains(&"Return to the call".to_owned()),
+            "the bar offers the way back: {bar:?}"
+        );
+        assert!(
+            !bar.contains(&"Hide the call screen".to_owned()),
+            "and the surface that was put aside is not on screen: {bar:?}"
+        );
+        assert_eq!(
+            app.call.as_ref().map(|call| call.phase),
+            Some(CallPhase::Active),
+            "the bar is only ever a way back to a call that is still up"
+        );
+
+        app.actions.push(Action::ReturnToCall);
+        let screen = labels(&mut app, &ctx);
+        assert!(
+            screen.contains(&"Hide the call screen".to_owned()),
+            "the surface comes back: {screen:?}"
+        );
+        assert!(
+            !screen.contains(&"Return to the call".to_owned()),
+            "and the bar goes with it: {screen:?}"
+        );
+        assert_eq!(
+            app.call.as_ref().map(|call| call.phase),
+            Some(CallPhase::Active),
+            "returning is not a new call"
+        );
+    }
+
+    /// The bar is a way back to a call that is still up, so it goes when the call does.
+    #[test]
+    fn the_bar_leaves_with_the_call_it_belongs_to() {
+        let (mut app, ctx) = on_a_call();
+        ctx.enable_accesskit();
+        app.actions.push(Action::LeaveCallSurface);
+        frame_with(&mut app, &ctx, Vec::new());
+        let bar = labels(&mut app, &ctx);
+        assert!(
+            bar.contains(&"Return to the call".to_owned()),
+            "the call is still up behind the bar: {bar:?}"
+        );
+
+        let call = app.call.as_mut().expect("a call is up");
+        call.phase = CallPhase::Ended;
+        call.outcome = Some(crate::calls::CallOutcome::Answered);
+        let after = labels(&mut app, &ctx);
+        assert!(
+            !after.contains(&"Return to the call".to_owned()),
+            "a call that is over has no way back: {after:?}"
+        );
+    }
+
+    /// A locked chat's farewell, and any call the reader put aside, still ends behind the bar.
+    ///
+    /// `call_surface_hidden` is set for a locked call's terminal snapshot, but the surface only
+    /// looked at the bar while the phase was live, so the four-second farewell painted the whole
+    /// window once more and announced that a hidden chat had a call. A hidden snapshot stays behind
+    /// the bar whatever the phase.
+    #[test]
+    fn a_hidden_farewell_stays_behind_the_bar() {
+        let (mut app, ctx) = on_a_call();
+        ctx.enable_accesskit();
+        app.call_surface_hidden = true;
+        let call = app.call.as_mut().expect("a call is up");
+        call.phase = CallPhase::Ended;
+        call.outcome = Some(crate::calls::CallOutcome::Answered);
+        let shown = labels(&mut app, &ctx);
+        for absent in ["Full screen", "Mute", "Hang up"] {
+            assert!(
+                !shown.contains(&absent.to_owned()),
+                "a hidden farewell must not paint the call surface: {absent} in {shown:?}"
+            );
+        }
+    }
+
+    /// A call that is over offers no control: the backend has already released the runtime.
+    ///
+    /// The farewell keeps the controls it was drawn with so the outcome reads where the call was,
+    /// but the red Hang up stayed enabled, so a click sent a command nobody was listening for and
+    /// the screen offered an action for a call that had ended.
+    #[test]
+    fn the_farewell_offers_no_action_for_a_call_that_is_over() {
+        let (mut app, ctx) = on_a_call();
+        ctx.enable_accesskit();
+        let call = app.call.as_mut().expect("a call is up");
+        call.phase = CallPhase::Ended;
+        call.outcome = Some(crate::calls::CallOutcome::Answered);
+        let shown = labelled(&mut app, &ctx);
+        for tip in ["Mute", "Hang up"] {
+            let control = shown.iter().find(|(label, _)| label == tip);
+            assert!(
+                matches!(control, Some((_, true))),
+                "{tip} is disabled once the call is over: {shown:?}"
+            );
+        }
+    }
+
+    /// A group's chat offers a voice and a video call in its header, as a person's does, while
+    /// group calls are on; a channel's offers neither.
+    #[test]
+    fn a_groups_header_offers_calls() {
+        let _on = crate::calls::override_group_calls(true);
+        let (mut app, ctx) = header_app();
+        let shown = labels(&mut app, &ctx);
+        for expected in ["Voice call", "Video call"] {
+            assert!(
+                shown.contains(&expected.to_owned()),
+                "{expected} is in the group's header: {shown:?}"
+            );
+        }
+
+        let channel = SAMPLES
+            .iter()
+            .find(|sample| sample.id.ends_with("@newsletter"))
+            .unwrap()
+            .id;
+        app.open_chat = Some(channel.into());
+        let shown = labels(&mut app, &ctx);
+        assert!(
+            !shown.contains(&"Voice call".to_owned()),
+            "a channel has no call button: {shown:?}"
+        );
+    }
+
+    /// With group calls off, a group's header has no call buttons, and a person's keeps them.
+    #[test]
+    fn with_group_calls_off_a_groups_header_offers_no_calls() {
+        let _off = crate::calls::override_group_calls(false);
+        let (mut app, ctx) = header_app();
+        let shown = labels(&mut app, &ctx);
+        for absent in ["Voice call", "Video call"] {
+            assert!(
+                !shown.contains(&absent.to_owned()),
+                "{absent} is not in the group's header: {shown:?}"
+            );
+        }
+        let person = SAMPLES
+            .iter()
+            .find(|sample| sample.id.ends_with("@s.whatsapp.net"))
+            .unwrap()
+            .id;
+        app.open_chat = Some(person.into());
+        let shown = labels(&mut app, &ctx);
+        assert!(
+            shown.contains(&"Voice call".to_owned()),
+            "a person's chat still calls: {shown:?}"
+        );
+    }
+
+    /// The demo with a group's chat open, ready to read its header's labels.
+    fn header_app() -> (App, egui::Context) {
+        let mut app = app();
+        let group = SAMPLES
+            .iter()
+            .find(|sample| sample.id.ends_with("@g.us"))
+            .unwrap()
+            .id;
+        app.open_chat = Some(group.into());
+        let ctx = egui::Context::default();
+        app.attach(&ctx);
+        ctx.enable_accesskit();
+        (app, ctx)
+    }
+
+    /// A group call that only the phone can answer leaves the screen alone and says so, naming
+    /// who is calling which group.
+    #[test]
+    fn a_group_call_on_the_phone_only_is_a_notice() {
+        let mut app = app();
+        apply_flags(&mut app, Some("call-group-on-phone"));
+        assert!(app.call.is_none(), "no call screen");
+        let notice = app
+            .toasts
+            .iter()
+            .find(|toast| toast.message.contains("answer on your phone"))
+            .expect("the window says so");
+        let group = app.chat_title_of(SAMPLES[1].id);
+        assert!(notice.message.contains(&group), "{}", notice.message);
+    }
+
+    /// A call we started in a group is drawn as the group's, ringing everyone on it: nobody has
+    /// joined, so each reads as invited, and nobody is named as having rung.
+    #[test]
+    fn a_group_call_we_started_rings_its_members() {
+        let mut app = app();
+        apply_flags(&mut app, Some("call-group-calling"));
+        assert_eq!(app.call_name(), "Rust Berlin");
+        assert_eq!(app.call_caller_name(), None);
+        assert!(app.call_people().iter().all(|person| !person.joined));
+        let ctx = egui::Context::default();
+        app.attach(&ctx);
+        ctx.enable_accesskit();
+        let shown = labels(&mut app, &ctx);
+        assert!(shown.contains(&"Hang up".to_owned()), "{shown:?}");
+    }
+
+    /// A group's call rings under the group's name and says who started it, and once up it has a
+    /// tile for everyone on its roster, saying who has not joined. A voice call in a group offers
+    /// no camera: WhatsApp takes video only in a group call that began as one.
+    #[test]
+    fn a_group_call_names_its_group_who_rang_and_who_is_on_it() {
+        let mut ringing = app();
+        apply_flags(&mut ringing, Some("call-group"));
+        assert_eq!(ringing.call_name(), "Rust Berlin", "named by its group");
+        let caller = ringing.call_caller_name();
+        assert_eq!(caller.as_deref(), Some("Jonas"));
+        let call = ringing.call.clone().unwrap();
+        assert_eq!(
+            crate::ui::call::incoming_text(ringing.locale, &call, caller.as_deref()),
+            "Group voice call from Jonas"
+        );
+
+        let mut running = app();
+        apply_flags(&mut running, Some("call-group-active"));
+        let people: Vec<(String, bool)> = running
+            .call_people()
+            .into_iter()
+            .map(|person| (person.name, person.joined))
+            .collect();
+        assert_eq!(
+            people,
+            [
+                ("Jonas".to_owned(), true),
+                ("Mira".to_owned(), true),
+                ("Tom".to_owned(), true),
+                ("Ada Lovelace".to_owned(), true),
+                ("Grace Hopper".to_owned(), false),
+            ]
+        );
+        let ctx = egui::Context::default();
+        running.attach(&ctx);
+        ctx.enable_accesskit();
+        let shown = labels(&mut running, &ctx);
+        for expected in ["Mute", "Devices", "Hang up"] {
+            assert!(
+                shown.contains(&expected.to_owned()),
+                "{expected} is on the call screen: {shown:?}"
+            );
+        }
+        assert!(
+            !shown.contains(&"Start video".to_owned()),
+            "a group voice call offers no camera: {shown:?}"
+        );
+
+        // A locked group's call names nobody on it.
+        let group = running.call.as_ref().unwrap().chat.clone();
+        for chat in running.chats.iter_mut().filter(|chat| chat.id == group) {
+            chat.locked = true;
+        }
+        running.settings.set_chat_lock_code(Some("test-code"));
+        assert!(running.call_people().is_empty());
+        assert_eq!(
+            running.call_self().map(|me| me.name).as_deref(),
+            Some("You"),
+            "our own tile is ours to name"
+        );
+        assert_eq!(running.call_caller_name(), None);
+    }
+
+    #[test]
+    fn the_call_screen_labels_every_control_it_offers() {
+        let (mut running, ctx) = on_a_call();
+        ctx.enable_accesskit();
+        let screen = labels(&mut running, &ctx);
+        for expected in [
+            "Hide the call screen",
+            "Full screen",
+            "Mute",
+            "Start video",
+            "Devices",
+            "Hang up",
+        ] {
+            assert!(
+                screen.contains(&expected.to_owned()),
+                "missing accessible label: {expected}"
+            );
+        }
+        // The same controls say what they do when pressed, not just which button they are.
+        running.actions.push(Action::ToggleCallFullscreen);
+        let full = labels(&mut running, &ctx);
+        assert!(
+            full.contains(&"Exit full screen".to_owned()),
+            "the full-screen control says how to leave: {full:?}"
+        );
+
+        let mut ringing = app();
+        apply_flags(&mut ringing, Some("call"));
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        ringing.attach(&ctx);
+        let incoming = labels(&mut ringing, &ctx);
+        for expected in ["Accept", "Decline"] {
+            assert!(
+                incoming.contains(&expected.to_owned()),
+                "missing accessible label: {expected}"
+            );
+        }
+    }
+}
+
+/// The call surface's previews: what they hand it, and the picture they hand it with.
+#[cfg(test)]
+mod call_preview_tests {
+    use super::tests::app;
+    use super::*;
+
+    #[test]
+    fn the_call_previews_hand_the_surface_a_live_call() {
+        let mut screen = app();
+        call_sample(&mut screen, true, false);
+        let incoming = screen.call.clone().expect("a call is on screen");
+        assert_eq!(incoming.phase, CallPhase::Incoming);
+        assert_eq!(incoming.direction, CallDirection::Incoming);
+        assert!(incoming.phase.is_live(), "a ringing call is still a call");
+        assert!(
+            !incoming.video,
+            "the ringing preview is the voice one, so the two do not read alike"
+        );
+
+        let mut screen = app();
+        call_sample(&mut screen, false, true);
+        let live = screen.call.clone().expect("a call is on screen");
+        assert_eq!(live.phase, CallPhase::Active);
+        assert_eq!(live.direction, CallDirection::Outgoing);
+        assert!(
+            live.started.is_some(),
+            "the duration has something to count from"
+        );
+        assert!(live.remote_video && live.camera_on);
+        assert!(
+            screen.call_remote_frame.is_some() && screen.call_local_frame.is_some(),
+            "a video preview has both pictures"
+        );
+        assert_eq!(
+            screen.call_remote_frame.as_ref().map(|frame| frame.size),
+            Some([540, 720]),
+            "the peer's picture keeps the shape a portrait phone sends"
+        );
+    }
+}
+
+/// The navigation rail beside the chat list, and the Calls tab beside the
+/// open chat.
+#[cfg(test)]
+mod rail_tests {
+    use super::tests::app;
+    use super::*;
+    use crate::model::{Action, Page};
+    use crate::ui::focus::{self, Stop};
+    use crate::ui::rail::{self, Destination};
+
+    /// One frame at `width` by 780 points, with the layout records of the
+    /// last one cleared, so a part not drawn leaves none.
+    fn frame(app: &mut App, ctx: &egui::Context, width: f32, events: Vec<egui::Event>) {
+        frame_at(app, ctx, egui::vec2(width, 780.0), events);
+    }
+
+    /// One frame at `size`, as [`frame`]; returns the text it painted.
+    fn frame_at(
+        app: &mut App,
+        ctx: &egui::Context,
+        size: egui::Vec2,
+        events: Vec<egui::Event>,
+    ) -> Vec<String> {
+        ctx.data_mut(|data| {
+            data.remove::<egui::Rect>(rail::rect_id());
+            data.remove::<egui::Rect>(crate::ui::chats::header_row_id());
+            data.remove::<egui::Rect>(crate::ui::conversation::header_row_id());
+            for chat in &app.chats {
+                data.remove::<egui::Rect>(crate::ui::chats::compact_chat_id(&chat.id));
+            }
+        });
+        let mut output = ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, size)),
+                events,
+                ..Default::default()
+            },
+            |ui| {
+                let ctx = ui.ctx().clone();
+                app.background_frame(&ctx);
+                app.frame_ui(ui);
+            },
+        );
+        output.textures_delta.clear();
+        fn texts(shape: &egui::Shape, out: &mut Vec<String>) {
+            match shape {
+                egui::Shape::Text(text) => out.push(text.galley.text().to_owned()),
+                egui::Shape::Vec(shapes) => shapes.iter().for_each(|shape| texts(shape, out)),
+                _ => {}
+            }
+        }
+        let mut drawn = Vec::new();
+        for clipped in &output.shapes {
+            texts(&clipped.shape, &mut drawn);
+        }
+        drawn
+    }
+
+    /// The demo on `page`, laid out wide, in the macOS chrome when `macos`.
+    fn open(page: &str, macos: bool) -> (App, egui::Context) {
+        let mut app = app();
+        apply_flags(&mut app, Some(page));
+        let ctx = egui::Context::default();
+        app.attach(&ctx);
+        if macos {
+            crate::theme::preview_macos(&ctx);
+        }
+        for _ in 0..3 {
+            frame(&mut app, &ctx, 1180.0, Vec::new());
+        }
+        (app, ctx)
+    }
+
+    fn recorded(ctx: &egui::Context, id: egui::Id) -> Option<egui::Rect> {
+        ctx.data(|data| data.get_temp::<egui::Rect>(id))
+    }
+
+    fn rail_rect(ctx: &egui::Context) -> Option<egui::Rect> {
+        recorded(ctx, rail::rect_id())
+    }
+
+    fn list_header(ctx: &egui::Context) -> Option<egui::Rect> {
+        recorded(ctx, crate::ui::chats::header_row_id())
+    }
+
+    fn conversation_header(ctx: &egui::Context) -> Option<egui::Rect> {
+        recorded(ctx, crate::ui::conversation::header_row_id())
+    }
+
+    /// Where the control registered for `stop` was drawn this frame.
+    fn stop_rect(ctx: &egui::Context, stop: Stop) -> Option<egui::Rect> {
+        focus::stops(ctx)
+            .into_iter()
+            .find(|(known, _)| *known == stop)
+            .and_then(|(_, id)| ctx.read_response(id))
+            .map(|response| response.rect)
+    }
+
+    fn destination_rect(ctx: &egui::Context, destination: Destination) -> egui::Rect {
+        ctx.read_response(rail::destination_id(destination))
+            .expect("the rail draws every destination")
+            .rect
+    }
+
+    fn click(app: &mut App, ctx: &egui::Context, width: f32, pos: egui::Pos2) {
+        frame(app, ctx, width, vec![egui::Event::PointerMoved(pos)]);
+        for pressed in [true, false] {
+            frame(
+                app,
+                ctx,
+                width,
+                vec![egui::Event::PointerButton {
+                    pos,
+                    button: egui::PointerButton::Primary,
+                    pressed,
+                    modifiers: egui::Modifiers::NONE,
+                }],
+            );
+        }
+        frame(app, ctx, width, Vec::new());
+    }
+
+    /// Ctrl+Shift (Cmd+Shift on macOS) and the digit at `physical`, which
+    /// the layout reports as `key` with Shift held.
+    fn shifted(key: egui::Key, physical: egui::Key) -> egui::Event {
+        egui::Event::Key {
+            key,
+            physical_key: Some(physical),
+            pressed: true,
+            repeat: false,
+            modifiers: egui::Modifiers::COMMAND | egui::Modifiers::SHIFT,
+        }
+    }
+
+    fn escape() -> egui::Event {
+        egui::Event::Key {
+            key: egui::Key::Escape,
+            physical_key: None,
+            pressed: true,
+            repeat: false,
+            modifiers: egui::Modifiers::NONE,
+        }
+    }
+
+    /// The rail stands at the window's left edge beside the list, with Chats
+    /// and Calls at its top and Starred, Settings and our avatar at its foot;
+    /// with the list hidden, the chats' avatars fill it between the two. On
+    /// macOS it starts below the traffic lights.
+    #[test]
+    fn the_rail_carries_the_destinations_with_the_list_shown_or_hidden() {
+        for macos in [false, true] {
+            let (app, ctx) = open("chat", macos);
+            let rail = rail_rect(&ctx).expect("the rail is drawn");
+            assert!(rail.left() < 1.0, "{macos}: at the left edge: {rail:?}");
+            assert!(
+                (rail.width() - crate::ui::chats::compact_width(&ctx)).abs() < 1.0,
+                "{macos}: as wide as the collapsed list was: {rail:?}"
+            );
+            let header = list_header(&ctx).expect("the list is drawn");
+            assert!(
+                header.left() >= rail.right(),
+                "{macos}: the list is beside it"
+            );
+            let top = [Destination::Chats, Destination::Calls]
+                .map(|destination| destination_rect(&ctx, destination));
+            let starred = destination_rect(&ctx, Destination::Starred);
+            let shown_starred = starred;
+            let settings = destination_rect(&ctx, Destination::Settings);
+            let shown_settings = settings;
+            let me = stop_rect(&ctx, Stop::Profile).expect("our avatar is drawn");
+            for rect in top.iter().chain([&starred, &settings, &me]) {
+                assert!(rail.contains_rect(*rect), "{macos}: {rect:?} in {rail:?}");
+            }
+            assert!(top[0].bottom() <= top[1].top());
+            // Starred heads the bottom group, a plate and a gap above
+            // Archived, or Settings when nothing is archived or locked.
+            let below = if Destination::Archived.offered(&app) {
+                destination_rect(&ctx, Destination::Archived)
+            } else {
+                settings
+            };
+            assert!(
+                (below.top() - starred.bottom() - 8.0).abs() < 0.5,
+                "{macos}: Starred directly above the next bottom button: {starred:?} {below:?}"
+            );
+            assert!(
+                starred.top() > top[1].bottom() + 100.0,
+                "{macos}: at the foot"
+            );
+            assert_eq!(starred.size(), egui::vec2(36.0, 36.0));
+            assert!(
+                (me.top() - settings.bottom() - 8.0).abs() < 0.5
+                    && (rail.bottom() - me.bottom() - 8.0).abs() < 0.5,
+                "{macos}: Settings, our avatar and the edge 8 points apart: {settings:?} {me:?}"
+            );
+            assert_eq!(settings.size(), egui::vec2(36.0, 36.0));
+            assert_eq!(me.size(), egui::vec2(32.0, 32.0));
+            // A Mac lays out its own way whichever the preview says.
+            if crate::theme::macos_chrome(&ctx) {
+                assert!(
+                    top[0].top() >= 36.0 && top[0].top() < 60.0,
+                    "just below the traffic lights: {:?}",
+                    top[0]
+                );
+                // The lights reach over the list header, whose title makes
+                // way for them.
+                assert!(header.left() + 14.0 + crate::ui::rail::lights_overhang(&ctx) >= 84.0);
+            } else {
+                // Chats sits level with the list header's title row.
+                assert!((top[0].center().y - header.center().y).abs() < 3.0);
+            }
+            assert!(Destination::Chats.lit(&app));
+            // Beside the list the rail does not repeat its chats.
+            let first = app.visible_chats()[0].id.clone();
+            assert!(
+                recorded(&ctx, crate::ui::chats::compact_chat_id(&first)).is_none(),
+                "{macos}: no avatars in the rail beside the list"
+            );
+
+            let (app, ctx) = open("rail", macos);
+            let rail = rail_rect(&ctx).expect("the rail is drawn with the list hidden");
+            assert!(list_header(&ctx).is_none(), "{macos}: the list is hidden");
+            let chats = destination_rect(&ctx, Destination::Chats);
+            let starred = destination_rect(&ctx, Destination::Starred);
+            let settings = destination_rect(&ctx, Destination::Settings);
+            let calls = destination_rect(&ctx, Destination::Calls);
+            let show = stop_rect(&ctx, Stop::Sidebar).expect("Show the chat list");
+            assert!(rail.contains_rect(show) && show.top() >= calls.bottom());
+            // Nothing the list's toggle leaves in place moves.
+            assert_eq!(chats, top[0], "{macos}: Chats stays put");
+            assert_eq!(calls, top[1], "{macos}: Calls stays put");
+            assert_eq!(starred, shown_starred, "{macos}: Starred stays put");
+            assert_eq!(settings, shown_settings, "{macos}: Settings stays put");
+            let first = app.visible_chats()[0].id.clone();
+            let avatar = recorded(&ctx, crate::ui::chats::compact_chat_id(&first))
+                .expect("the chats' avatars fill the rail");
+            assert!(
+                rail.contains_rect(avatar),
+                "{macos}: {avatar:?} in {rail:?}"
+            );
+            assert!(
+                avatar.top() >= calls.bottom() && avatar.bottom() <= starred.top(),
+                "{macos}: between the top group and Starred: {avatar:?}"
+            );
+            // Under Show the chat list, which takes a cell of its own.
+            assert!(avatar.top() >= show.bottom());
+        }
+    }
+
+    /// At the minimum window height, Tab and Shift+Tab reveal every rail
+    /// control, including the bottom group, without crossing the title bar.
+    #[test]
+    fn tab_reveals_every_rail_control_in_a_short_window() {
+        for macos in [false, true] {
+            for page in ["chat", "rail"] {
+                for reverse in [false, true] {
+                    let (mut app, ctx) = open(page, macos);
+                    let size = egui::vec2(1180.0, 300.0);
+                    for _ in 0..3 {
+                        frame_at(&mut app, &ctx, size, Vec::new());
+                    }
+                    let mut expected = vec![
+                        Stop::Chats,
+                        Stop::Calls,
+                        Stop::Starred,
+                        Stop::Archived,
+                        Stop::Locked,
+                        Stop::Settings,
+                        Stop::Profile,
+                    ];
+                    if page == "rail" {
+                        expected.push(Stop::Sidebar);
+                    }
+                    for stop in &expected {
+                        assert!(stop_rect(&ctx, *stop).is_some(), "{stop:?} is offered");
+                    }
+                    ctx.memory_mut(|memory| {
+                        memory.request_focus(rail::destination_id(Destination::Chats));
+                    });
+                    let mut reached = std::collections::BTreeSet::new();
+                    for _ in 0..40 {
+                        frame_at(
+                            &mut app,
+                            &ctx,
+                            size,
+                            vec![egui::Event::Key {
+                                key: egui::Key::Tab,
+                                physical_key: None,
+                                pressed: true,
+                                repeat: false,
+                                modifiers: if reverse {
+                                    egui::Modifiers::SHIFT
+                                } else {
+                                    egui::Modifiers::NONE
+                                },
+                            }],
+                        );
+                        for _ in 0..3 {
+                            frame_at(&mut app, &ctx, size, Vec::new());
+                        }
+                        let focused = ctx.memory(|memory| memory.focused());
+                        let Some((stop, id)) = focus::stops(&ctx)
+                            .into_iter()
+                            .find(|(stop, id)| Some(*id) == focused && expected.contains(stop))
+                        else {
+                            continue;
+                        };
+                        let response = ctx.read_response(id).unwrap();
+                        let mut viewport = rail_rect(&ctx).unwrap();
+                        if crate::theme::traffic_light_inset(&ctx) > 0.0 {
+                            viewport.min.y += crate::theme::TOP_BAR_HEIGHT / 2.0 + 12.0;
+                        }
+                        assert_eq!(
+                            response.interact_rect, response.rect,
+                            "{page}, macOS={macos}, reverse={reverse}: {stop:?} is fully visible"
+                        );
+                        assert!(
+                            viewport.contains_rect(response.rect),
+                            "{stop:?} stays in the rail below the title bar"
+                        );
+                        reached.insert(stop);
+                    }
+                    assert_eq!(reached, expected.into_iter().collect());
+                }
+            }
+        }
+    }
+
+    /// Wheel scrolling reaches the account button at the minimum height;
+    /// growing the window restores the usual top and bottom positions.
+    #[test]
+    fn a_short_rail_scrolls_and_resets_when_the_window_grows() {
+        for macos in [false, true] {
+            for page in ["chat", "rail"] {
+                let (mut app, ctx) = open(page, macos);
+                let chats = destination_rect(&ctx, Destination::Chats);
+                let profile = stop_rect(&ctx, Stop::Profile).unwrap();
+                let size = egui::vec2(1180.0, 300.0);
+                for _ in 0..3 {
+                    frame_at(&mut app, &ctx, size, Vec::new());
+                }
+                assert!(stop_rect(&ctx, Stop::Profile).unwrap().bottom() > size.y);
+                let pointer = destination_rect(&ctx, Destination::Calls).center();
+                frame_at(
+                    &mut app,
+                    &ctx,
+                    size,
+                    vec![
+                        egui::Event::PointerMoved(pointer),
+                        egui::Event::MouseWheel {
+                            unit: egui::MouseWheelUnit::Point,
+                            delta: egui::vec2(0.0, -600.0),
+                            modifiers: egui::Modifiers::NONE,
+                            phase: egui::TouchPhase::Move,
+                        },
+                    ],
+                );
+                for _ in 0..30 {
+                    frame_at(&mut app, &ctx, size, Vec::new());
+                }
+                let id = focus::control(&ctx, Stop::Profile).unwrap();
+                let response = ctx.read_response(id).unwrap();
+                assert_eq!(
+                    response.interact_rect, response.rect,
+                    "{page}, macOS={macos}: the account button is fully visible after scrolling"
+                );
+                assert!(rail_rect(&ctx).unwrap().contains_rect(response.rect));
+                for _ in 0..3 {
+                    frame(&mut app, &ctx, 1180.0, Vec::new());
+                }
+                assert_eq!(destination_rect(&ctx, Destination::Chats), chats);
+                assert_eq!(stop_rect(&ctx, Stop::Profile), Some(profile));
+            }
+        }
+    }
+
+    /// The Calls page's chips, All and Missed, are the chat list's own,
+    /// under its search field and in its Tab order. Missed keeps only calls
+    /// to us nobody took, a group's included; a search looks among them,
+    /// and the choice is kept with the account.
+    #[test]
+    fn the_calls_chips_pick_missed_calls_and_combine_with_search() {
+        use crate::model::CallFilter;
+        use crate::ui::calls;
+        let (mut app, ctx) = open("calls", false);
+        let chip = |ctx: &egui::Context, filter| {
+            recorded(ctx, calls::filter_chip_id(filter)).expect("the chip is drawn")
+        };
+        let (all, missed) = (chip(&ctx, CallFilter::All), chip(&ctx, CallFilter::Missed));
+        let search = stop_rect(&ctx, Stop::Search).expect("the search field");
+        assert!(all.top() >= search.bottom() && all.right() <= missed.left());
+        assert_eq!(all.height(), 28.0, "the chat list's chip");
+        assert_eq!(stop_rect(&ctx, Stop::All), Some(all));
+        assert_eq!(stop_rect(&ctx, Stop::Missed), Some(missed));
+        let rows: Vec<(Message, bool)> = calls::rows(&app.call_log)
+            .into_iter()
+            .map(|row| {
+                let missed = calls::Entry::of(row[0]).unwrap().missed();
+                (row[0].clone(), missed)
+            })
+            .collect();
+        assert!(rows.iter().filter(|(_, missed)| *missed).count() >= 2);
+        assert!(
+            rows.iter().any(|(call, missed)| *missed
+                && matches!(call.content, Content::Call { group: true, .. })),
+            "a missed group call"
+        );
+        let drawn = |ctx: &egui::Context| -> Vec<String> {
+            rows.iter()
+                .filter(|(call, _)| {
+                    ctx.read_response(calls::row_id(&call.chat, &call.id))
+                        .is_some()
+                })
+                .map(|(call, _)| call.id.clone())
+                .collect()
+        };
+        let ids = |keep: &dyn Fn(&Message, bool) -> bool| -> Vec<String> {
+            rows.iter()
+                .filter(|(call, missed)| keep(call, *missed))
+                .map(|(call, _)| call.id.clone())
+                .collect()
+        };
+        assert_eq!(drawn(&ctx), ids(&|_, _| true), "All lists every row");
+
+        click(&mut app, &ctx, 1180.0, missed.center());
+        // A response can come from the pass before the last.
+        frame(&mut app, &ctx, 1180.0, Vec::new());
+        assert_eq!(app.call_filter, CallFilter::Missed);
+        assert_eq!(
+            app.account().settings.call_filter.as_deref(),
+            Some("missed")
+        );
+        assert_eq!(drawn(&ctx), ids(&|_, missed| missed), "only missed calls");
+
+        // A search looks among the missed calls only.
+        let ada = SAMPLES[0].id;
+        app.calls_search = app.display_name(ada);
+        frame(&mut app, &ctx, 1180.0, Vec::new());
+        frame(&mut app, &ctx, 1180.0, Vec::new());
+        assert_eq!(
+            drawn(&ctx),
+            ids(&|call, missed| missed && call.chat == ada),
+            "Ada's missed calls"
+        );
+        let grace = SAMPLES[2].id;
+        app.calls_search = app.display_name(grace);
+        frame(&mut app, &ctx, 1180.0, Vec::new());
+        frame(&mut app, &ctx, 1180.0, Vec::new());
+        let texts = frame_at(&mut app, &ctx, egui::vec2(1180.0, 780.0), Vec::new());
+        assert!(drawn(&ctx).is_empty(), "Grace has no missed call");
+        assert!(texts.iter().any(|text| text == "No matching calls"));
+        // The chips stay while searching: All brings Grace's call back.
+        let missed = chip(&ctx, CallFilter::Missed);
+        click(&mut app, &ctx, 1180.0, missed.center());
+        assert_eq!(app.call_filter, CallFilter::All, "a second click is All");
+        assert_eq!(app.account().settings.call_filter, None);
+        frame(&mut app, &ctx, 1180.0, Vec::new());
+        assert_eq!(drawn(&ctx), ids(&|call, _| call.chat == grace));
+    }
+
+    /// Missed with no missed call says so, and points back to All.
+    #[test]
+    fn missed_with_no_missed_calls_says_so() {
+        use crate::model::CallFilter;
+        use crate::ui::calls;
+        let (mut app, ctx) = open("calls-missed-none", false);
+        assert_eq!(app.call_filter, CallFilter::Missed);
+        assert!(!app.call_log.is_empty(), "other calls remain");
+        let texts = frame_at(&mut app, &ctx, egui::vec2(1180.0, 780.0), Vec::new());
+        assert!(
+            texts.iter().any(|text| text == "No missed calls"),
+            "{texts:?}"
+        );
+        assert!(
+            texts
+                .iter()
+                .any(|text| text == "Choose All to see every call."),
+            "{texts:?}"
+        );
+        assert!(
+            app.call_log.iter().all(|call| ctx
+                .read_response(calls::row_id(&call.chat, &call.id))
+                .is_none()),
+            "no rows"
+        );
+        let (app, ctx) = open("calls-missed", false);
+        assert_eq!(app.call_filter, CallFilter::Missed);
+        assert!(recorded(&ctx, calls::filter_chip_id(CallFilter::Missed)).is_some());
+    }
+
+    /// Archived sits in the rail's bottom group, lit while the archive fills
+    /// the list column, and Chats leads back; the chip row has no Archived.
+    #[test]
+    fn the_archive_opens_from_the_rail_into_the_list() {
+        let (mut app, ctx) = open("chat", false);
+        assert!(
+            Destination::Archived.offered(&app),
+            "the demo archives chats"
+        );
+        let archived = destination_rect(&ctx, Destination::Archived);
+        let settings = destination_rect(&ctx, Destination::Settings);
+        let rail = rail_rect(&ctx).unwrap();
+        assert!(rail.contains_rect(archived) && archived.bottom() <= settings.top());
+        assert!(
+            ctx.data(|data| data.get_temp::<egui::Rect>(egui::Id::new("archived-chip")))
+                .is_none(),
+            "no Archived chip"
+        );
+        click(&mut app, &ctx, 1180.0, archived.center());
+        assert!(app.show_archived && Destination::Archived.lit(&app));
+        assert!(!Destination::Chats.lit(&app));
+        assert!(
+            list_header(&ctx).is_some(),
+            "the archive is in the list column"
+        );
+        let chats = destination_rect(&ctx, Destination::Chats);
+        click(&mut app, &ctx, 1180.0, chats.center());
+        assert!(!app.show_archived && Destination::Chats.lit(&app));
+    }
+
+    /// The rail is one shade darker than the list in every palette, light,
+    /// dark and the Messages theme's.
+    #[test]
+    fn the_rail_is_a_shade_darker_than_the_list() {
+        let luma = |color: egui::Color32| {
+            u32::from(color.r()) + u32::from(color.g()) + u32::from(color.b())
+        };
+        for palette in [
+            crate::theme::Palette::light(),
+            crate::theme::Palette::dark(),
+        ] {
+            assert!(luma(palette.rail()) < luma(palette.sidebar()));
+            assert!(palette.rail().a() >= palette.sidebar().a());
+        }
+    }
+
+    /// The list header keeps only New chat and Hide the chat list beside its
+    /// title; the starred messages' header has only Back and its title, and
+    /// the Calls tab's only New call.
+    #[test]
+    fn the_list_header_has_only_its_own_buttons() {
+        let in_header = |ctx: &egui::Context| {
+            let header = list_header(ctx).expect("the list header is drawn");
+            focus::stops(ctx)
+                .into_iter()
+                .filter(|(_, id)| {
+                    ctx.read_response(*id)
+                        .is_some_and(|response| header.intersects(response.rect))
+                })
+                .map(|(stop, _)| stop)
+                .collect::<Vec<_>>()
+        };
+        for macos in [false, true] {
+            let (_app, ctx) = open("chat", macos);
+            assert_eq!(in_header(&ctx), [Stop::NewChat, Stop::Sidebar], "{macos}");
+            let (_app, ctx) = open("starred", macos);
+            assert_eq!(in_header(&ctx), [Stop::Back], "{macos}");
+            let (_app, ctx) = open("calls", macos);
+            assert_eq!(in_header(&ctx), [Stop::NewChat], "{macos}: New call");
+        }
+    }
+
+    /// Opening Calls keeps the open chat beside the history; picking a row
+    /// opens that row's chat there, still on Calls. With no chat open the
+    /// pane offers to start a call.
+    #[test]
+    fn the_calls_tab_keeps_the_open_chat_beside_its_history() {
+        let (mut app, ctx) = open("chat", false);
+        let chat = app.open_chat.clone().expect("a chat is open to start");
+        let calls = destination_rect(&ctx, Destination::Calls);
+        click(&mut app, &ctx, 1180.0, calls.center());
+        assert_eq!(app.page, Page::Calls);
+        assert!(Destination::Calls.lit(&app) && !Destination::Chats.lit(&app));
+        assert_eq!(app.open_chat.as_deref(), Some(chat.as_str()));
+        assert!(
+            conversation_header(&ctx).is_some(),
+            "the chat stays on the right"
+        );
+        assert!(list_header(&ctx).is_some(), "the history is on the left");
+
+        let (mut app, ctx) = open("calls-chat", false);
+        let opened = app.open_chat.clone().unwrap();
+        assert!(conversation_header(&ctx).is_some());
+        let other = app
+            .call_log
+            .iter()
+            .find(|call| call.chat != opened)
+            .cloned()
+            .expect("a call with someone else");
+        let row = ctx
+            .read_response(crate::ui::calls::row_id(&other.chat, &other.id))
+            .expect("the row is drawn")
+            .rect;
+        click(
+            &mut app,
+            &ctx,
+            1180.0,
+            row.left_center() + egui::vec2(40.0, 0.0),
+        );
+        assert_eq!(app.page, Page::Calls, "picking a call stays on Calls");
+        assert_eq!(app.open_chat.as_deref(), Some(other.chat.as_str()));
+        assert!(app.call_picked());
+        assert!(conversation_header(&ctx).is_some());
+
+        let (app, ctx) = open("calls-info", false);
+        assert_eq!(app.page, Page::Calls);
+        assert!(app.call_picked() && conversation_header(&ctx).is_some());
+
+        let (_app, ctx) = open("calls", false);
+        assert!(
+            conversation_header(&ctx).is_none(),
+            "no chat: the start pane"
+        );
+    }
+
+    /// Calls and Starred are left through Chats or Escape, and Ctrl+Shift+1
+    /// and Ctrl+Shift+2 lead to Chats and Calls from anywhere.
+    #[test]
+    fn escape_and_the_shortcuts_return_to_the_chats() {
+        let (mut app, ctx) = open("calls-chat", false);
+        let chat = app.open_chat.clone().unwrap();
+        frame(&mut app, &ctx, 1180.0, vec![escape()]);
+        frame(&mut app, &ctx, 1180.0, Vec::new());
+        assert_eq!(app.page, Page::Chats);
+        assert_eq!(
+            app.open_chat.as_deref(),
+            Some(chat.as_str()),
+            "the chat stays open"
+        );
+
+        frame(
+            &mut app,
+            &ctx,
+            1180.0,
+            vec![shifted(egui::Key::Num2, egui::Key::Num2)],
+        );
+        frame(&mut app, &ctx, 1180.0, Vec::new());
+        assert_eq!(app.page, Page::Calls);
+        frame(
+            &mut app,
+            &ctx,
+            1180.0,
+            vec![shifted(egui::Key::Exclamationmark, egui::Key::Num1)],
+        );
+        frame(&mut app, &ctx, 1180.0, Vec::new());
+        assert_eq!(app.page, Page::Chats);
+        assert_eq!(app.open_chat.as_deref(), Some(chat.as_str()));
+
+        let starred = destination_rect(&ctx, Destination::Starred);
+        click(&mut app, &ctx, 1180.0, starred.center());
+        assert!(app.show_starred && Destination::Starred.lit(&app));
+        click(&mut app, &ctx, 1180.0, starred.center());
+        assert!(app.show_starred, "Starred is not a toggle");
+        frame(&mut app, &ctx, 1180.0, vec![escape()]);
+        frame(&mut app, &ctx, 1180.0, Vec::new());
+        assert!(!app.show_starred && Destination::Chats.lit(&app));
+        click(&mut app, &ctx, 1180.0, starred.center());
+        assert!(app.show_starred);
+        let chats = destination_rect(&ctx, Destination::Chats);
+        click(&mut app, &ctx, 1180.0, chats.center());
+        assert!(!app.show_starred && app.page == Page::Chats);
+    }
+
+    /// A narrow window keeps the rail beside the list, and the rail goes
+    /// with the list when a picked call's chat slides over it; Escape
+    /// brings the history back.
+    #[test]
+    fn a_narrow_window_hides_the_rail_with_the_list() {
+        let (mut app, ctx) = open("calls", false);
+        for _ in 0..30 {
+            frame(&mut app, &ctx, 480.0, Vec::new());
+        }
+        let rail = rail_rect(&ctx).expect("the rail stands beside the history");
+        let header = list_header(&ctx).expect("the history fills the window");
+        assert!(rail.right() <= header.left());
+        let call = app.call_log[0].clone();
+        app.actions.push(Action::PickCall {
+            chat: call.chat.clone(),
+            message: call.id.clone(),
+        });
+        for _ in 0..30 {
+            frame(&mut app, &ctx, 480.0, Vec::new());
+        }
+        assert!(conversation_header(&ctx).is_some(), "the chat slides over");
+        assert!(rail_rect(&ctx).is_none() && list_header(&ctx).is_none());
+        frame(&mut app, &ctx, 480.0, vec![escape()]);
+        for _ in 0..30 {
+            frame(&mut app, &ctx, 480.0, Vec::new());
+        }
+        assert_eq!(app.page, Page::Calls);
+        assert!(app.open_chat.is_none());
+        assert!(rail_rect(&ctx).is_some() && list_header(&ctx).is_some());
     }
 }

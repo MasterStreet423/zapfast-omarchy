@@ -10,7 +10,8 @@ defecto) es la distribución: el oficial al día más estos cambios.
   de la interfaz; acá están marcados todos los textos y `assets/i18n/es.po`
   está completo. Lo que upstream guarda en constantes o en inglés en el
   archivo de mensajes (atajos, categorías de emoji, resúmenes como "Photo")
-  se traduce al mostrarlo, en `src/i18n_extra.rs`.
+  se traduce al mostrarlo, en `src/i18n_extra.rs`. Los resúmenes ("Photo",
+  "Voice message") los traduce upstream desde #527.
 - **Emojis en español.** El selector y el autocompletado `:atajo:` buscan por
   los nombres y palabras clave de Unicode CLDR en español, sin importar las
   tildes (`corazon` encuentra ❤️). Tabla en `assets/i18n/emoji-es.tsv`,
@@ -28,13 +29,12 @@ defecto) es la distribución: el oficial al día más estos cambios.
   `$XDG_RUNTIME_DIR/zapfast/chats.json`, legible solo por el usuario, y
   `zapfast open-chat <id>` abre uno en la instancia que está corriendo. Con
   eso un lanzador (el menú de Omarchy, por ejemplo) puede listar y abrir chats.
-  Código en `src/chat_index.rs`.
+  Código en `src/chat_index.rs`. Convive con lo que upstream agregó en #426
+  (`zapfast <número>`, `wa.me` y `whatsapp://`): eso abre por número; esto, por
+  id, así que también abre grupos.
 
-- **"En línea" solo cuando lo estás mirando.** whatsapp-rust anuncia presencia
-  por su cuenta al conectar y cuando cambia el nombre, así que con la ventana
-  escondida en la bandeja la cuenta podía quedar en línea. Acá la presencia es
-  manual (`PresencePolicy::Manual` en `src/backend/worker.rs`) y la decide solo
-  el foco de la ventana, como ya pretendía upstream.
+- **Sin empaquetado de Windows ni winget.** El fork es para Omarchy; lo que
+  upstream agregó en `packaging/windows/` y `packaging/winget/` no se trae.
 
 ## Traer lo nuevo del oficial
 

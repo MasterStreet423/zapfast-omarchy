@@ -41,12 +41,50 @@ jobs:
   packaging:
     permissions:
       contents: write
-    uses: crmne/native-packages/.github/workflows/package.yml@999768410cf53cdc68c8679c09cb14de1a6bca7b # v0.8.1
+    uses: crmne/native-packages/.github/workflows/package.yml@226fb48cb375c7cb309a3e642c7228a6e00e9ebf # v0.10.0
     with:
       targets: linux-amd64,linux-arm64
       version: ${{ inputs.version || 'v0.13.1' }}
       publish: ${{ inputs.publish == true && inputs.version != '' }}
     secrets: inherit
+
+  # The Windows packages, installed for real with stand-in program files: the
+  # Inno Setup installer, the MSI taking it over, an update, and uninstalling
+  # with ZapFast running and without. Releases build both from these files.
+  windows-installer:
+    name: Windows installer
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '4.0'
+      - name: WiX
+        shell: pwsh
+        run: |
+          dotnet tool install --global wix --version 5.0.2
+          wix extension add --global WixToolset.Util.wixext/5.0.2
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          "$env:USERPROFILE\.dotnet\tools" | Out-File -Append -Encoding utf8 $env:GITHUB_PATH
+      - name: Install, update and remove
+        shell: pwsh
+        run: pwsh packaging/windows/test-installer.ps1
+      # The release's own path to the package: native-packages checks the
+      # input's executable is an x64 PE file, so a system one stands in.
+      - name: Package as the release does
+        shell: pwsh
+        run: |
+          gem install native-packages --version 0.10.0 --no-document
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $payload = "dist\windows-input-x86_64-pc-windows-msvc"
+          New-Item -ItemType Directory -Force $payload | Out-Null
+          Copy-Item "$env:SystemRoot\System32\PING.EXE" "$payload\zapfast.exe"
+          Copy-Item README.md, LICENSE, THIRD-PARTY-NOTICES.md, packaging\windows\zapfast-installer.txt $payload
+          native-packages build --version 0.0.1 --target windows-amd64 `
+            --defer-recipes --output "$env:RUNNER_TEMP\windows-packages"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Get-ChildItem "$env:RUNNER_TEMP\windows-packages\packages\windows-amd64\msi\zapfast-v0.0.1-x86_64-pc-windows-msvc.msi"
 
   installation:
     name: Install (${{ matrix.os }}, ${{ matrix.image }})
@@ -57,7 +95,9 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-24.04, ubuntu-24.04-arm]
-        image: ['ubuntu:24.04', 'debian:13-slim', 'fedora:41', 'fedora:latest']
+        # The oldest distributions the Ubuntu 24.04 builds support (glibc
+        # 2.39) and newer.
+        image: ["ubuntu:24.04", "debian:13-slim", "fedora:41", "fedora:latest"]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/download-artifact@v4
@@ -97,7 +137,7 @@ jobs:
           ARCH: ${{ matrix.arch }}
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends libasound2t64
+          sudo apt-get install -y --no-install-recommends libasound2t64 libpipewire-0.3-0t64
           set -- dist/native-packages/packages/"$TARGET"/appimage/zapfast-*-"$ARCH".AppImage
           test "$#" -eq 1
           chmod +x "$1"

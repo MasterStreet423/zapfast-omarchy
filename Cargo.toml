@@ -31,16 +31,16 @@ cbc = { version = "0.2", features = ["alloc", "block-padding"] }
 hkdf = "0.13"
 hmac = "0.13"
 # Reads .wastickers zip archives.
-zip = { version = "5", default-features = false, features = ["deflate"] }
+zip = { version = "9", default-features = false, features = ["deflate"] }
 clap = { version = "4.5", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 log = "0.4"
 directories = "6"
 # UI framework. glow avoids the larger wgpu dependency.
-eframe = { version = "0.36", default-features = false, features = ["accesskit", "glow", "default_fonts", "links", "wayland", "x11", "persistence"] }
-egui = "0.36"
-egui_extras = { version = "0.36", features = ["file", "image", "svg", "webp", "gif"] }
+eframe = { version = "0.36.2", default-features = false, features = ["accesskit", "glow", "default_fonts", "links", "wayland", "x11", "persistence"] }
+egui = "0.36.2"
+egui_extras = { version = "0.36.2", features = ["file", "image", "svg", "webp", "gif"] }
 # Reads the colour emoji font's bitmaps for the demo tour's GIF fixtures. Keep
 # skrifa aligned with epaint to avoid compiling two versions.
 skrifa = "0.44"
@@ -49,15 +49,32 @@ image = { version = "0.25", default-features = false, features = ["jpeg", "png",
 # WhatsApp Web protocol: pairing, encryption, history sync, and media. Version
 # 0.7.0 on crates.io enables `simd`, which needs nightly Rust. This commit builds
 # on stable and includes snapshot recovery and no-progress conflict handling
-# (upstream #1365, #1374 and #1375). Selected features provide Tokio transport, ureq media downloads,
-# and the SQLite device store. The window handles shutdown instead of `signal`.
-# Includes upstream Business pairing (#1440), LockChatUpdate and snapshot replay
-# (#1507), the viewer's channel mute state (#1537), favorite and recent sticker
-# sync events (#1538), boolean AB props (#1539), and favorite chats sync
-# (#1544). Device-store
-# compatibility retains the legacy created_at column.
-whatsapp-rust = { git = "https://github.com/oxidezap/whatsapp-rust", rev = "f7468ae2920a2b0aedbd0848cf121de56a07f93c", default-features = false, features = ["sqlite-storage", "tokio-transport", "tokio-runtime", "ureq-client", "tokio-native"] }
+# (upstream #1365, #1374 and #1375). Selected features provide Tokio transport,
+# ureq media downloads, and the SQLite device store. The window handles shutdown
+# instead of `signal`. Includes upstream Business pairing (#1440), LockChatUpdate
+# and snapshot replay (#1507), the viewer's channel mute state (#1537), favorite
+# and recent sticker sync events (#1538), boolean AB props (#1539), favorite
+# chats sync (#1544), media re-upload that works and expired downloads that no
+# longer force a media_conn refresh each (#1648, #1653, #1659; the 429s of
+# ZapFast #405), and the typed send, edit, picture and poll APIs (#1614, #1626,
+# #1630, #1640). Protobuf structs are non-exhaustive since #1676, so they are
+# built from `Default` and assigned field by field. Device-store
+# compatibility retains the legacy created_at column. All carried fixes have
+# merged upstream, including video pacing, retransmission and loss recovery
+# (#1726, #1727, #1728), the 1:1 report extension's bytes and rate received
+# (#1761), without which an iPhone peer lowered its video to 600 kbit/s
+# mid-call, and counters of why the peer's video packets never became pictures
+# (#1763), which the call log prints. The sqlite-wasm-rs 0.6 edge that clashed
+# with rusqlite 0.40 (#1764) is behind a `js` feature since #1765. This is
+# upstream main with XOR FEC for 1:1 video, which an iPhone relies on since it
+# never NACKs (#1783), and dropping video queued before the relay allocates
+# (#1782); no fork is carried. Back to crates.io once released. `voip` is the call stack: signaling,
+# the sans-IO media engine with MLOW and libopus codecs, and the native UDP
+# relay transport.
+whatsapp-rust = { git = "https://github.com/oxidezap/whatsapp-rust", rev = "1bfa8d6a66871d0abaf1c5efc77cf4f1694da6f3", default-features = false, features = ["sqlite-storage", "tokio-transport", "tokio-runtime", "ureq-client", "tokio-native", "voip"] }
 tokio = { version = "1", features = ["rt-multi-thread", "sync", "time", "macros", "fs", "net", "io-util"] }
+# Queue between the call's audio streams and the engine.
+async-channel = "2.5"
 # Opens the WhatsApp WebSocket through a proxy. Both crates are already
 # included through the Tokio transport at these versions.
 tokio-websockets = { version = "0.13.3", default-features = false, features = ["client"] }
@@ -96,21 +113,39 @@ arboard = { version = "3", default-features = false, features = ["image-data", "
 mime_guess2 = "2"
 # Emoji names, groups, and shortcodes for picker search.
 emojis = "0.9"
+# Appends the hostname to the device name shown in WhatsApp's Linked Devices.
+gethostname = "1"
 
 # Rasterizes the SVG logo for windows, the tray, and notifications. Already
 # included through egui_extras.
 resvg = { version = "0.45", default-features = false }
 
-# Desktop notifications through D-Bus on Linux and system frameworks elsewhere.
-notify-rust = { version = "4", default-features = false, features = ["z"] }
 openh264 = "0.9"
+# The encoder option a call's camera uses to change its bitrate mid-stream,
+# which openh264 does not wrap. Already included through openh264.
+openh264-sys2 = { version = "0.9", default-features = false }
 mp4 = "0.14"
-# The 0.22 release ends the sound of an interleaved MP4 at the first packet of
-# another track, so a video that has a picture and a sound track plays a tenth
-# of a second of audio and the listener hears silence. This revision is the
-# merge of upstream RustAudio/rodio#833, which skips the packets of every track
-# but the selected one. Drop the pin at the first release that carries it.
-rodio = { git = "https://github.com/RustAudio/rodio", rev = "e89e685d326a684b298c5138adf94caa49e5568c", default-features = false, features = ["playback", "recording", "mp3", "mp4", "wav", "vorbis"] }
+# rodio decodes and mixes; fastframe-audio plays and records, so neither of
+# rodio's own device features is on. The crmne/rodio fork (branch `zapfast`)
+# is upstream's master, which carries what no release has yet:
+# RustAudio/rodio#833 (https://github.com/RustAudio/rodio/pull/833), without
+# which an MP4 with a picture and a sound track plays a tenth of a second of
+# its sound (0.23.0 was cut from the 0.22 branch without it). Drop the pin at
+# the first release with it.
+rodio = { git = "https://github.com/crmne/rodio", rev = "742090d57a4c83b23bd990ba0dcf939d09dbeb94", default-features = false, features = ["mp3", "mp4", "wav", "vorbis"] }
+# The ring a microphone's samples cross from the audio thread to the reader,
+# which never waits or allocates on the audio thread. Already in the tree.
+rtrb = "0.3"
+# Echo cancellation for calls: WebRTC's audio processing (AEC3, its noise
+# suppressor and AGC2) ported to Rust, so it builds wherever Rust does with no
+# C++, meson or system library. Its C++ test suite runs against the port.
+sonora = "0.2"
+# AEC3 itself, driven directly with a configuration for speakers in a room,
+# which sonora's pipeline does not take. Already included through sonora.
+sonora-aec3 = "0.2"
+# rodio's own copy, named to decode a video's AAC track that `mp4` reads:
+# symphonia 0.5's MP4 reader refuses the sound of WhatsApp's videos (#265).
+symphonia = { version = "0.5.5", default-features = false, features = ["aac"] }
 opus = "0.4"
 ogg = "0.9"
 # Converts animated Signal APNG stickers to the animated WebP used by WhatsApp.
@@ -121,38 +156,60 @@ libwebp-sys2 = { version = "0.2", features = ["1_2"] }
 # Shared foundation of Carmine's egui apps (github.com/crmne/fastframe). Every
 # crate comes from the same revision.
 # Bundled gettext catalogs: lookups and system language detection.
-fastframe-i18n = { git = "https://github.com/crmne/fastframe", tag = "v0.4.1" }
+fastframe-i18n = { git = "https://github.com/crmne/fastframe", tag = "v0.14.1" }
 # The icons! table, a loader that survives reduce_texture_memory, and the Lucide
 # icons shared with Spotifast.
-fastframe-icons = { git = "https://github.com/crmne/fastframe", tag = "v0.4.1" }
+fastframe-icons = { git = "https://github.com/crmne/fastframe", tag = "v0.14.1" }
 # The platform's interface font (Inter where there is none), and installed
 # fonts for other scripts.
-fastframe-fonts = { git = "https://github.com/crmne/fastframe", tag = "v0.4.1" }
+fastframe-fonts = { git = "https://github.com/crmne/fastframe", tag = "v0.14.1" }
 # Colour emoji in the platform's own style, with the bundled Noto behind
 # them, drawn off the interface thread.
-fastframe-emoji = { git = "https://github.com/crmne/fastframe", tag = "v0.4.1" }
+fastframe-emoji = { git = "https://github.com/crmne/fastframe", tag = "v0.14.1" }
 # Follows the desktop's hinting and glyph coverage, live through the portal.
-fastframe-text = { git = "https://github.com/crmne/fastframe", tag = "v0.4.1", features = ["watch"] }
+fastframe-text = { git = "https://github.com/crmne/fastframe", tag = "v0.14.1", features = ["watch"] }
 # Palette files, the shared presets, and following Omarchy's theme live.
-fastframe-theme = { git = "https://github.com/crmne/fastframe", tag = "v0.4.1" }
+fastframe-theme = { git = "https://github.com/crmne/fastframe", tag = "v0.14.1" }
 # Logs to stderr and a per-run file, and records panics without their payload.
-fastframe-log = { git = "https://github.com/crmne/fastframe", tag = "v0.4.1" }
+fastframe-log = { git = "https://github.com/crmne/fastframe", tag = "v0.14.1" }
 # The tray item: StatusNotifier on Linux, tray-icon on Windows and macOS.
-fastframe-tray = { git = "https://github.com/crmne/fastframe", tag = "v0.4.1" }
-# Keeps ZapFast running without a window and recovers off-screen windows.
-fastframe-shell = { git = "https://github.com/crmne/fastframe", tag = "v0.4.1" }
-# Centres the macOS traffic lights on ZapFast's own header.
-fastframe-macos = { git = "https://github.com/crmne/fastframe", tag = "v0.4.1" }
+fastframe-tray = { git = "https://github.com/crmne/fastframe", tag = "v0.14.1" }
+# Keeps ZapFast running without a window, remembers its geometry, recovers it
+# off screen, and brings it forward on niri.
+fastframe-shell = { git = "https://github.com/crmne/fastframe", tag = "v0.14.1" }
+# Window chrome: centres the macOS traffic lights on ZapFast's own header and
+# lets its headers move the window.
+fastframe-titlebar = { git = "https://github.com/crmne/fastframe", tag = "v0.14.1" }
 # One running copy per user: the lock, and the channel a second launch uses.
-fastframe-instance = { git = "https://github.com/crmne/fastframe", tag = "v0.4.1" }
+fastframe-instance = { git = "https://github.com/crmne/fastframe", tag = "v0.14.1" }
 # The wheel step, and on Linux touchpad scale, glide and axis lock.
-fastframe-scroll = { git = "https://github.com/crmne/fastframe", tag = "v0.4.1" }
+fastframe-scroll = { git = "https://github.com/crmne/fastframe", tag = "v0.14.1" }
+# The desktop entry name (Flatpak-aware), the GNOME check, and GNOME's clock
+# format through the desktop portal.
+fastframe-desktop = { git = "https://github.com/crmne/fastframe", tag = "v0.14.1" }
+# Process-wide Dock icon and unread badge, plus the Windows taskbar overlay.
+fastframe-dock = { git = "https://github.com/crmne/fastframe", tag = "v0.14.1" }
+# Starting in the tray at login: XDG autostart or the background portal,
+# SMAppService with the bundled agent, the Windows Run key.
+fastframe-autostart = { git = "https://github.com/crmne/fastframe", tag = "v0.14.1" }
+# One native notification API for delivery, permissions, clicks and withdrawal.
+fastframe-notifications = { git = "https://github.com/crmne/fastframe", tag = "v0.14.1" }
+# Sleep and wake as the system reports them, so the link reconnects after a
+# wake (Linux and Windows).
+fastframe-power = { git = "https://github.com/crmne/fastframe", tag = "v0.14.1" }
+# Saves that are never half written: settings and the chosen wallpaper.
+fastframe-file = { git = "https://github.com/crmne/fastframe", tag = "v0.14.1" }
+# Every sound and recording: one device stream that idles while nothing plays,
+# follows the default device and reopens after failures. On Linux it plays to
+# PipeWire or PulseAudio itself, so Linux builds need libpipewire's headers and
+# clang.
+fastframe-audio = { git = "https://github.com/crmne/fastframe", tag = "v0.14.1" }
 # Self-update from GitHub releases with signed checksums, a helper and rollback.
-fastframe-update = { git = "https://github.com/crmne/fastframe", tag = "v0.4.1", features = ["reqwest"] }
+fastframe-update = { git = "https://github.com/crmne/fastframe", tag = "v0.14.1", features = ["reqwest"] }
 
 [patch.crates-io]
-# crmne/egui apps-0.36, shared with Spotifast, RekordFlash and TonePush: egui
-# 0.36.1 with right-to-left shaping and glyph clusters from crmne/zapfast#144
+# crmne/egui apps-0.36.2, shared with Spotifast, RekordFlash and TonePush: egui
+# 0.36.2 with right-to-left shaping and glyph clusters from crmne/zapfast#144
 # and digits shaped left to right in text without right-to-left letters (#184)
 # (emilk/egui#8577), egui's busy-loop fix (emilk/egui#8398), and eframe pacing
 # Wayland frames by the compositor's frame callbacks so a window the
@@ -166,16 +223,16 @@ fastframe-update = { git = "https://github.com/crmne/fastframe", tag = "v0.4.1",
 # no longer shrinks each time it reopens (#293, emilk/egui#8656).
 # Every egui crate comes from the same revision so they share one emath and
 # epaint. Drop this once egui releases all three.
-ecolor = { git = "https://github.com/crmne/egui", rev = "ba6790fe7cf46e58e8d27ce1524cbfdee745e938" }
-eframe = { git = "https://github.com/crmne/egui", rev = "ba6790fe7cf46e58e8d27ce1524cbfdee745e938" }
-egui = { git = "https://github.com/crmne/egui", rev = "ba6790fe7cf46e58e8d27ce1524cbfdee745e938" }
-egui-wgpu = { git = "https://github.com/crmne/egui", rev = "ba6790fe7cf46e58e8d27ce1524cbfdee745e938" }
-egui-winit = { git = "https://github.com/crmne/egui", rev = "ba6790fe7cf46e58e8d27ce1524cbfdee745e938" }
-egui_extras = { git = "https://github.com/crmne/egui", rev = "ba6790fe7cf46e58e8d27ce1524cbfdee745e938" }
-egui_glow = { git = "https://github.com/crmne/egui", rev = "ba6790fe7cf46e58e8d27ce1524cbfdee745e938" }
-emath = { git = "https://github.com/crmne/egui", rev = "ba6790fe7cf46e58e8d27ce1524cbfdee745e938" }
-epaint = { git = "https://github.com/crmne/egui", rev = "ba6790fe7cf46e58e8d27ce1524cbfdee745e938" }
-epaint_default_fonts = { git = "https://github.com/crmne/egui", rev = "ba6790fe7cf46e58e8d27ce1524cbfdee745e938" }
+ecolor = { git = "https://github.com/crmne/egui", rev = "6ce633ba5f7f64d19ef6d204f9377da560bb546b" }
+eframe = { git = "https://github.com/crmne/egui", rev = "6ce633ba5f7f64d19ef6d204f9377da560bb546b" }
+egui = { git = "https://github.com/crmne/egui", rev = "6ce633ba5f7f64d19ef6d204f9377da560bb546b" }
+egui-wgpu = { git = "https://github.com/crmne/egui", rev = "6ce633ba5f7f64d19ef6d204f9377da560bb546b" }
+egui-winit = { git = "https://github.com/crmne/egui", rev = "6ce633ba5f7f64d19ef6d204f9377da560bb546b" }
+egui_extras = { git = "https://github.com/crmne/egui", rev = "6ce633ba5f7f64d19ef6d204f9377da560bb546b" }
+egui_glow = { git = "https://github.com/crmne/egui", rev = "6ce633ba5f7f64d19ef6d204f9377da560bb546b" }
+emath = { git = "https://github.com/crmne/egui", rev = "6ce633ba5f7f64d19ef6d204f9377da560bb546b" }
+epaint = { git = "https://github.com/crmne/egui", rev = "6ce633ba5f7f64d19ef6d204f9377da560bb546b" }
+epaint_default_fonts = { git = "https://github.com/crmne/egui", rev = "6ce633ba5f7f64d19ef6d204f9377da560bb546b" }
 # crmne/winit apps-0.30, shared with the same apps: winit 0.30.13 plus Wayland
 # `Occluded` for the xdg-shell suspended state with commits on the app's behalf
 # while it isn't presenting (rust-windowing/winit#4709, #4710), macOS Quit
@@ -185,40 +242,58 @@ epaint_default_fonts = { git = "https://github.com/crmne/egui", rev = "ba6790fe7
 # data device: Hyprland sends the clipboard only to a client's first data
 # device, so a second one stopped pasting (crmne/spotifast#614). A dropped
 # macOS window is ordered out before it closes, so a Touch Bar exception
-# cannot leave it on screen (#260, rust-windowing/winit#4728).
-winit = { git = "https://github.com/crmne/winit", rev = "ed7caa9023f10b397f5b6ec8284a840cbd8a6f65" }
+# cannot leave it on screen (#260, rust-windowing/winit#4728). Only winit
+# windows close when its loop exits, preserving the macOS tray across hide
+# and recreation (rust-windowing/winit#4754, crmne/winit#2), and a first
+# window opens after the headless AppKit loop has already launched (#4770).
+winit = { git = "https://github.com/crmne/winit", rev = "0bed9dc0a7db02590a279fb8bac795fa39ee6948" }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 zbus-secret-service-keyring-store = { version = "1.0.1", features = ["rt-tokio-crypto-rust"] }
-# Pauses MPRIS media players while recording or playing voice messages, and
-# emits the Unity Launcher API signal launchers show as a taskbar badge.
-# Already in the tree through notify-rust and fastframe-tray.
+# Pauses MPRIS media players while recording or playing voice messages.
+# Already in the tree through fastframe-notifications and fastframe-tray.
 zbus = { version = "5.19", default-features = false, features = ["blocking-api", "tokio"] }
 # Reads the time locale's clock format.
 libc = "0.2"
+# The camera for video calls, through Video4Linux, in Rust: no build-time
+# bindings, so building on Linux needs nothing new.
+linuxvideo = "0.3.5"
+# Tells a Wayland window, which the compositor can blur behind the Messages
+# theme, from an X11 one. Already in the tree through eframe.
+raw-window-handle = "0.6"
+# winit draws the window's frame itself where the compositor will not, as
+# GNOME on Wayland does not: Adwaita-style rounded corners, title and
+# buttons. eframe without its default features leaves winit with only a
+# plain, square grey frame there (#397). The feature applies to eframe's
+# winit, the fork in [patch.crates-io].
+winit = { version = "0.30", default-features = false, features = ["wayland-csd-adwaita"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 apple-native-keyring-store = { version = "1.0.2", features = ["keychain"] }
 # The application menu bar, built with tray-icon's muda at the version
 # fastframe-tray uses.
 tray-icon = { version = "0.25", default-features = false }
-# AppKit calls for the application menus and editing commands, on the main
-# thread.
+# AppKit calls for the application menus and editing commands on the main thread.
 objc2 = "0.6"
-objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSApplication", "NSResponder", "NSText", "NSView", "NSWindow"] }
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSAppearance", "NSApplication", "NSGraphics", "NSResponder", "NSText", "NSView", "NSVisualEffectView", "NSWindow"] }
+# Reaches the window behind eframe's view, for the Messages theme's vibrancy.
+raw-window-handle = "0.6"
 # Reads the locale's clock format.
 objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSDateFormatter", "NSFormatter", "NSLocale", "NSString"] }
+# The camera for video calls, through AVFoundation.
+nokhwa = { version = "0.10.11", default-features = false, features = ["input-avfoundation"] }
 
 [target.'cfg(windows)'.dependencies]
 windows-native-keyring-store = { version = "1.1", default-features = false }
-winrt-notification = { package = "tauri-winrt-notification", version = "0.7.3" }
-# Registry and locale calls.
-windows-sys = { version = "0.60", features = ["Win32_Foundation", "Win32_Globalization", "Win32_System_Registry"] }
-# Accesses the native window handle for the taskbar overlay.
+# Locale calls.
+windows-sys = { version = "0.60", features = ["Win32_Foundation", "Win32_Globalization"] }
+# Accesses the native window handle for the Messages theme's Mica backdrop.
 raw-window-handle = "0.6"
+# The camera for video calls, through Media Foundation.
+nokhwa = { version = "0.10.11", default-features = false, features = ["input-msmf"] }
 # Pauses other apps' media through the system media transport controls while
 # recording or playing voice messages. The same version cpal already uses.
-windows = { version = "0.62", features = ["Media_Control", "Foundation_Collections", "Win32_Foundation", "Win32_Graphics_Gdi", "Win32_System_Com", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging"] }
+windows = { version = "0.62", features = ["Media_Control", "Foundation_Collections", "Win32_Foundation", "Win32_Graphics_Dwm", "Win32_System_Com", "Win32_UI_Controls", "Win32_UI_WindowsAndMessaging"] }
 
 # The icon and version information Windows shows for the executable.
 [target.'cfg(windows)'.build-dependencies]
@@ -259,4 +334,4 @@ opt-level = 2
 [build-dependencies]
 # Compiles the PO catalogs to Rust, leaving out unfinished entries. Ordinary
 # builds do not need gettext tools.
-fastframe-i18n = { git = "https://github.com/crmne/fastframe", tag = "v0.4.1", features = ["build"] }
+fastframe-i18n = { git = "https://github.com/crmne/fastframe", tag = "v0.14.1", features = ["build"] }

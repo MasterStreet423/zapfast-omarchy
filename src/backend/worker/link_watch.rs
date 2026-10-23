@@ -7,18 +7,20 @@
 //! finished, so a wedged write silences the keepalive and its dead-socket
 //! watchdog alike: no error, no disconnect, no reconnect (issue #177).
 //!
-//! The worker's tick asks this watch two questions and reconnects through
-//! the library when either says so:
+//! On Linux and Windows the system says when it woke up (fastframe-power's
+//! `Event::Resumed`, which the app hands every account as
+//! `Command::Resumed`), and the worker reconnects then. The worker's tick
+//! also asks this watch and reconnects through the library when it says so:
 //!
-//! - Did the machine sleep since the last tick? The wall clock keeps running
-//!   through a suspend, while the monotonic clock behind [`Instant`] stops on
-//!   Linux (`CLOCK_MONOTONIC`) and macOS (`CLOCK_UPTIME_RAW`). On Windows,
-//!   `Instant` counts the suspend too, so this question never fires there and
-//!   the next one fires on the first tick after any sleep longer than its
-//!   limit.
+//! - Did the machine sleep since the last tick? Only asked on macOS, where
+//!   the wake is not reported yet. The wall clock keeps running through a
+//!   suspend, while the monotonic clock behind [`Instant`] stops there
+//!   (`CLOCK_UPTIME_RAW`).
 //! - Has nothing at all arrived for longer than a working link allows? The
 //!   library pings an idle link every 15 to 30 seconds, so its answers alone
-//!   keep the received-frame counter moving.
+//!   keep the received-frame counter moving. A network change can wedge a
+//!   link without any sleep, and a wake the system did not report is caught
+//!   here too.
 
 use std::time::{Duration, Instant, SystemTime};
 
@@ -40,13 +42,28 @@ pub(super) enum Verdict {
     Silent(Duration),
 }
 
-#[derive(Default)]
 pub(super) struct LinkWatch {
+    /// Whether a wall clock running ahead of the monotonic one counts as a
+    /// sleep: only where the system does not report the wake.
+    clock_check: bool,
     /// The two clocks at the previous tick.
     last_tick: Option<(Instant, SystemTime)>,
     /// The received-frame count, and when it was first seen at that value.
     frames: Option<(u64, Instant)>,
 }
+
+impl Default for LinkWatch {
+    fn default() -> Self {
+        Self {
+            clock_check: !RESUME_REPORTED,
+            last_tick: None,
+            frames: None,
+        }
+    }
+}
+
+/// Whether fastframe-power reports the wake on this platform.
+const RESUME_REPORTED: bool = cfg!(any(target_os = "linux", target_os = "windows"));
 
 impl LinkWatch {
     /// Checks the link at a tick. `frames_received` is the library's
@@ -66,7 +83,8 @@ impl LinkWatch {
                 let awake = now.saturating_duration_since(then);
                 let passed = wall.duration_since(then_wall).unwrap_or_default();
                 passed.checked_sub(awake).filter(|gap| *gap >= SLEEP_GAP)
-            });
+            })
+            .filter(|_| self.clock_check);
         let Some(frames) = frames_received else {
             self.frames = None;
             return Verdict::Healthy;
@@ -94,6 +112,14 @@ mod tests {
     use super::*;
 
     const TICK: Duration = Duration::from_secs(5);
+
+    /// A watch that checks the clock, as on macOS.
+    fn watch() -> LinkWatch {
+        LinkWatch {
+            clock_check: true,
+            ..LinkWatch::default()
+        }
+    }
 
     /// Two clocks that advance together unless the test suspends the machine.
     struct Clocks {
@@ -127,7 +153,7 @@ mod tests {
     #[test]
     fn a_link_that_keeps_receiving_stays_healthy() {
         let mut clocks = Clocks::new();
-        let mut watch = LinkWatch::default();
+        let mut watch = watch();
         for frames in 0..100 {
             assert_eq!(clocks.check(&mut watch, Some(frames)), Verdict::Healthy);
             clocks.awake(TICK);
@@ -137,7 +163,7 @@ mod tests {
     #[test]
     fn a_link_that_receives_nothing_is_reconnected_once_per_limit() {
         let mut clocks = Clocks::new();
-        let mut watch = LinkWatch::default();
+        let mut watch = watch();
         assert_eq!(clocks.check(&mut watch, Some(7)), Verdict::Healthy);
         let mut waited = Duration::ZERO;
         while waited + TICK < SILENCE_LIMIT {
@@ -158,7 +184,7 @@ mod tests {
     #[test]
     fn silence_is_only_counted_while_connected() {
         let mut clocks = Clocks::new();
-        let mut watch = LinkWatch::default();
+        let mut watch = watch();
         assert_eq!(clocks.check(&mut watch, Some(3)), Verdict::Healthy);
         clocks.awake(SILENCE_LIMIT);
         assert_eq!(clocks.check(&mut watch, None), Verdict::Healthy);
@@ -172,7 +198,7 @@ mod tests {
     #[test]
     fn a_suspend_is_noticed_on_the_first_tick_after_resume() {
         let mut clocks = Clocks::new();
-        let mut watch = LinkWatch::default();
+        let mut watch = watch();
         assert_eq!(clocks.check(&mut watch, Some(1)), Verdict::Healthy);
         clocks.awake(TICK);
         clocks.suspend(Duration::from_secs(1_560));
@@ -184,10 +210,26 @@ mod tests {
         assert_eq!(clocks.check(&mut watch, Some(1)), Verdict::Healthy);
     }
 
+    /// Linux and Windows report the wake, so the clock is not asked there:
+    /// a jump of the wall clock (an NTP step, say) is not taken for a sleep.
+    #[test]
+    fn where_the_wake_is_reported_the_clock_is_not_asked() {
+        let mut clocks = Clocks::new();
+        let mut watch = LinkWatch {
+            clock_check: false,
+            ..LinkWatch::default()
+        };
+        assert_eq!(clocks.check(&mut watch, Some(1)), Verdict::Healthy);
+        clocks.awake(TICK);
+        clocks.suspend(Duration::from_secs(1_560));
+        assert_eq!(clocks.check(&mut watch, Some(2)), Verdict::Healthy);
+        assert_eq!(LinkWatch::default().clock_check, !RESUME_REPORTED);
+    }
+
     #[test]
     fn a_short_suspend_or_a_small_clock_step_is_not_a_sleep() {
         let mut clocks = Clocks::new();
-        let mut watch = LinkWatch::default();
+        let mut watch = watch();
         assert_eq!(clocks.check(&mut watch, Some(1)), Verdict::Healthy);
         clocks.awake(TICK);
         clocks.suspend(SLEEP_GAP - Duration::from_secs(1));
@@ -201,7 +243,7 @@ mod tests {
     #[test]
     fn a_slow_worker_is_not_a_sleep() {
         let mut clocks = Clocks::new();
-        let mut watch = LinkWatch::default();
+        let mut watch = watch();
         assert_eq!(clocks.check(&mut watch, Some(1)), Verdict::Healthy);
         clocks.awake(Duration::from_secs(300));
         assert_eq!(clocks.check(&mut watch, Some(2)), Verdict::Healthy);
@@ -210,7 +252,7 @@ mod tests {
     #[test]
     fn a_sleep_while_disconnected_leaves_the_library_to_reconnect() {
         let mut clocks = Clocks::new();
-        let mut watch = LinkWatch::default();
+        let mut watch = watch();
         assert_eq!(clocks.check(&mut watch, None), Verdict::Healthy);
         clocks.suspend(Duration::from_secs(600));
         assert_eq!(clocks.check(&mut watch, None), Verdict::Healthy);
@@ -222,7 +264,7 @@ mod tests {
     fn a_suspend_counted_by_the_monotonic_clock_is_caught_as_silence() {
         // Windows: `Instant` keeps counting through the suspend.
         let mut clocks = Clocks::new();
-        let mut watch = LinkWatch::default();
+        let mut watch = watch();
         assert_eq!(clocks.check(&mut watch, Some(1)), Verdict::Healthy);
         clocks.awake(Duration::from_secs(1_560));
         assert_eq!(

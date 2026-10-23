@@ -24,6 +24,11 @@ const MAX_WIDTH: f32 = 520.0;
 /// The narrowest conversation a docked pane leaves beside it. Below this the
 /// pane lies over the conversation instead of squeezing it.
 const CONVERSATION_MIN: f32 = 360.0;
+/// The info panel always takes a column of its own outside the narrow
+/// window mode, so it may be narrower than the search pane, and the
+/// conversation beside it too.
+pub(super) const INFO_MIN: f32 = 260.0;
+pub(super) const INFO_CONVERSATION_MIN: f32 = 280.0;
 const ROW_HEIGHT: f32 = 60.0;
 /// Characters of context kept before a match deep in a long line.
 const LEAD: usize = 18;
@@ -39,14 +44,70 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) -> Option<Rect> {
     if !app.chat_search_visible() {
         return None;
     }
+    let wanted = app.settings.search_pane_width;
+    match dock(app, ui, "chat-search-pane", wanted, |app, ui| {
+        search(app, ui, false)
+    }) {
+        Docking::Docked { width, wanted } => {
+            // Only a drag moves the edge off the width asked for.
+            if (width - wanted).abs() > 1.0 {
+                app.settings.search_pane_width = width;
+                app.actions.push(Action::SettingsChanged);
+            }
+            None
+        }
+        Docking::Overlay(region) => Some(region),
+    }
+}
+
+/// The pane over the right of a conversation too narrow to share.
+pub fn show_overlay(app: &mut App, ctx: &egui::Context, region: Rect) {
+    let width = app.settings.search_pane_width.clamp(MIN_WIDTH, MAX_WIDTH);
+    overlay(app, ctx, "chat-search-overlay", width, region, |app, ui| {
+        search(app, ui, true)
+    });
+}
+
+/// Where [`dock`] put a pane: docked at the right, at the width it took
+/// and the width it was asked for, or left for an overlay over `region`.
+pub(super) enum Docking {
+    Docked { width: f32, wanted: f32 },
+    Overlay(Rect),
+}
+
+/// Docks a right-hand pane beside the conversation when the window has room
+/// for both, drawing `contents` in it. The info panel shares this with the
+/// search pane, so the two dock and float the same way.
+pub(super) fn dock(
+    app: &mut App,
+    ui: &mut egui::Ui,
+    id: &str,
+    wanted: f32,
+    contents: impl FnOnce(&mut App, &mut egui::Ui),
+) -> Docking {
     let region = ui.available_rect_before_wrap();
     if region.width() < MIN_WIDTH + CONVERSATION_MIN {
-        return Some(region);
+        return Docking::Overlay(region);
     }
+    docked(app, ui, id, wanted, MIN_WIDTH, CONVERSATION_MIN, contents)
+}
+
+/// Docks a right-hand pane whatever the room, narrowing the conversation
+/// down to `conversation_min` and the pane down to `min`.
+pub(super) fn docked(
+    app: &mut App,
+    ui: &mut egui::Ui,
+    id: &str,
+    wanted: f32,
+    min: f32,
+    conversation_min: f32,
+    contents: impl FnOnce(&mut App, &mut egui::Ui),
+) -> Docking {
+    let region = ui.available_rect_before_wrap();
     let palette = app.palette;
-    let max = (region.width() - CONVERSATION_MIN).clamp(MIN_WIDTH, MAX_WIDTH);
-    let wanted = app.settings.search_pane_width.clamp(MIN_WIDTH, max);
-    let id = egui::Id::new("chat-search-pane");
+    let max = (region.width() - conversation_min).clamp(min, MAX_WIDTH);
+    let wanted = wanted.clamp(min, max);
+    let id = egui::Id::new(id);
     // egui would remember a width a narrow window squeezed; the saved width
     // is the reader's, so it comes back when the window widens again.
     ui.ctx()
@@ -54,35 +115,38 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) -> Option<Rect> {
     let response = egui::Panel::right(id)
         .resizable(true)
         .default_size(wanted)
-        .size_range(MIN_WIDTH..=max)
+        .size_range(min..=max)
         .show_separator_line(false)
         .frame(Frame::new().fill(palette.panel).inner_margin(Margin::ZERO))
-        .show(ui, |ui| search(app, ui, false));
+        .show(ui, |ui| contents(app, ui));
     let rect = response.response.rect;
     ui.painter().vline(
         rect.left(),
         rect.y_range(),
         Stroke::new(1.0, palette.outline),
     );
-    // Only a drag moves the edge off the width asked for.
-    if (rect.width() - wanted).abs() > 1.0 {
-        app.settings.search_pane_width = rect.width();
-        app.actions.push(Action::SettingsChanged);
+    Docking::Docked {
+        width: rect.width(),
+        wanted,
     }
-    None
 }
 
-/// The pane over the right of a conversation too narrow to share.
-pub fn show_overlay(app: &mut App, ctx: &egui::Context, region: Rect) {
+/// A pane over the right of a conversation too narrow to share.
+pub(super) fn overlay(
+    app: &mut App,
+    ctx: &egui::Context,
+    id: &str,
+    width: f32,
+    region: Rect,
+    contents: impl FnOnce(&mut App, &mut egui::Ui),
+) {
     let palette = app.palette;
-    let width = app
-        .settings
-        .search_pane_width
-        .clamp(MIN_WIDTH, MAX_WIDTH)
-        .min(region.width());
+    let width = width.max(MIN_WIDTH).min(region.width());
     let rect = Rect::from_min_max(pos2(region.right() - width, region.top()), region.max);
-    egui::Area::new(egui::Id::new("chat-search-overlay"))
-        .order(egui::Order::Middle)
+    // Above the conversation's header too, which a vibrant window draws on
+    // a layer of its own over the messages, so the header keeps its glass.
+    egui::Area::new(egui::Id::new(id))
+        .order(egui::Order::Foreground)
         .fixed_pos(rect.min)
         .constrain(false)
         .show(ctx, |ui| {
@@ -98,7 +162,7 @@ pub fn show_overlay(app: &mut App, ctx: &egui::Context, region: Rect) {
                 .show(ui, |ui| {
                     ui.set_min_size(rect.size());
                     ui.set_max_size(rect.size());
-                    search(app, ui, true);
+                    contents(app, ui);
                 });
             ui.painter().vline(
                 rect.left(),
@@ -106,6 +170,31 @@ pub fn show_overlay(app: &mut App, ctx: &egui::Context, region: Rect) {
                 Stroke::new(1.0, palette.outline),
             );
         });
+}
+
+/// What a pane's header row needs beside the caption buttons ZapFast draws:
+/// its close button and title.
+const HEADER_MIN_CONTENT: f32 = 240.0;
+
+/// The top of a pane's header, inside its frame of `margin`: at the window's
+/// top-right corner it drags the window and keeps clear of the caption
+/// buttons ZapFast draws, moving the header's row under them when the pane
+/// is too narrow to share it. Call it before the row, which leaves the
+/// returned room at its left (a narrow window's page over the chat reaches
+/// both corners).
+pub(super) fn caption_header(ui: &mut egui::Ui, margin: Vec2) -> super::CaptionRoom {
+    let rect = ui.max_rect();
+    let room = super::caption_room(ui.ctx(), rect, HEADER_MIN_CONTENT);
+    let top = Rect::from_min_max(
+        rect.min - margin,
+        pos2(
+            rect.right() + margin.x,
+            rect.top() + room.top + 32.0 + margin.y,
+        ),
+    );
+    super::caption_drag(ui, top);
+    ui.add_space(room.top);
+    room
 }
 
 /// The pane's contents. Over a narrow conversation (`overlay`) a picked
@@ -118,8 +207,10 @@ fn search(app: &mut App, ui: &mut egui::Ui, overlay: bool) {
     Frame::new()
         .inner_margin(Margin::symmetric(14, 10))
         .show(ui, |ui| {
+            let room = caption_header(ui, vec2(14.0, 10.0));
             ui.horizontal(|ui| {
                 ui.set_min_height(32.0);
+                ui.add_space(room.left);
                 let close = crate::i18n::gettext(app.locale, "Close search");
                 if theme::icon_button(ui, Icon::X, 18.0, palette.secondary, palette.text, &close)
                     .tab_stop(Stop::ChatSearchClose)
@@ -562,7 +653,7 @@ fn hit_row(
     // line the query is nowhere in.
     let line = hit
         .text_matching(query)
-        .unwrap_or_else(|| crate::i18n_extra::summary(&hit.summary()).into_owned());
+        .unwrap_or_else(|| hit.summary_in(app.locale));
     let line = app.preview_line(&line, hit);
     let (snippet, found) = snippet(&line, query);
     let who = if hit.from_me {

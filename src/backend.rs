@@ -4,12 +4,17 @@
 //! work. Commands and events cross channels, and events wake the UI.
 
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::time::Duration;
 
 use tokio::sync::mpsc;
 
-use crate::model::{Chat, ChatId, Contact, Gif, GifError, Message, PollDraft, StickerPack};
+use crate::model::{
+    Chat, ChatId, Contact, Gif, GifError, Message, PollDraft, StickerPack, StorageStats,
+};
 use crate::paths::AccountDirs;
+
+pub(crate) mod picture_edit;
 
 // Re-exported so the picker can detect pasted Signal pack links.
 mod read_sync;
@@ -17,7 +22,7 @@ pub(crate) mod sticker_import;
 mod sticker_maker;
 pub(crate) mod sticker_store;
 mod worker;
-pub use worker::{PINNED_CHATS, PLUS_PINNED_CHATS};
+pub use worker::{PINNED_CHATS, PLUS_PINNED_CHATS, host_owned_presence};
 
 /// Result of a deletion request, without protocol errors crossing the bridge.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -160,8 +165,14 @@ pub enum Command {
     SendText {
         chat: ChatId,
         text: String,
-        quoting: Option<String>,
+        quoting: Option<crate::model::ReplyTarget>,
         mentions: Vec<String>,
+    },
+    SendLocation {
+        chat: ChatId,
+        latitude: f64,
+        longitude: f64,
+        quoting: Option<crate::model::ReplyTarget>,
     },
     ReplyInteractive {
         chat: ChatId,
@@ -169,11 +180,19 @@ pub enum Command {
         button: usize,
         choice: Option<usize>,
     },
-    /// Forwards archived messages to another chat, oldest first.
+    /// Forwards archived messages to each chat in `to_chats`, oldest first.
+    /// The whole batch is refused when it names more chats than
+    /// [`forward_limit`](crate::model::forward_limit) allows for these messages.
     Forward {
         from_chat: ChatId,
         messages: Vec<String>,
-        to_chat: ChatId,
+        to_chats: Vec<ChatId>,
+    },
+    /// Asks how many chats these messages may be forwarded to at once,
+    /// answered with [`Event::ForwardLimit`].
+    ForwardLimit {
+        from_chat: ChatId,
+        messages: Vec<String>,
     },
     /// Updates our typing state in a chat.
     Composing {
@@ -213,6 +232,8 @@ pub enum Command {
         chat: ChatId,
         before: Option<PageKey>,
     },
+    /// Asks for one chat's active pins, for the line under its header.
+    LoadPins(ChatId),
     /// Requests messages before the archive's earliest message. `explicit`
     /// marks a request the reader made by scrolling to the top: only those
     /// report a phone that did not answer, since automatic requests (short
@@ -227,8 +248,32 @@ pub enum Command {
         chat: ChatId,
         message: String,
     },
+    /// Whether the background may fetch older history, and the chat the reader
+    /// has open, so it is asked for its older messages first.
+    SetHistoryPrefetch {
+        on: bool,
+        focused: Option<ChatId>,
+    },
+    /// A page of the chat's photos and playable videos, answered by
+    /// `Event::ChatMedia`. `None` asks for the newest page; `around` centres it
+    /// on one message, so a viewer opened on a photo older than the newest
+    /// page still has an album to step through. Any view that lists a chat's
+    /// photos and clips (the viewer's album, a chat's media panel) asks this
+    /// way and tells its answer apart by `chat` and `around`.
+    LoadChatMedia {
+        chat: ChatId,
+        around: Option<String>,
+    },
     Download {
+        /// Asked for by the reader: no size limit, a deadline that grows
+        /// with the file.
+        manual: bool,
         card: Option<usize>,
+        chat: ChatId,
+        message: String,
+    },
+    /// Downloads a motion photo's clip.
+    DownloadMotion {
         chat: ChatId,
         message: String,
     },
@@ -254,19 +299,56 @@ pub enum Command {
         from: Option<i64>,
         until: Option<i64>,
     },
+    /// Stars or unstars one archived message.
+    SetStar {
+        chat: ChatId,
+        message: String,
+        starred: bool,
+    },
+    /// Asks for the starred messages.
+    LoadStarred,
+    /// Result of a star or unstar request.
+    Starred {
+        chat: ChatId,
+        message: String,
+        starred: bool,
+        /// Which attempt this answer belongs to. A later click or a phone
+        /// update wins, and this answer is ignored.
+        generation: u64,
+        /// The account that asked. A request that outlives its account must
+        /// not write the next one, whose generations start over.
+        session: u64,
+        result: Result<(), String>,
+    },
+    /// Lists one chat's pictures, videos, documents and links for the info
+    /// panel. `request` comes back with the answer, so a late answer to an
+    /// earlier request is told apart from the one being waited for.
+    ListChatShared {
+        chat: ChatId,
+        request: u64,
+    },
     /// Creates an archive chat before its first message is sent.
     EnsureChat {
         chat: ChatId,
         name: String,
     },
+    /// Internal: the id a phone-history request went out under, which the
+    /// phone's answer names. `serial` is the worker's number for the request.
+    OlderSent {
+        chat: ChatId,
+        serial: u64,
+        request: String,
+    },
     /// Internal result for a failed phone-history request.
     OlderFailed {
         chat: ChatId,
+        serial: u64,
         error: String,
     },
     /// Internal group-metadata failure.
     GroupInfoFailed {
         chat: ChatId,
+        request_generation: u64,
         /// Whether the server refusal is permanent.
         permanent: bool,
     },
@@ -275,6 +357,16 @@ pub enum Command {
         id: String,
         text: String,
         mentions: Vec<String>,
+    },
+    /// Internal: WhatsApp's answer to an edit sent from here. The archive
+    /// takes the new text only once WhatsApp accepts it.
+    EditSettled {
+        chat: ChatId,
+        id: String,
+        /// Orders edits sent from here, so a late answer to an older one
+        /// cannot replace a newer one.
+        generation: u64,
+        accepted: Result<(crate::model::Content, Vec<crate::model::MentionRef>), String>,
     },
     Revoke {
         chat: ChatId,
@@ -291,16 +383,23 @@ pub enum Command {
         id: String,
         outcome: MessageRemovalOutcome,
     },
-    /// Selects and sends files with the desktop picker.
-    PickFiles(ChatId),
+    /// Selects files with the desktop picker for the composer. `documents`
+    /// stages them to go as documents, pictures included.
+    PickFiles {
+        chat: ChatId,
+        documents: bool,
+    },
     /// Sends files with the caption on the first.
     SendFiles {
         chat: ChatId,
         paths: Vec<PathBuf>,
+        /// Sends every file as a document with its original bytes, instead
+        /// of turning pictures, videos and audio into media messages.
+        documents: bool,
         caption: Option<String>,
         mentions: Vec<String>,
         /// The message the first file replies to.
-        quoting: Option<String>,
+        quoting: Option<crate::model::ReplyTarget>,
     },
     /// Sends a clipboard image as straight-alpha RGBA.
     SendImage {
@@ -310,7 +409,7 @@ pub enum Command {
         rgba: Vec<u8>,
         caption: Option<String>,
         mentions: Vec<String>,
-        quoting: Option<String>,
+        quoting: Option<crate::model::ReplyTarget>,
     },
     /// Syncs chat mute state. `Some(0)` is indefinite and `None` unmutes.
     SetMuted(ChatId, Option<i64>),
@@ -338,8 +437,47 @@ pub enum Command {
     SendVoice {
         chat: ChatId,
         samples: Vec<f32>,
-        quoting: Option<String>,
+        quoting: Option<crate::model::ReplyTarget>,
     },
+    /// Places a 1:1 call, or starts a call in a group for a group chat, offering video from the
+    /// first frame when asked.
+    ///
+    /// `generation` is the one the window already drew the call under, and `cancel` is set when
+    /// the reader hangs up before the offer has gone out, so the peer is never rung for it.
+    StartCall {
+        chat: ChatId,
+        video: bool,
+        generation: u64,
+        cancel: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    },
+    /// Joins a call link by its token, with video for a video call's link. `generation` and
+    /// `cancel` are what [`Command::StartCall`] carries.
+    JoinCallLink {
+        token: String,
+        video: bool,
+        generation: u64,
+        cancel: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    },
+    /// Answers the ringing incoming call with the real `<accept>`.
+    AnswerCall,
+    /// Declines the ringing incoming call with the real `<reject>`.
+    DeclineCall,
+    /// Ends the current call.
+    HangupCall,
+    /// Mutes or unmutes the current call's microphone through the engine.
+    SetCallMuted(bool),
+    /// Turns the current call's camera on or off.
+    SetCallCamera(bool),
+    /// Rebinds the current call's microphone; `None` is the system default.
+    SetCallMicrophone(Option<String>),
+    /// Rebinds the current call's speaker; `None` is the system default.
+    SetCallSpeaker(Option<String>),
+    /// Switches the current call's camera node.
+    SetCallCameraDevice(Option<String>),
+    /// Lists the microphones, speakers and cameras the call screen offers.
+    RefreshCallDevices,
+    /// Reads the account's call entries for the Calls page.
+    LoadCallLog,
     /// Sends a played receipt for a voice message.
     MarkPlayed {
         chat: ChatId,
@@ -351,7 +489,7 @@ pub enum Command {
     SendSticker {
         chat: ChatId,
         path: PathBuf,
-        quoting: Option<String>,
+        quoting: Option<crate::model::ReplyTarget>,
     },
     /// Saves a sticker file.
     SaveSticker {
@@ -404,6 +542,11 @@ pub enum Command {
     },
     /// Asks for an audio file for one chat's notifications.
     PickChatSound(ChatId),
+    /// Stores a chat's own voice message speed.
+    SetChatVoiceSpeed {
+        chat: ChatId,
+        speed: Option<f32>,
+    },
     /// Asks for a folder for new downloads.
     PickDownloadFolder,
     /// Asks for a wallpaper image and copies it into the state directory.
@@ -431,6 +574,54 @@ pub enum Command {
         chat: ChatId,
         jpeg: Option<Vec<u8>>,
     },
+    /// Asks for a picture for a group being created, and answers with
+    /// `Event::NewGroupPicture`: cropped and encoded as a group photo is.
+    PickNewGroupPicture,
+    /// Creates a group with us as its admin, answered by `Event::GroupCreated`.
+    /// `members` are canonical chat ids; `picture` a staged JPEG from
+    /// `PickNewGroupPicture`, set once the group exists.
+    CreateGroup {
+        request: u64,
+        subject: String,
+        members: Vec<ChatId>,
+        picture: Option<std::path::PathBuf>,
+    },
+    /// Internal: WhatsApp answered `CreateGroup`.
+    GroupCreated {
+        request: u64,
+        result: Result<CreatedGroup, crate::new_group::CreateFailure>,
+        picture: Option<std::path::PathBuf>,
+    },
+    /// Asks for a group's invite link, answered by `Event::GroupInviteLink`;
+    /// `reset` revokes the old link first, for admins.
+    GroupInviteLink {
+        chat: ChatId,
+        reset: bool,
+    },
+    /// Adds people to a group, answered by `Event::GroupMembersAdded`.
+    /// `members` are canonical chat ids.
+    AddGroupMembers {
+        chat: ChatId,
+        members: Vec<ChatId>,
+    },
+    /// Changes one of a group's permissions, for its admins: `members`
+    /// true lets every member (for approval, turns it on).
+    SetGroupPermission {
+        chat: ChatId,
+        permission: crate::group_admin::Permission,
+        members: bool,
+    },
+    /// Makes a member an admin, dismisses one, or removes them.
+    ChangeGroupMember {
+        chat: ChatId,
+        member: ChatId,
+        change: crate::group_admin::MemberChange,
+    },
+    /// Internal: WhatsApp answered one of the group management commands.
+    GroupManaged {
+        chat: ChatId,
+        answer: GroupAnswer,
+    },
     /// Internal: WhatsApp answered a change to a group's name or photo.
     GroupEdited {
         chat: ChatId,
@@ -448,6 +639,9 @@ pub enum Command {
     /// Whether archived chats stay archived when a new message arrives or is
     /// sent; when not, a new message unarchives the chat here.
     SetKeepChatsArchived(bool),
+    /// The machine woke up from sleep: a link open across it can still look
+    /// established while nothing arrives, so reconnect it now.
+    Resumed,
     /// Asks where to save a copy of an attachment, then copies it there.
     SaveAttachmentAs {
         source: std::path::PathBuf,
@@ -456,6 +650,10 @@ pub enum Command {
     /// Opens the log, or shows it in its folder, off the interface thread;
     /// only a failure reports back.
     OpenLog(PathBuf),
+    /// Asks for one folder, then saves every named attachment into it.
+    SaveAttachments {
+        files: Vec<(std::path::PathBuf, String)>,
+    },
     /// Reads and decodes an image file off the UI thread for clipboard writing.
     PrepareClipboardImage(PathBuf),
     /// Deletes an imported pack directory.
@@ -500,11 +698,38 @@ pub enum Command {
         transparent: bool,
         emojis: Vec<String>,
         chat: Option<ChatId>,
+        quoting: Option<crate::model::ReplyTarget>,
     },
     /// Internal: a made sticker, and where it goes.
     StickerMade {
         result: Result<PathBuf, String>,
         chat: Option<ChatId>,
+        quoting: Option<crate::model::ReplyTarget>,
+    },
+    /// Reads a staged picture's size, so the cropper can open on it.
+    InspectPicture {
+        target: crate::app::AttachmentId,
+        path: PathBuf,
+    },
+    /// Internal: the inspected picture's size, or why it could not be read.
+    PictureInspected {
+        target: crate::app::AttachmentId,
+        result: Result<(u32, u32), String>,
+    },
+    /// Turns and crops a staged picture, writing the result beside the media
+    /// cache so it can be sent in place of the original.
+    ApplyPictureEdit {
+        target: crate::app::AttachmentId,
+        source: crate::model::PictureSource,
+        width: u32,
+        height: u32,
+        crop: crate::model::PictureCrop,
+        turns: u8,
+    },
+    /// Internal: the edited picture, ready to replace the staged attachment.
+    PictureEdited {
+        target: crate::app::AttachmentId,
+        result: Result<PathBuf, String>,
     },
     /// Creates an empty local sticker pack under the given name.
     CreateStickerPack {
@@ -527,6 +752,7 @@ pub enum Command {
     },
     /// Internal contact-save result.
     ContactSaved {
+        generation: u64,
         id: String,
         name: String,
         first_name: Option<String>,
@@ -534,6 +760,7 @@ pub enum Command {
     },
     /// Checks a number, optionally saves it, and opens its chat.
     NewContact {
+        request: u64,
         phone: String,
         full_name: Option<String>,
         first_name: Option<String>,
@@ -541,17 +768,19 @@ pub enum Command {
     },
     /// Internal number-lookup result.
     ContactChecked {
+        generation: u64,
+        request: u64,
         phone: String,
         full_name: Option<String>,
         first_name: Option<String>,
         to_phone: bool,
-        registered: bool,
+        registered: Result<bool, String>,
     },
     /// Downloads and sends a GIF as a short looping video.
     SendGif {
         chat: ChatId,
         gif: Gif,
-        quoting: Option<String>,
+        quoting: Option<crate::model::ReplyTarget>,
     },
     /// Searches GIPHY or lists trending results for an empty query.
     SearchGifs {
@@ -589,6 +818,27 @@ pub enum Command {
         through: i64,
     },
     SetPinned(ChatId, bool),
+    /// Pins or unpins one message for everyone in the chat.
+    SetMessagePinned {
+        chat: ChatId,
+        message: String,
+        pinned: bool,
+    },
+    /// Result of a pin or unpin request.
+    MessagePinned {
+        chat: ChatId,
+        message: String,
+        pinned: bool,
+        /// When the click was made. An older answer cannot overwrite a newer one.
+        at: i64,
+        /// Which attempt this answer belongs to.
+        generation: u64,
+        /// The link the request was sent on: an answer that outlives a
+        /// logout must not write the next account's archive.
+        session: u64,
+        expires_at: i64,
+        result: Result<(), String>,
+    },
     /// Marks a chat as a favorite, or removes the mark, here and on the phone.
     SetFavorite(ChatId, bool),
     /// The phone answered a favorites list sent at `at` holding the queued
@@ -626,6 +876,12 @@ pub enum Command {
         id: String,
         result: Result<PathBuf, String>,
     },
+    /// Internal motion-clip download result.
+    MotionDownloaded {
+        chat: ChatId,
+        id: String,
+        result: Result<PathBuf, String>,
+    },
     /// Internal recent-sticker download result.
     StickerFetched {
         hash: String,
@@ -651,10 +907,29 @@ pub enum Command {
         query: String,
         results: Result<Vec<Gif>, GifError>,
     },
+    /// Measures this account's media cache for Settings, answered by
+    /// `Event::StorageStats` with the same `token`.
+    LoadStorageStats {
+        token: u64,
+    },
+    /// Deletes the files in this account's media cache, never the archive,
+    /// so attachments download again when viewed. Answered like
+    /// `LoadStorageStats`, with `cleared` set.
+    ClearMediaCache {
+        token: u64,
+    },
+    /// Internal: a measurement made off the runtime, after a clear when
+    /// `cleared`.
+    StorageMeasured {
+        stats: Option<StorageStats>,
+        token: u64,
+        cleared: bool,
+    },
     /// Internal file-picker result.
     Picked {
         chat: ChatId,
         paths: Vec<PathBuf>,
+        documents: bool,
     },
     /// Internal uploaded attachment ready for archiving and sending.
     Outbound {
@@ -673,7 +948,12 @@ pub enum Command {
     /// Internal group metadata result.
     GroupInfo {
         chat: ChatId,
+        /// Metadata request operation that produced this reply.
+        request_generation: u64,
         name: Option<String>,
+        description: String,
+        /// Description notice generation when this metadata was requested.
+        description_generation: u64,
         participants: Vec<String>,
         read_only: bool,
         ephemeral_expiration: Option<u32>,
@@ -688,6 +968,12 @@ pub enum Command {
         /// The chat's rename generation when this metadata was asked for. A
         /// snapshot older than a rename made here cannot restore the old name.
         subject_generation: u64,
+        /// The group's permissions and admins.
+        settings: crate::model::GroupSettings,
+        /// The chat's management generation when this metadata was asked
+        /// for. A snapshot older than a permission or member change made here
+        /// cannot undo it.
+        settings_generation: u64,
     },
     /// Internal pairing-code result.
     PairCode {
@@ -719,6 +1005,12 @@ pub enum Command {
     },
     /// Internal: followed channels and whether each is muted on the server.
     ChannelMutes(Vec<(String, bool)>),
+    /// Internal: every followed channel and the name the server gives it
+    /// (blank when it has none), from the query numbered `generation`.
+    ChannelNames {
+        generation: u64,
+        names: Vec<(String, String)>,
+    },
     /// Internal: the pictures of followed channels, or `None` when the list
     /// could not be read.
     ChannelPictures(Option<Vec<(ChatId, ChannelPicture)>>),
@@ -755,6 +1047,13 @@ pub enum Event {
         chat: ChatId,
         error: Option<String>,
     },
+    /// How many chats these messages may be forwarded to at once: one when
+    /// any of them was forwarded many times, as on WhatsApp.
+    ForwardLimit {
+        from_chat: ChatId,
+        messages: Vec<String>,
+        limit: usize,
+    },
     PollVoted {
         chat: ChatId,
         message: String,
@@ -775,6 +1074,21 @@ pub enum Event {
     Labels(Vec<crate::model::Label>),
     /// Unsent text stored for each chat, sent once at startup.
     Drafts(Vec<(ChatId, String)>),
+    /// The starred messages of one chat, for the mark in the conversation.
+    Stars {
+        chat: ChatId,
+        ids: Vec<String>,
+    },
+    /// A star that changed in the archive: one the server accepted for a
+    /// click here (`local`), or one made on the phone or another device.
+    StarChanged {
+        chat: ChatId,
+        message: String,
+        starred: bool,
+        local: bool,
+    },
+    /// The starred messages, newest star first.
+    StarredList(Vec<crate::archive::Starred>),
     /// Messages in one chat matching a search, newest first, echoing the
     /// query and range asked for so a stale answer can be told apart.
     ChatHits {
@@ -787,7 +1101,35 @@ pub enum Event {
         /// the pane can say so instead of dropping them silently.
         truncated: bool,
     },
+    /// One chat's media, documents and links, newest first, for the info
+    /// panel, or why they could not be listed.
+    ChatShared {
+        request: u64,
+        result: Result<crate::model::ChatMedia, String>,
+    },
+    /// What the info panel lists for a chat changed in the archive: a
+    /// picture, a video, a document or a linked text was filed, imported,
+    /// edited, revoked or deleted, or the chat was cleared.
+    ChatSharedChanged(ChatId),
+    /// A page of a chat's photos and playable videos, oldest first, answering
+    /// `Command::LoadChatMedia` with the `around` it was asked with.
+    ChatMedia {
+        chat: ChatId,
+        around: Option<String>,
+        items: Vec<crate::model::MediaItem>,
+    },
     ChatUpdated(Box<Chat>),
+    /// Active pins of one chat, for the line under its header.
+    Pins {
+        chat: ChatId,
+        items: Vec<crate::archive::Pinned>,
+    },
+    /// A pin the server accepted, or refused, for one message.
+    PinChanged {
+        chat: ChatId,
+        message: String,
+        pinned: bool,
+    },
     /// Chat messages in ascending order. `older` prepends them; `complete`
     /// means the archive has no earlier rows.
     Messages {
@@ -797,10 +1139,19 @@ pub enum Event {
         complete: bool,
     },
     MessageUpdated(Box<Message>),
-    /// Files selected for the composer.
+    /// The account's media cache as measured, `None` when it could not be
+    /// read. `cleared` says the cache was just emptied, so files the
+    /// interface still points into it are gone.
+    StorageStats {
+        stats: Option<StorageStats>,
+        token: u64,
+        cleared: bool,
+    },
+    /// Files selected for the composer, to go as documents when `documents`.
     Picked {
         chat: ChatId,
         paths: Vec<PathBuf>,
+        documents: bool,
     },
     /// Live incoming message for desktop notification.
     Incoming {
@@ -854,6 +1205,17 @@ pub enum Event {
         height: u32,
         transparent: bool,
     },
+    /// A staged picture's size, so the cropper can open on it.
+    PictureInspected {
+        target: crate::app::AttachmentId,
+        result: Result<(u32, u32), String>,
+    },
+    /// An edited picture, ready to replace the staged attachment, or why it
+    /// could not be written.
+    PictureEdited {
+        target: crate::app::AttachmentId,
+        result: Result<PathBuf, String>,
+    },
     /// A shared sticker pack, ready to view, with its publisher; or why it
     /// could not be opened.
     StickerPackPreview(Result<(StickerPack, String), String>),
@@ -872,14 +1234,23 @@ pub enum Event {
         message: String,
         result: Result<PathBuf, String>,
     },
+    /// A motion photo's clip finished downloading, or failed.
+    Motion {
+        chat: ChatId,
+        message: String,
+        result: Result<PathBuf, String>,
+    },
     /// Link-time history sync state.
     Syncing(bool),
     /// Reported history-sync percentage.
     SyncProgress(u32),
     /// Phone-history result. `more` indicates whether another request may help.
+    /// `silent` marks a background page the reader did not ask for, which must
+    /// not count against the phone's answers.
     OlderFetched {
         chat: ChatId,
         more: bool,
+        silent: bool,
     },
     /// Whether account privacy disables direct-chat read receipts.
     ReceiptsPrivacy {
@@ -928,10 +1299,66 @@ pub enum Event {
         code: String,
         result: Result<(ChatId, bool), String>,
     },
+    /// A picture picked for a group being created, staged as a JPEG.
+    NewGroupPicture(Result<std::path::PathBuf, String>),
+    /// A group's invite link, or why it could not be had.
+    GroupInviteLink {
+        chat: ChatId,
+        reset: bool,
+        result: Result<crate::group_admin::InviteLink, crate::group_admin::Failure>,
+    },
+    /// `Command::AddGroupMembers` finished.
+    GroupMembersAdded {
+        chat: ChatId,
+        result: Result<crate::group_admin::Added, crate::group_admin::Failure>,
+    },
+    /// `Command::SetGroupPermission` finished; on success the chat is
+    /// already updated.
+    GroupPermissionSaved {
+        chat: ChatId,
+        permission: crate::group_admin::Permission,
+        result: Result<(), crate::group_admin::Failure>,
+    },
+    /// `Command::ChangeGroupMember` finished.
+    GroupMemberChanged {
+        chat: ChatId,
+        member: ChatId,
+        change: crate::group_admin::MemberChange,
+        result: Result<(), crate::group_admin::Failure>,
+    },
+    /// `Command::CreateGroup` finished: the group is filed and can open.
+    GroupCreated {
+        request: u64,
+        result: Result<crate::new_group::Created, crate::new_group::CreateFailure>,
+    },
+    /// Number lookup failed without opening a chat.
+    ContactFailed {
+        request: u64,
+        error: String,
+    },
     /// Number lookup succeeded and its chat can open.
     ContactReady {
+        request: u64,
         id: String,
         name: Option<String>,
+    },
+    /// The current call changed state. The UI renders this and nothing else.
+    Call(Box<crate::calls::CallUpdate>),
+    /// A group call ZapFast cannot join while [`crate::calls::GROUP_CALLS_ENABLED`] is off:
+    /// ringing (`phase` is `Incoming`), so the window says who is calling and to answer on the
+    /// phone, or over, so that word is taken back. It never takes the call screen.
+    PhoneOnlyCall(Box<crate::calls::CallUpdate>),
+    /// The devices the call screen can offer.
+    CallDevices(Box<crate::calls::DeviceList>),
+    /// The account's call entries, newest first, for the Calls page.
+    CallLog(Vec<Message>),
+    /// One video frame for the call screen: our own preview, the peer's picture, or both.
+    CallVideo {
+        local: Option<Arc<egui::ColorImage>>,
+        remote: Option<Arc<egui::ColorImage>>,
+        /// Whose picture `remote` is on a group call, by chat id; `None` for the peer of a
+        /// one-to-one call.
+        from: Option<String>,
     },
     /// Informational toast message.
     Info(String),
@@ -953,7 +1380,7 @@ pub enum Event {
     /// what was being sent so the user loses neither text nor a recording.
     SendRefused {
         chat: ChatId,
-        quoting: Option<String>,
+        quoting: Option<crate::model::ReplyTarget>,
         unsent: Unsent,
         reason: Refusal,
     },
@@ -975,6 +1402,58 @@ pub enum GroupEdit {
     Name(String),
     /// A new photo, or none.
     Picture { removed: bool },
+}
+
+/// WhatsApp's answer to a group management command, read on the runtime and
+/// filed by the worker.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum GroupAnswer {
+    Link {
+        reset: bool,
+        result: Result<crate::group_admin::InviteLink, crate::group_admin::Failure>,
+    },
+    Added(Result<Vec<MemberAnswer>, crate::group_admin::Failure>),
+    Permission {
+        permission: crate::group_admin::Permission,
+        members: bool,
+        result: Result<(), crate::group_admin::Failure>,
+    },
+    Member {
+        member: ChatId,
+        change: crate::group_admin::MemberChange,
+        result: Result<Vec<MemberAnswer>, crate::group_admin::Failure>,
+    },
+}
+
+/// What WhatsApp said about one person in a member change.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MemberAnswer {
+    /// The person's canonical chat id.
+    pub id: ChatId,
+    /// WhatsApp's error code for them, such as "403"; `None` when accepted.
+    pub error: Option<String>,
+}
+
+/// A group WhatsApp created for `Command::CreateGroup`, read on the runtime
+/// and filed by the worker.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CreatedGroup {
+    /// The group's canonical chat id.
+    pub chat: ChatId,
+    pub subject: String,
+    /// The members under canonical chat ids, ourselves included.
+    pub participants: Vec<String>,
+    /// Whether we are an admin, as the creator is.
+    pub admin: bool,
+    pub info_locked: bool,
+    pub read_only: bool,
+    /// Its permissions and admins.
+    pub settings: crate::model::GroupSettings,
+    /// When WhatsApp made it, in Unix seconds.
+    pub created_at: i64,
+    /// The people picked whom WhatsApp did not add. Empty when the members
+    /// could not be confirmed.
+    pub unadded: Vec<ChatId>,
 }
 
 /// Where a channel's picture lives on WhatsApp's media servers, as the
@@ -1004,9 +1483,15 @@ pub enum Refusal {
 pub enum Unsent {
     /// Composer text in wire form, with `@user` mention tokens.
     Text(String),
+    /// The spot a location was to send, so the dialog can come back with it.
+    Location {
+        latitude: f64,
+        longitude: f64,
+    },
     Voice(Vec<f32>),
     Files {
         paths: Vec<PathBuf>,
+        documents: bool,
         caption: Option<String>,
     },
     Image {

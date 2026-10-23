@@ -1,6 +1,6 @@
-//! The account switcher: our own avatar at the top of the chat list opens a
-//! menu of the numbers linked here and a way to add another. The settings
-//! keep their own button beside it.
+//! The account switcher: our own avatar at the foot of the navigation rail
+//! opens a menu of the numbers linked here and a way to add another. The
+//! settings keep their own button above it.
 
 use egui::{Align2, CornerRadius, Rect, Sense, Vec2, pos2, vec2};
 

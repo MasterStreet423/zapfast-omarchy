@@ -18,6 +18,24 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  # Dependencies come only from the approved sources in CONTRIBUTING.md, and
+  # review evidence (captures, comparison pages, recordings) stays in the pull
+  # request instead of the tree. See CONTRIBUTING.md.
+  policy:
+    name: policy
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - name: Dependency sources
+        run: python3 .github/scripts/check-dependency-sources.py
+      - name: No review evidence in the tree
+        if: ${{ !cancelled() }}
+        run: python3 .github/scripts/check-review-evidence.py
+      - name: Policy check regressions
+        if: ${{ !cancelled() }}
+        run: python3 .github/scripts/test-policy-checks.py
+
   audit:
     name: Dependency advisories
     runs-on: ubuntu-latest
@@ -42,7 +60,7 @@ jobs:
       - name: GUI build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libxkbcommon-dev libwayland-dev libgl1-mesa-dev libasound2-dev cmake perl
+          sudo apt-get install -y libxkbcommon-dev libwayland-dev libgl1-mesa-dev libasound2-dev libpipewire-0.3-dev clang libclang-dev cmake perl
       # After the toolchain, so the cache key follows the pinned rustc. The
       # key carries no job name, so each job sets its own generation. Saves
       # only on pushes to main; pull requests restore.
@@ -63,7 +81,9 @@ jobs:
   test:
     name: test (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 60
+    # A cold Windows build passed both suites in 59 minutes, then timed out
+    # saving mbx's cache. Leave enough time for that cache to reach later runs.
+    timeout-minutes: ${{ matrix.os == 'windows-latest' && 90 || 60 }}
     strategy:
       fail-fast: false
       matrix:
@@ -75,7 +95,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libxkbcommon-dev libwayland-dev libgl1-mesa-dev libasound2-dev cmake perl
+          sudo apt-get install -y libxkbcommon-dev libwayland-dev libgl1-mesa-dev libasound2-dev libpipewire-0.3-dev clang libclang-dev cmake perl
       - uses: jdx/mr-boxington-action@v1
         with:
           cache-generation: test-v1
@@ -122,7 +142,8 @@ jobs:
   nix:
     name: Nix package (${{ matrix.system }})
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 60
+    # Uncached, aarch64-darwin takes about 53 minutes, Linux about 22.
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
@@ -131,9 +152,13 @@ jobs:
             system: x86_64-linux
           - os: ubuntu-24.04-arm
             system: aarch64-linux
+          - os: macos-latest
+            system: aarch64-darwin
     steps:
       - uses: actions/checkout@v7
+      # Frees disk space on Ubuntu runners; macOS runners have enough.
       - uses: wimpysworld/nothing-but-nix@v9
+        if: runner.os == 'Linux'
       - uses: cachix/install-nix-action@v31
       - uses: nix-community/cache-nix-action@v7
         with:

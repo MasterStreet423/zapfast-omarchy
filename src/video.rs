@@ -4,8 +4,8 @@
 //! its H.264 track with `openh264` (as `animation` does for GIFs), and hands
 //! over scaled RGBA frames tagged with their presentation time. The interface
 //! thread shows the newest frame that is due and uploads it into a single
-//! texture. Sound plays through rodio, whose symphonia backend decodes the
-//! AAC track, and its position steers the clock while it lasts. Other codecs
+//! texture. `mp4` also reads the AAC track, symphonia's AAC decoder decodes
+//! it, and rodio plays it; its position steers the clock while it lasts. Other codecs
 //! are reported so the video can open in the system player instead.
 
 use std::cell::Cell;
@@ -16,7 +16,6 @@ use std::sync::mpsc::{Receiver, SyncSender, TryRecvError};
 use std::time::{Duration, Instant};
 
 use egui::{ColorImage, TextureHandle, TextureOptions};
-use rodio::Source;
 
 use crate::backend::Waker;
 
@@ -35,6 +34,10 @@ const LEAD: Duration = Duration::from_millis(400);
 const UNSEEN: Duration = Duration::from_millis(1500);
 /// Longest wait between repaints while a video plays, for the progress.
 const TICK: Duration = Duration::from_millis(40);
+/// How long a video plays silently after its sound output failed before the
+/// sound is opened again, doubling up to the longest with each failure.
+const SOUND_RETRY: Duration = Duration::from_secs(1);
+const SOUND_RETRY_LONGEST: Duration = Duration::from_secs(30);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum State {
@@ -84,21 +87,41 @@ enum Delivery {
     Unsupported(String),
 }
 
-/// Playback time: wall time while no sound steers it.
+/// Playback time: wall time, scaled by the playback speed, while no sound
+/// steers it.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Clock {
     /// Position when the clock last stopped or jumped.
     anchor: Duration,
     /// When it started running from `anchor`, while it runs.
     since: Option<Instant>,
+    /// Video time per wall time in thousandths; 0 is the default 1x.
+    permille: u32,
 }
 
 impl Clock {
     pub fn position(&self, now: Instant) -> Duration {
         self.anchor
-            + self
-                .since
-                .map_or(Duration::ZERO, |since| now.saturating_duration_since(since))
+            + self.since.map_or(Duration::ZERO, |since| {
+                now.saturating_duration_since(since).mul_f64(self.rate())
+            })
+    }
+
+    fn rate(&self) -> f64 {
+        if self.permille == 0 {
+            1.0
+        } else {
+            f64::from(self.permille) / 1000.0
+        }
+    }
+
+    /// Runs at `speed` times wall time from here on, without a jump.
+    pub fn set_speed(&mut self, speed: f32, now: Instant) {
+        self.anchor = self.position(now);
+        if self.since.is_some() {
+            self.since = Some(now);
+        }
+        self.permille = (speed.max(0.0) * 1000.0).round() as u32;
     }
 
     pub fn running(&self) -> bool {
@@ -177,18 +200,80 @@ pub fn arc(center: egui::Pos2, radius: f32, fraction: f32) -> Vec<egui::Pos2> {
 
 /// The sound of the playing video on the default output device.
 struct Sound {
-    device: rodio::MixerDeviceSink,
+    device: crate::audio::Output,
     sink: rodio::Player,
-    /// Video time the queued decoder started from.
+    /// Video time the queued sound starts from.
     base: Duration,
+    /// Video time per second of queued sound: the playback speed.
+    factor: f32,
+}
+
+/// A video's sound compressed by its playback speed as it plays, with the
+/// voice messages' pitch-keeping stretch, every channel kept: only a few
+/// thousand frames are held, never the rest of the track.
+struct Stretched {
+    stream: crate::timestretch::Stream<AacTrack>,
+    channels: rodio::ChannelCount,
+    rate: rodio::SampleRate,
+    total: Duration,
+}
+
+impl Stretched {
+    fn new(track: AacTrack, factor: f32) -> Self {
+        let channels = rodio::Source::channels(&track);
+        let rate = rodio::Source::sample_rate(&track);
+        let total = track.total.div_f32(factor);
+        Self {
+            stream: crate::timestretch::Stream::new(track, usize::from(channels.get()), factor),
+            channels,
+            rate,
+            total,
+        }
+    }
+}
+
+impl Iterator for Stretched {
+    type Item = rodio::Sample;
+
+    fn next(&mut self) -> Option<rodio::Sample> {
+        self.stream.next()
+    }
+}
+
+impl rodio::Source for Stretched {
+    fn current_span_len(&self) -> Option<usize> {
+        None
+    }
+
+    fn channels(&self) -> rodio::ChannelCount {
+        self.channels
+    }
+
+    fn sample_rate(&self) -> rodio::SampleRate {
+        self.rate
+    }
+
+    fn total_duration(&self) -> Option<Duration> {
+        Some(self.total)
+    }
+}
+
+/// Queues `track` on `sink` at `speed`: as decoded at 1x, streamed through
+/// the stretch above it.
+fn queue_sound(sink: &rodio::Player, track: AacTrack, speed: f32) {
+    if speed > 1.0 {
+        sink.append(Stretched::new(track, speed));
+    } else {
+        sink.append(track);
+    }
 }
 
 impl Sound {
     /// Opens the file's sound, paused at `from`. A video without a sound
     /// track, or a computer without an output device, plays silently.
-    fn open(path: &Path, from: Duration, muted: bool) -> Option<Self> {
+    fn open(path: &Path, from: Duration, muted: bool, speed: f32) -> Option<Self> {
         let decoder = sound_decoder(path, from)?;
-        let device = match crate::audio::open_output() {
+        let device = match crate::audio::open_output(None) {
             Ok(device) => device,
             Err(error) => {
                 log::warn!("video plays without sound: {error}");
@@ -198,58 +283,255 @@ impl Sound {
         let sink = rodio::Player::connect_new(device.mixer());
         sink.pause();
         sink.set_volume(if muted { 0.0 } else { 1.0 });
-        sink.append(decoder);
+        queue_sound(&sink, decoder, speed);
         Some(Self {
             device,
             sink,
             base: from,
+            factor: speed.max(1.0),
         })
     }
 
-    /// Queues the sound again from `from`, paused. A fresh player keeps the
-    /// seek off the audio thread, which `Player::try_seek` would wait for.
-    fn restart(&mut self, path: &Path, from: Duration, muted: bool) {
+    /// Queues the sound again from `from` at `speed`, paused. A fresh player
+    /// keeps the seek off the audio thread, which `Player::try_seek` would
+    /// wait for.
+    fn restart(&mut self, path: &Path, from: Duration, muted: bool, speed: f32) {
         let sink = rodio::Player::connect_new(self.device.mixer());
         sink.pause();
         sink.set_volume(if muted { 0.0 } else { 1.0 });
         if let Some(decoder) = sound_decoder(path, from) {
-            sink.append(decoder);
+            queue_sound(&sink, decoder, speed);
         }
         self.sink = sink;
         self.base = from;
+        self.factor = speed.max(1.0);
     }
 
     /// Position of the sound in the video, while there is sound left.
     fn position(&self) -> Option<Duration> {
-        (!self.sink.empty()).then(|| self.base + self.sink.get_pos())
+        (!self.sink.empty()).then(|| sound_position(self.base, self.sink.get_pos(), self.factor))
     }
 }
 
-fn sound_decoder(
-    path: &Path,
-    from: Duration,
-) -> Option<rodio::Decoder<std::io::BufReader<std::fs::File>>> {
-    let file = std::fs::File::open(path).ok()?;
-    // Fails for a video without a sound track: the MP4's H.264 track has no
-    // codec symphonia knows, so there is nothing to pick. It also fails for a
-    // sound track symphonia cannot decode, such as HE-AAC, which is worth
-    // naming when a video plays silently.
-    let mut decoder = match rodio::Decoder::try_from(file) {
-        Ok(decoder) => decoder,
+/// The video time reached after `played` of sound queued from `base` at
+/// `factor` times speed: each second heard covers `factor` of the video.
+fn sound_position(base: Duration, played: Duration, factor: f32) -> Duration {
+    base + played.mul_f32(factor)
+}
+
+fn sound_decoder(path: &Path, from: Duration) -> Option<AacTrack> {
+    // A video without a sound track stays quiet without a word. A sound
+    // track that does not open, such as HE-AAC, is worth naming when a
+    // video plays silently.
+    let codec = sound_codec(path)?;
+    match AacTrack::open(path, from) {
+        Ok(track) => Some(track),
         Err(error) => {
-            if let Some(codec) = sound_codec(path) {
-                log::debug!("video plays without sound: its {codec} track did not open: {error}");
-            }
-            return None;
+            log::debug!("video plays without sound: its {codec} track did not open: {error}");
+            None
         }
-    };
-    if !from.is_zero()
-        && let Err(error) = decoder.try_seek(from)
-    {
-        log::debug!("video plays without sound: its sound track did not seek: {error}");
-        return None;
     }
-    Some(decoder)
+}
+
+/// The MP4's AAC sound track, read with `mp4` and decoded with symphonia's
+/// AAC decoder. rodio's own MP4 reader (symphonia 0.5's isomp4) refuses the
+/// sound of the videos WhatsApp sends, whose `esds` carries a custom
+/// SLConfigDescriptor (#265), so the track is read the way the picture is.
+struct AacTrack {
+    mp4: mp4::Mp4Reader<std::io::BufReader<std::fs::File>>,
+    track: u32,
+    /// The next sample to decode, numbered from 1.
+    next: u32,
+    count: u32,
+    decoder: symphonia::default::codecs::AacDecoder,
+    buffer: Option<symphonia::core::audio::SampleBuffer<f32>>,
+    /// The decoded packet being played, interleaved, and how far it got.
+    pending: Vec<f32>,
+    at: usize,
+    /// Interleaved samples still to drop to land on the seek target.
+    skip: usize,
+    channels: rodio::ChannelCount,
+    rate: rodio::SampleRate,
+    total: Duration,
+}
+
+impl AacTrack {
+    fn open(path: &Path, from: Duration) -> Result<Self, String> {
+        use symphonia::core::codecs::{CODEC_TYPE_AAC, CodecParameters, Decoder, DecoderOptions};
+
+        let file = std::fs::File::open(path).map_err(|error| error.to_string())?;
+        let size = file.metadata().map_err(|error| error.to_string())?.len();
+        let mp4 = mp4::Mp4Reader::read_header(std::io::BufReader::new(file), size)
+            .map_err(|error| error.to_string())?;
+        let track = mp4
+            .tracks()
+            .values()
+            .find(|track| track.track_type().ok() == Some(mp4::TrackType::Audio))
+            .ok_or("no sound track")?;
+        if track.media_type().ok() != Some(mp4::MediaType::AAC) {
+            return Err("not AAC".to_owned());
+        }
+        let config = &track
+            .trak
+            .mdia
+            .minf
+            .stbl
+            .stsd
+            .mp4a
+            .as_ref()
+            .and_then(|mp4a| mp4a.esds.as_ref())
+            .ok_or("no AAC configuration")?
+            .es_desc
+            .dec_config
+            .dec_specific;
+        // HE-AAC (SBR, 5) and HE-AACv2 (PS, 29) carry an AAC-LC core at
+        // the frequency index given, which is all symphonia decodes. `mp4`
+        // reads only the first two bytes, so a config naming SBR or PS would
+        // lack the extension symphonia expects after them: name the core.
+        let profile = match config.profile {
+            5 | 29 => 2,
+            profile => profile,
+        };
+        // The AudioSpecificConfig: five bits of object type, four of
+        // sampling frequency index, four of channel configuration.
+        let specific = (u16::from(profile) << 11)
+            | (u16::from(config.freq_index) << 7)
+            | (u16::from(config.chan_conf) << 3);
+        let rate = track
+            .sample_freq_index()
+            .map_err(|error| error.to_string())?
+            .freq();
+        let mut params = CodecParameters::new();
+        params
+            .for_codec(CODEC_TYPE_AAC)
+            .with_sample_rate(rate)
+            .with_extra_data(specific.to_be_bytes().into());
+        let decoder =
+            symphonia::default::codecs::AacDecoder::try_new(&params, &DecoderOptions::default())
+                .map_err(|error| error.to_string())?;
+        let timeline = Timeline::of(track);
+        // A packet's sound overlaps the one before it, so decoding starts a
+        // packet early and drops what comes before `from`.
+        let first = timeline.first_sample(from).saturating_sub(1).max(1);
+        let start = timeline
+            .starts
+            .get(first as usize - 1)
+            .copied()
+            .unwrap_or(0);
+        let early = timeline.ticks(from).saturating_sub(start);
+        let early_frames = early * u64::from(rate) / timeline.timescale;
+        let mut sound = Self {
+            track: track.track_id(),
+            count: track.sample_count(),
+            total: track.duration(),
+            mp4,
+            next: first,
+            decoder,
+            buffer: None,
+            pending: Vec::new(),
+            at: 0,
+            skip: 0,
+            channels: rodio::ChannelCount::MIN,
+            rate: rodio::SampleRate::new(rate).ok_or("no sampling rate")?,
+        };
+        // The first packet names the channel count rodio is told about.
+        if !sound.refill() {
+            return Err("no sound in the track".to_owned());
+        }
+        let channels = sound.channels.get();
+        sound.skip = early_frames as usize * usize::from(channels);
+        Ok(sound)
+    }
+
+    /// Decodes the next packet into `pending`, skipping packets that do not
+    /// decode. False once the track is over.
+    fn refill(&mut self) -> bool {
+        use symphonia::core::codecs::Decoder;
+
+        while self.next <= self.count {
+            let sample = match self.mp4.read_sample(self.track, self.next) {
+                Ok(Some(sample)) => sample,
+                Ok(None) => return false,
+                Err(error) => {
+                    log::debug!("video sound stopped: a sample did not read: {error}");
+                    return false;
+                }
+            };
+            self.next += 1;
+            let packet = symphonia::core::formats::Packet::new_from_slice(
+                self.track,
+                sample.start_time,
+                u64::from(sample.duration),
+                &sample.bytes,
+            );
+            let decoded = match self.decoder.decode(&packet) {
+                Ok(decoded) => decoded,
+                Err(symphonia::core::errors::Error::DecodeError(_)) => continue,
+                Err(error) => {
+                    log::debug!("video sound stopped: {error}");
+                    return false;
+                }
+            };
+            let channels = u16::try_from(decoded.spec().channels.count()).unwrap_or(0);
+            self.channels = rodio::ChannelCount::new(channels).unwrap_or(rodio::ChannelCount::MIN);
+            let buffer = self.buffer.get_or_insert_with(|| {
+                symphonia::core::audio::SampleBuffer::new(
+                    decoded.capacity() as u64,
+                    *decoded.spec(),
+                )
+            });
+            buffer.copy_interleaved_ref(decoded);
+            self.pending.clear();
+            self.pending.extend_from_slice(buffer.samples());
+            self.at = 0;
+            if !self.pending.is_empty() {
+                return true;
+            }
+        }
+        false
+    }
+}
+
+impl Iterator for AacTrack {
+    type Item = rodio::Sample;
+
+    fn next(&mut self) -> Option<rodio::Sample> {
+        loop {
+            let left = self.pending.len() - self.at;
+            if self.skip >= left && self.skip > 0 {
+                self.skip -= left;
+                self.at = self.pending.len();
+            } else if self.skip > 0 {
+                self.at += self.skip;
+                self.skip = 0;
+            }
+            if let Some(&sample) = self.pending.get(self.at) {
+                self.at += 1;
+                return Some(rodio::Sample::from(sample));
+            }
+            if !self.refill() {
+                return None;
+            }
+        }
+    }
+}
+
+impl rodio::Source for AacTrack {
+    fn current_span_len(&self) -> Option<usize> {
+        None
+    }
+
+    fn channels(&self) -> rodio::ChannelCount {
+        self.channels
+    }
+
+    fn sample_rate(&self) -> rodio::SampleRate {
+        self.rate
+    }
+
+    fn total_duration(&self) -> Option<Duration> {
+        Some(self.total)
+    }
 }
 
 /// The codec and profile of the MP4's sound track, such as "aac (SBR)", or
@@ -284,6 +566,9 @@ struct Session {
     texture: Option<TextureHandle>,
     clock: Clock,
     sound: Option<Sound>,
+    /// When to open the sound again after its output failed (#507), and how
+    /// long the wait after the next failure will be.
+    sound_retry: Option<(Instant, Duration)>,
     total: Duration,
     /// Longest side of the frames the decoder in use sends.
     side: u32,
@@ -328,6 +613,40 @@ impl Session {
         }
     }
 
+    /// Drops a sound whose output keeps failing (#507), and opens it again at
+    /// the clock's position after a wait that doubles with each failure, so
+    /// the video plays on silently in between.
+    fn recover_sound(&mut self, now: Instant, muted: bool, speed: f32) {
+        if self
+            .sound
+            .as_ref()
+            .is_some_and(|sound| sound.device.failed())
+        {
+            self.sound = None;
+            self.retry_sound(now);
+        }
+        let Some((at, _)) = self.sound_retry else {
+            return;
+        };
+        if self.sound.is_some() || now < at {
+            return;
+        }
+        self.sound = Sound::open(&self.path, self.clock.position(now), muted, speed);
+        match &self.sound {
+            Some(sound) if self.state == State::Playing => sound.sink.play(),
+            Some(_) => {}
+            None => self.retry_sound(now),
+        }
+    }
+
+    fn retry_sound(&mut self, now: Instant) {
+        let wait = self
+            .sound_retry
+            .map_or(SOUND_RETRY, |(_, wait)| (wait * 2).min(SOUND_RETRY_LONGEST));
+        log::warn!("video sound lost; trying again in {wait:?}");
+        self.sound_retry = Some((now + wait, wait));
+    }
+
     fn show(&mut self, ctx: &egui::Context, image: ColorImage) {
         match &mut self.texture {
             Some(texture) => texture.set(image, TextureOptions::LINEAR),
@@ -351,6 +670,8 @@ pub struct Player {
     /// Longest side frames are decoded to: larger while the video covers
     /// the window.
     side: u32,
+    /// Playback speed, kept from one video to the next.
+    speed: f32,
 }
 
 impl Player {
@@ -362,6 +683,38 @@ impl Player {
             audible: true,
             seen: Cell::new(Instant::now()),
             side: MAX_SIDE,
+            speed: 1.0,
+        }
+    }
+
+    pub fn speed(&self) -> f32 {
+        self.speed
+    }
+
+    /// Plays at the next of 1x, 1.5x and 2x, as the voice message chip does.
+    pub fn cycle_speed(&mut self) {
+        self.set_speed(crate::audio::next_cycled_speed(self.speed));
+    }
+
+    /// Plays at `speed`, carrying on from where the video stands.
+    pub fn set_speed(&mut self, speed: f32) {
+        let speed = crate::audio::supported_speed(speed);
+        if speed == self.speed {
+            return;
+        }
+        self.speed = speed;
+        let muted = self.muted;
+        let Some(session) = self.session.as_mut() else {
+            return;
+        };
+        let now = Instant::now();
+        session.clock.set_speed(speed, now);
+        let position = session.clock.position(now);
+        if let Some(sound) = &mut session.sound {
+            sound.restart(&session.path, position, muted, speed);
+            if session.state == State::Playing {
+                sound.sink.play();
+            }
         }
     }
 
@@ -426,8 +779,9 @@ impl Player {
         session.side = side;
         session.resize = None;
         session.frames = spawn_decoder(&session.path, to, side, self.waker.clone());
+        let speed = self.speed;
         if let Some(sound) = &mut session.sound {
-            sound.restart(&session.path, to, muted);
+            sound.restart(&session.path, to, muted, speed);
         }
     }
 
@@ -552,6 +906,7 @@ impl Player {
         self.seen.set(now);
         let mut clock = Clock::default();
         clock.seek(from, now);
+        clock.set_speed(self.speed, now);
         self.session = Some(Session {
             message: message.to_owned(),
             path: path.to_owned(),
@@ -564,8 +919,9 @@ impl Player {
             clock,
             sound: self
                 .audible
-                .then(|| Sound::open(path, from, self.muted))
+                .then(|| Sound::open(path, from, self.muted, self.speed))
                 .flatten(),
+            sound_retry: None,
             total: Duration::ZERO,
             side: self.side,
             resize: None,
@@ -637,6 +993,7 @@ impl Player {
                 return None;
             }
         }
+        session.recover_sound(now, self.muted, self.speed);
         if session.state != State::Playing {
             return None;
         }
@@ -965,6 +1322,50 @@ impl Output<'_> {
     }
 }
 
+/// Converts a YUV 4:2:0 picture to RGB, scaled to `out` when it differs from `size`.
+///
+/// Shared with the call screen, which has raw camera planes and decoded peer frames rather than a
+/// whole file to play. `turns` is quarter turns clockwise to apply while converting; a call passes
+/// [`orientation_turns`] of the peer's `device_orientation`, and `out` stays the size the picture
+/// has *before* those turns, since the rotation swaps the result's sides.
+pub(crate) fn rgb_image(
+    y: &[u8],
+    u: &[u8],
+    v: &[u8],
+    strides: (usize, usize, usize),
+    size: (usize, usize),
+    out: (usize, usize),
+    turns: u8,
+) -> ColorImage {
+    convert(
+        &Planes {
+            y,
+            u,
+            v,
+            strides,
+            size,
+        },
+        out,
+        turns,
+    )
+}
+
+/// How many quarter turns clockwise a peer's `device_orientation` asks the picture to take.
+///
+/// WhatsApp's low two bits are a counter-clockwise quarter-turn count, not a clockwise one: the
+/// shipped web renderer applies `rotate(Math.PI * (orientation - 1) / 2)`, and whatsapp-rust's own
+/// `voip-cli` example undoes the same value with `transpose=cclock` for 1 and `transpose=clock`
+/// for 3 (`examples/voip-cli/src/video.rs`). [`convert`] turns clockwise, so the count flips; 2 is
+/// its own inverse. Anything else, including the 0 an upright camera reports, is no turn at all.
+pub(crate) fn orientation_turns(orientation: u8) -> u8 {
+    match orientation & 0x03 {
+        1 => 3,
+        2 => 2,
+        3 => 1,
+        _ => 0,
+    }
+}
+
 /// Turns one decoded frame into an upright picture no larger than `side`
 /// on its longest side.
 fn picture(yuv: &openh264::decoder::DecodedYUV<'_>, turns: u8, side: u32) -> Option<ColorImage> {
@@ -1254,6 +1655,71 @@ mod tests {
     }
 
     #[test]
+    fn clock_runs_faster_at_a_higher_speed_without_a_jump() {
+        let start = Instant::now();
+        let mut clock = Clock::default();
+        clock.resume(start);
+        let second = start + Duration::from_secs(1);
+        clock.set_speed(2.0, second);
+        assert_eq!(clock.position(second), Duration::from_secs(1));
+        assert_eq!(
+            clock.position(second + Duration::from_secs(2)),
+            Duration::from_secs(5)
+        );
+        clock.set_speed(1.0, second + Duration::from_secs(2));
+        assert_eq!(
+            clock.position(second + Duration::from_secs(3)),
+            Duration::from_secs(6)
+        );
+    }
+
+    #[test]
+    fn the_sound_at_2x_lasts_half_as_long_in_every_channel() {
+        let track = sound_decoder(Path::new(SAMPLE), Duration::ZERO).unwrap();
+        let channels = rodio::Source::channels(&track);
+        let plain = track.count();
+        let track = sound_decoder(Path::new(SAMPLE), Duration::ZERO).unwrap();
+        let stretched = Stretched::new(track, 2.0);
+        // The channels the track has, not a mono downmix.
+        assert_eq!(rodio::Source::channels(&stretched), channels);
+        let rate = rodio::Source::sample_rate(&stretched);
+        let total = rodio::Source::total_duration(&stretched).unwrap();
+        let samples = stretched.count();
+        assert_eq!(samples % usize::from(channels.get()), 0);
+        let frames = |samples: usize| samples / usize::from(channels.get());
+        // The clip's sound, in half the time, to the frame.
+        assert!(frames(samples).abs_diff(frames(plain).div_ceil(2)) <= 1);
+        let seconds = frames(samples) as f64 / f64::from(rate.get());
+        assert!(
+            (seconds - total.as_secs_f64()).abs() < 0.1,
+            "got {seconds} s"
+        );
+    }
+
+    #[test]
+    fn sped_up_sound_reports_the_video_time_it_reached() {
+        // A second heard at 2x from the 3 s mark is the 5 s mark, and the
+        // clock that follows it stays put.
+        let base = Duration::from_secs(3);
+        assert_eq!(
+            sound_position(base, Duration::from_secs(1), 2.0),
+            Duration::from_secs(5)
+        );
+        assert_eq!(
+            sound_position(base, Duration::from_secs(2), 1.5),
+            Duration::from_secs(6)
+        );
+        let start = Instant::now();
+        let mut clock = Clock::default();
+        clock.seek(base, start);
+        clock.resume(start);
+        clock.set_speed(2.0, start);
+        let later = start + Duration::from_secs(1);
+        clock.follow(sound_position(base, Duration::from_secs(1), 2.0), later);
+        assert_eq!(clock.position(later), Duration::from_secs(5));
+    }
+
+    #[test]
     fn clock_runs_pauses_and_seeks() {
         let start = Instant::now();
         let later = |ms| start + Duration::from_millis(ms);
@@ -1460,6 +1926,49 @@ mod tests {
     }
 
     #[test]
+    fn a_peer_orientation_turns_the_picture_upright() {
+        // The low two bits are the rotation; the keyframe flag rides in a higher bit.
+        assert_eq!(orientation_turns(0), 0);
+        assert_eq!(orientation_turns(1), 3);
+        assert_eq!(orientation_turns(2), 2);
+        assert_eq!(orientation_turns(3), 1);
+        assert_eq!(orientation_turns(0x08 | 1), 3);
+
+        // A four by two picture, dark on the left. A peer whose device orientation is one quarter
+        // turn counter-clockwise has sent it rotated, so it must be turned back the same amount:
+        // the picture comes out portrait, two wide by four tall, with the half that was on the
+        // right now on top.
+        let y = [16, 16, 235, 235, 16, 16, 235, 235];
+        let chroma = [128, 128];
+        let planes = Planes {
+            y: &y,
+            u: &chroma,
+            v: &chroma,
+            strides: (4, 2, 2),
+            size: (4, 2),
+        };
+        let black = egui::Color32::from_rgb(0, 0, 0);
+        let white = egui::Color32::from_rgb(255, 255, 255);
+        let upright = convert(&planes, (4, 2), orientation_turns(1));
+        assert_eq!(
+            upright.size,
+            [2, 4],
+            "the sides swap, so a portrait stays portrait"
+        );
+        assert_eq!(
+            upright.pixels,
+            [white, white, white, white, black, black, black, black]
+        );
+        // An upright frame is left alone, and a half turn swaps the halves without reshaping.
+        let alone = convert(&planes, (4, 2), orientation_turns(0));
+        assert_eq!(alone.size, [4, 2]);
+        assert_eq!(alone.pixels[..4], [black, black, white, white]);
+        let halves = convert(&planes, (4, 2), orientation_turns(2));
+        assert_eq!(halves.size, [4, 2]);
+        assert_eq!(halves.pixels[..4], [white, white, black, black]);
+    }
+
+    #[test]
     fn primaries_convert_to_their_colours() {
         let near = |a: egui::Color32, b: [u8; 3]| {
             a.r().abs_diff(b[0]) <= 2 && a.g().abs_diff(b[1]) <= 2 && a.b().abs_diff(b[2]) <= 2
@@ -1491,6 +2000,74 @@ mod tests {
         assert!(
             sound > Duration::from_millis(2900),
             "the sound of a three second clip should last about three seconds, not {sound:?}"
+        );
+    }
+
+    /// WhatsApp's videos carry a custom SLConfigDescriptor (`predefined`
+    /// 0x00) in their `esds`, which symphonia 0.5's MP4 reader refuses, so
+    /// every one played silently (#265). The sample with that byte changed
+    /// stands in for them.
+    #[test]
+    fn a_video_with_a_custom_sl_config_plays_its_sound() {
+        let mut bytes = std::fs::read(SAMPLE).unwrap();
+        let sl_config = [0x06, 0x80, 0x80, 0x80, 0x01, 0x02];
+        let at = bytes
+            .windows(sl_config.len())
+            .position(|window| window == sl_config)
+            .expect("the sample's SLConfigDescriptor");
+        bytes[at + sl_config.len() - 1] = 0x00;
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("whatsapp.mp4");
+        std::fs::write(&path, bytes).unwrap();
+
+        let mut decoder = sound_decoder(&path, Duration::ZERO).expect("the sound opens");
+        let rate = rodio::Source::sample_rate(&decoder).get();
+        let channels = usize::from(rodio::Source::channels(&decoder).get());
+        let frames = decoder.by_ref().count() / channels;
+        let sound = Duration::from_secs_f64(frames as f64 / f64::from(rate));
+        assert!(sound > Duration::from_millis(2900), "got {sound:?}");
+    }
+
+    /// A video whose sound declares HE-AAC (object type 5) plays its AAC-LC
+    /// core, as rodio's own reader would, instead of staying silent.
+    #[test]
+    fn an_he_aac_sound_track_plays_its_core() {
+        let mut bytes = std::fs::read(SAMPLE).unwrap();
+        // The sample's AudioSpecificConfig opens with 0x13 0x88: AAC-LC,
+        // 22.05 kHz, mono. 0x2B keeps the frequency bits and names SBR.
+        let config = [0x05, 0x80, 0x80, 0x80, 0x05, 0x13, 0x88];
+        let at = bytes
+            .windows(config.len())
+            .position(|window| window == config)
+            .expect("the sample's AudioSpecificConfig");
+        bytes[at + 5] = 0x2B;
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("he-aac.mp4");
+        std::fs::write(&path, bytes).unwrap();
+
+        let mut decoder = sound_decoder(&path, Duration::ZERO).expect("the sound opens");
+        let rate = rodio::Source::sample_rate(&decoder).get();
+        let channels = usize::from(rodio::Source::channels(&decoder).get());
+        let frames = decoder.by_ref().count() / channels;
+        let sound = Duration::from_secs_f64(frames as f64 / f64::from(rate));
+        assert!(sound > Duration::from_millis(2900), "got {sound:?}");
+    }
+
+    #[test]
+    fn the_sound_seeks_to_where_the_video_starts() {
+        let whole = sound_decoder(Path::new(SAMPLE), Duration::ZERO).unwrap();
+        let rate = f64::from(rodio::Source::sample_rate(&whole).get());
+        let channels = usize::from(rodio::Source::channels(&whole).get());
+        let whole = whole.count() / channels;
+        let rest = sound_decoder(Path::new(SAMPLE), Duration::from_secs(1))
+            .unwrap()
+            .count()
+            / channels;
+        // Starting a second in leaves a second less, to within a packet.
+        let missing = (whole - rest) as f64 / rate;
+        assert!(
+            (missing - 1.0).abs() < 0.05,
+            "a second in left {missing} s less"
         );
     }
 }

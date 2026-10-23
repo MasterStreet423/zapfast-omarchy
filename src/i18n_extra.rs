@@ -1,5 +1,5 @@
 //! Fork additions to `i18n`: the interface locale for views that are not
-//! handed the app, and translation of summaries stored in English.
+//! handed the app, and translation of English text upstream keeps in constants.
 
 use std::borrow::Cow;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -103,6 +103,10 @@ pub fn tr(english: &str) -> Cow<'static, str> {
             locale,
             "Enter the whole number, starting with the country code",
         ),
+        "Enter a phone number with its country code, using only digits, spaces, hyphens and brackets" => gettext(
+            locale,
+            "Enter a phone number with its country code, using only digits, spaces, hyphens and brackets",
+        ),
         // Download failures kept on the attachment
         "No longer available on WhatsApp's servers" => {
             gettext(locale, "No longer available on WhatsApp's servers")
@@ -115,84 +119,9 @@ pub fn tr(english: &str) -> Cow<'static, str> {
     }
 }
 
-/// Labels that `Content::summary` writes in English, alone or as
-/// `Label: detail` and `Label (detail)`.
-fn summary_label(locale: Locale, english: &str) -> Option<Cow<'static, str>> {
-    Some(match english {
-        "Photo" => gettext(locale, "Photo"),
-        "GIF" => gettext(locale, "GIF"),
-        "Video" => gettext(locale, "Video"),
-        "Video message" => gettext(locale, "Video message"),
-        "Voice message" => gettext(locale, "Voice message"),
-        "Audio" => gettext(locale, "Audio"),
-        "Document" => gettext(locale, "Document"),
-        "Sticker" => gettext(locale, "Sticker"),
-        "Sticker pack" => gettext(locale, "Sticker pack"),
-        "Location" => gettext(locale, "Location"),
-        "Live location" => gettext(locale, "Live location"),
-        "Live location ended" => gettext(locale, "Live location ended"),
-        "Contact" => gettext(locale, "Contact"),
-        "Poll" => gettext(locale, "Poll"),
-        "This message was deleted" => gettext(locale, "This message was deleted"),
-        "Unsupported message" => gettext(locale, "Unsupported message"),
-        "View once message" => gettext(locale, "View once message"),
-        "View once photo" => gettext(locale, "View once photo"),
-        "View once video" => gettext(locale, "View once video"),
-        "View once voice message" => gettext(locale, "View once voice message"),
-        "View once audio" => gettext(locale, "View once audio"),
-        "Meta AI reply" => gettext(locale, "Meta AI reply"),
-        "Message on your phone" => gettext(locale, "Message on your phone"),
-        _ => return None,
-    })
-}
-
-/// Shows a stored English message summary in the interface language. Only
-/// the label is translated; what follows it is the sender's own text.
-pub fn summary(text: &str) -> Cow<'_, str> {
-    summary_in(locale(), text)
-}
-
-fn summary_in(locale: Locale, text: &str) -> Cow<'_, str> {
-    if locale == Locale::English {
-        return Cow::Borrowed(text);
-    }
-    if let Some(label) = summary_label(locale, text) {
-        return label;
-    }
-    if let Some((label, rest)) = text.split_once(": ")
-        && let Some(local) = summary_label(locale, label)
-    {
-        return Cow::Owned(format!("{local}: {rest}"));
-    }
-    if text.ends_with(')')
-        && let Some((label, rest)) = text.split_once(" (")
-        && let Some(local) = summary_label(locale, label)
-    {
-        return Cow::Owned(format!("{local} ({rest}"));
-    }
-    Cow::Borrowed(text)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn summaries_translate_the_label_and_keep_the_sender_text() {
-        let es = Locale::Spanish;
-        assert_eq!(summary_in(es, "Photo"), "Foto");
-        assert_eq!(summary_in(es, "Photo: Photo"), "Foto: Photo");
-        assert_eq!(
-            summary_in(es, "Document: informe.pdf"),
-            "Documento: informe.pdf"
-        );
-        assert_eq!(
-            summary_in(es, "Voice message (0:12)"),
-            "Mensaje de voz (0:12)"
-        );
-        assert_eq!(summary_in(es, "hola: qué tal"), "hola: qué tal");
-        assert_eq!(summary_in(Locale::English, "Photo"), "Photo");
-    }
 
     #[test]
     fn every_spanish_message_is_translated() {

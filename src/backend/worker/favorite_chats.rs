@@ -52,19 +52,22 @@ impl FavoriteChats {
 
 /// The app-state value for a whole favorites list, made at `at` (ms).
 pub(super) fn favorites_value(list: &[Favorite], at: i64) -> wa::SyncActionValue {
-    wa::SyncActionValue {
-        favorites_action: MessageField::some(wa::sync_action_value::FavoritesAction {
-            favorites: list
+    {
+        let mut proto = wa::SyncActionValue::default();
+        proto.favorites_action = MessageField::some({
+            let mut proto = wa::sync_action_value::FavoritesAction::default();
+            proto.favorites = list
                 .iter()
-                .map(
-                    |favorite| wa::sync_action_value::favorites_action::Favorite {
-                        id: Some(favorite.jid.clone()),
-                    },
-                )
-                .collect(),
-        }),
-        timestamp: Some(at),
-        ..Default::default()
+                .map(|favorite| {
+                    let mut proto = wa::sync_action_value::favorites_action::Favorite::default();
+                    proto.id = Some(favorite.jid.clone());
+                    proto
+                })
+                .collect();
+            proto
+        });
+        proto.timestamp = Some(at);
+        proto
     }
 }
 
@@ -250,13 +253,18 @@ mod tests {
     fn phone_list(worker: &mut Worker, ids: &[&str], at: i64) {
         let update = wa_events::FavoritesUpdate::builder()
             .timestamp(whatsapp_rust::wacore::time::from_millis_or_now(at))
-            .action(Box::new(wa::sync_action_value::FavoritesAction {
-                favorites: ids
+            .action(Box::new({
+                let mut proto = wa::sync_action_value::FavoritesAction::default();
+                proto.favorites = ids
                     .iter()
-                    .map(|id| wa::sync_action_value::favorites_action::Favorite {
-                        id: Some((*id).into()),
+                    .map(|id| {
+                        let mut proto =
+                            wa::sync_action_value::favorites_action::Favorite::default();
+                        proto.id = Some((*id).into());
+                        proto
                     })
-                    .collect(),
+                    .collect();
+                proto
             }))
             .from_full_sync(false)
             .build();

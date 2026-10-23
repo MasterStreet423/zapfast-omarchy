@@ -15,13 +15,18 @@ runtime-version: '26.08'
 sdk: org.freedesktop.Sdk
 sdk-extensions:
   - org.freedesktop.Sdk.Extension.rust-stable
+  # libclang, for the bindings fastframe-audio's PipeWire output generates
+  # against the SDK's libpipewire headers.
+  - org.freedesktop.Sdk.Extension.llvm22
 command: zapfast
 finish-args:
   # Wayland first, X11 when that is what there is.
   - --socket=wayland
   - --socket=fallback-x11
   - --share=ipc
-  - --device=dri
+  # The GPU, and the cameras for video calls: Flatpak has no narrower
+  # permission for Video4Linux devices.
+  - --device=all
   # Sound: PulseAudio, which PipeWire also answers.
   - --socket=pulseaudio
   # WhatsApp and attachment downloads.
@@ -29,13 +34,16 @@ finish-args:
   # Archive key and status notifier tray.
   - --talk-name=org.freedesktop.secrets
   - --talk-name=org.kde.StatusNotifierWatcher
+  # Desktop notifications, which Fastframe sends straight to the server.
+  - --talk-name=org.freedesktop.Notifications
   # Older Flatpak versions leave XDG_STATE_HOME unset. Keep the fallback
   # state directory (session, history, logs, and credential markers) durable.
   - --persist=.local/state
 build-options:
-  append-path: /usr/lib/sdk/rust-stable/bin
+  append-path: /usr/lib/sdk/rust-stable/bin:/usr/lib/sdk/llvm22/bin
   env:
     CARGO_HOME: /run/build/zapfast/cargo
+    LIBCLANG_PATH: /usr/lib/sdk/llvm22/lib
 modules:
   - name: zapfast
     buildsystem: simple

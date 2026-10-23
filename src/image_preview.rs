@@ -1,8 +1,10 @@
-//! State and routing for the in-app image preview.
+//! State and routing for the in-app media viewer and sticker preview.
 
 use std::path::{Path, PathBuf};
 
 use egui::{Event, Key, Modifiers, Vec2, vec2};
+
+use crate::model::ChatId;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum OpenTarget {
@@ -10,9 +12,32 @@ pub enum OpenTarget {
     External,
 }
 
-/// Chooses the native preview for an image rendered successfully by the conversation view.
+/// Whether the full-window viewer can open this file.
+///
+/// The viewer browses the chat's album, so it takes exactly what the album
+/// holds, decided by the same rule the album uses to decide what joins it: a
+/// photo it can decode, or a clip it can play. A clip is not an image, so
+/// `can_preview_image` alone would send it to the system player; a GIF is an
+/// inline animation and is deliberately not in the album, so it is not opened
+/// here either.
+pub fn can_view(path: &Path) -> bool {
+    crate::model::gallery_kind_for_path(path).is_some()
+}
+
+/// Whether this file is a clip, from its name alone. Used where the album item
+/// is not known yet, so a clip is never handed to the image decoder.
+pub fn is_video(path: &Path) -> bool {
+    crate::model::gallery_kind_for_path(path) == Some(crate::model::GalleryKind::Video)
+}
+
+/// Chooses the native preview for an image rendered successfully by the
+/// conversation view.
+///
+/// The test is `can_view`, not "is an image": the viewer opens what the album
+/// holds, so a GIF, which the album leaves out, goes to the system viewer
+/// instead of opening a preview that has nothing to show.
 pub fn open_target(path: &Path, rendered: bool) -> OpenTarget {
-    if rendered && crate::safety::can_preview_image(path) {
+    if rendered && can_view(path) {
         OpenTarget::Preview
     } else {
         OpenTarget::External
@@ -31,13 +56,17 @@ pub fn preview_action(key: Key, modifiers: Modifiers) -> Option<crate::model::Ac
         }
         (false, Key::Minus) if !modifiers.any() => Some(crate::model::Action::ZoomImageOut),
         (false, Key::Num0) if !modifiers.any() => Some(crate::model::Action::FitImage),
+        // A clip on the stage takes the arrows first, to jump five seconds;
+        // otherwise they step through the album.
+        (false, Key::ArrowLeft) if !modifiers.any() => Some(crate::model::Action::ViewerStep(-1)),
+        (false, Key::ArrowRight) if !modifiers.any() => Some(crate::model::Action::ViewerStep(1)),
         _ => None,
     }
 }
 
 /// The preview swallows keys that would type into or edit the chat behind
 /// it, while leaving navigation and activation keys (Tab, Enter, Space,
-/// arrows) for the preview modal's own controls.
+/// Up/Down) for the preview modal's own controls.
 pub fn consumes_key(key: &Event) -> bool {
     match key {
         Event::Text(_) | Event::Paste(_) | Event::Copy | Event::Cut => true,
@@ -56,8 +85,6 @@ fn is_modal_navigation(key: Key) -> bool {
             | Key::Space
             | Key::ArrowUp
             | Key::ArrowDown
-            | Key::ArrowLeft
-            | Key::ArrowRight
             | Key::Home
             | Key::End
             | Key::PageUp
@@ -110,12 +137,26 @@ pub fn anchored_offset(
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct PreviewState {
-    path: PathBuf,
+    /// The file being shown, or `None` for an album item whose attachment is
+    /// not downloaded yet. A missing file is not replaced by another one: the
+    /// viewer shows what the item is and offers it for download.
+    path: Option<PathBuf>,
     zoom: f32,
     fit: bool,
     /// Scale the fitted image is drawn at, so zooming starts from what is
     /// on screen rather than from the original pixels.
     fit_scale: f32,
+    /// The chat whose album the viewer browses.
+    chat: ChatId,
+    /// The message this picture came from.
+    message: String,
+    /// Which of an interactive message's pictures, as `MediaItem::card`.
+    card: Option<usize>,
+    /// Whether this item is known to be a clip although neither the album nor
+    /// the file's name says so: a video opened from its own bubble.
+    clip: bool,
+    /// A motion photo's clip, playing over its photo, when one is.
+    motion: Option<PathBuf>,
 }
 
 impl PreviewState {
@@ -123,17 +164,108 @@ impl PreviewState {
     const MAX_ZOOM: f32 = 4.0;
     pub const ZOOM_STEP: f32 = 1.25;
 
-    pub fn new(path: PathBuf) -> Self {
+    pub fn new(path: Option<PathBuf>, chat: ChatId, message: String) -> Self {
         Self {
             path,
+            chat,
+            message,
+            card: None,
             zoom: 1.0,
             fit: true,
             fit_scale: 1.0,
+            clip: false,
+            motion: None,
         }
     }
 
-    pub fn path(&self) -> &Path {
-        &self.path
+    /// A viewer opened on a video from its own bubble: a clip, whatever its
+    /// file is called.
+    pub fn new_clip(path: PathBuf, chat: ChatId, message: String) -> Self {
+        Self {
+            clip: true,
+            ..Self::new(Some(path), chat, message)
+        }
+    }
+
+    /// Plays a motion photo's clip over the photo on screen.
+    pub fn play_motion(&mut self, clip: PathBuf) {
+        self.motion = Some(clip);
+    }
+
+    /// The motion photo clip playing over the photo, when one is.
+    pub fn motion(&self) -> Option<&Path> {
+        self.motion.as_deref()
+    }
+
+    /// The file the stage plays when it shows a clip: a motion photo's clip,
+    /// or the item's own file.
+    pub fn clip_path(&self) -> Option<&Path> {
+        self.motion().or(self.path())
+    }
+
+    /// The same picture as one of an interactive message's, as
+    /// `MediaItem::card` counts them.
+    pub fn with_card(mut self, card: Option<usize>) -> Self {
+        self.card = card;
+        self
+    }
+
+    /// Which of an interactive message's pictures this is.
+    pub fn card(&self) -> Option<usize> {
+        self.card
+    }
+
+    /// The chat whose album the viewer browses.
+    pub fn chat(&self) -> &str {
+        &self.chat
+    }
+
+    /// The message this picture came from.
+    pub fn message(&self) -> &str {
+        &self.message
+    }
+
+    /// Where this picture sits in the album, when the album holds it. The
+    /// position is derived, so a list that arrives late or changes cannot put
+    /// the viewer on the wrong item.
+    pub fn position(&self, album: &[crate::model::MediaItem]) -> Option<usize> {
+        album
+            .iter()
+            .position(|item| item.id == self.message && item.card == self.card)
+    }
+
+    /// Whether the viewer is showing a clip. The album item says so when the
+    /// album holds this message, and the file's own name otherwise: the same
+    /// rule the viewer draws with, so a clip is played and never handed to the
+    /// image decoder, and the actions that would decode it are left out.
+    pub fn shows_video(&self, album: &[crate::model::MediaItem]) -> bool {
+        self.motion.is_some()
+            || self.clip
+            || self
+                .position(album)
+                .and_then(|index| album.get(index))
+                .map_or_else(|| self.path().is_some_and(is_video), |item| item.video)
+    }
+
+    /// Points the viewer at another item, back to fitting the window.
+    pub fn show_item(&mut self, path: Option<PathBuf>, message: String) {
+        self.show_album_item(path, message, None);
+    }
+
+    /// Points the viewer at an album item, a card picture included.
+    pub fn show_album_item(&mut self, path: Option<PathBuf>, message: String, card: Option<usize>) {
+        self.path = path;
+        self.message = message;
+        self.card = card;
+        self.clip = false;
+        self.motion = None;
+        self.fit = true;
+        self.zoom = 1.0;
+    }
+
+    /// The file on screen, when the item has one.
+    pub fn path(&self) -> Option<&Path> {
+        self.path.as_deref()
     }
 
     pub fn zoom(&self) -> f32 {
@@ -195,14 +327,191 @@ impl PreviewState {
     }
 }
 
+/// A sticker from the conversation shown large on its own.
+#[derive(Clone, Debug, PartialEq)]
+pub struct StickerPreview {
+    path: PathBuf,
+    animated: bool,
+    /// The content hash, which names the favorite copy of the same sticker.
+    hash: Option<String>,
+}
+
+impl StickerPreview {
+    /// Whether it moves comes from the file: phones often leave the
+    /// message's `is_animated` flag out.
+    pub fn new(path: PathBuf) -> Self {
+        let bytes = std::fs::read(&path).ok();
+        Self {
+            animated: bytes.as_deref().is_some_and(crate::animation::webp_moves),
+            hash: bytes
+                .as_deref()
+                .map(crate::backend::sticker_store::content_hash),
+            path,
+        }
+    }
+
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+
+    pub fn animated(&self) -> bool {
+        self.animated
+    }
+
+    /// The favorite copy of this sticker among the saved ones, if any.
+    pub fn favorite<'a>(&self, saved: &'a [PathBuf]) -> Option<&'a PathBuf> {
+        let hash = self.hash.as_deref()?;
+        saved
+            .iter()
+            .find(|path| path.file_stem().is_some_and(|stem| stem == hash))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::path::{Path, PathBuf};
 
+    /// A preview of one file, with no album behind it.
+    fn fixture() -> PreviewState {
+        PreviewState::new(
+            Some(PathBuf::from("photo.png")),
+            "1@s.whatsapp.net".into(),
+            "m1".into(),
+        )
+    }
+
+    /// One album item, only ever matched by its id here.
+    fn item(id: &str) -> crate::model::MediaItem {
+        crate::model::MediaItem {
+            card: None,
+            id: id.into(),
+            timestamp: 0,
+            video: false,
+            path: None,
+            thumbnail: None,
+        }
+    }
+
+    /// The rule the copy action and its shortcut share: the album item says
+    /// whether a clip is on screen when the album holds this message, and the
+    /// file's own name says it otherwise.
+    #[test]
+    fn the_album_item_says_whether_a_clip_is_on_screen() {
+        let mut preview = fixture();
+        assert!(!preview.shows_video(&[]), "a photo is not a clip");
+        preview = PreviewState::new(
+            Some(PathBuf::from("clip.mp4")),
+            "1@s.whatsapp.net".into(),
+            "m1".into(),
+        );
+        assert!(preview.shows_video(&[]), "the file's own name decides");
+        // The album item decides once the album holds this message, and the
+        // item is the one this message names.
+        let mut clip = item("m1");
+        clip.video = true;
+        let album = vec![clip, item("m2"), item("m3")];
+        assert!(
+            preview.shows_video(&album),
+            "the album says m1 is a clip, whatever the file name says"
+        );
+        preview.show_item(Some(PathBuf::from("clip.mp4")), "m2".into());
+        assert!(
+            !preview.shows_video(&album),
+            "and the album says m2 is a photo"
+        );
+        // A message the album does not hold falls back to the file's name.
+        preview.show_item(Some(PathBuf::from("clip.mp4")), "elsewhere".into());
+        assert!(preview.shows_video(&album));
+    }
+
+    #[test]
+    fn the_album_position_comes_from_the_message_id() {
+        let mut preview = fixture();
+        let album = vec![item("m1"), item("m2"), item("m3")];
+        assert_eq!(preview.position(&album), Some(0));
+        preview.show_item(Some(PathBuf::from("other.png")), "m3".into());
+        assert_eq!(preview.position(&album), Some(2));
+        // A picture that is not in the album has no position, so the viewer
+        // does not claim to be somewhere it is not.
+        preview.show_item(Some(PathBuf::from("other.png")), "nope".into());
+        assert_eq!(preview.position(&album), None);
+    }
+
+    #[test]
+    fn showing_another_item_returns_to_fitting() {
+        let mut preview = fixture();
+        preview.zoom_in();
+        assert!(!preview.is_fit());
+        preview.show_item(Some(PathBuf::from("next.png")), "m2".into());
+        assert!(preview.is_fit(), "a new picture starts fitted");
+        assert_eq!(preview.path(), Some(Path::new("next.png")));
+        assert_eq!(preview.message(), "m2");
+        // An item whose file is not here yet keeps that: the viewer does not
+        // fall back to whatever was on screen.
+        preview.show_item(None, "m3".into());
+        assert_eq!(preview.path(), None);
+        assert_eq!(preview.message(), "m3");
+    }
+
+    #[test]
+    fn the_viewer_steps_with_the_arrow_keys() {
+        assert_eq!(
+            preview_action(Key::ArrowRight, Modifiers::NONE),
+            Some(crate::model::Action::ViewerStep(1))
+        );
+        assert_eq!(
+            preview_action(Key::ArrowLeft, Modifiers::NONE),
+            Some(crate::model::Action::ViewerStep(-1))
+        );
+        assert_eq!(preview_action(Key::ArrowRight, Modifiers::SHIFT), None);
+        assert_eq!(preview_action(Key::Period, Modifiers::NONE), None);
+        // The arrows reach the viewer rather than the modal's focus walk.
+        assert!(consumes_key(&Event::Key {
+            key: Key::ArrowLeft,
+            physical_key: None,
+            pressed: true,
+            repeat: false,
+            modifiers: Modifiers::NONE,
+        }));
+    }
+
+    #[test]
+    fn a_sticker_preview_finds_its_favorite_copy_by_content() {
+        let dir = tempfile::tempdir().expect("temp");
+        let received = dir.path().join("msg-1.webp");
+        std::fs::write(&received, b"sun").expect("writes");
+        let preview = StickerPreview::new(received);
+        assert!(!preview.animated());
+        let other = dir.path().join("saved").join("0000.webp");
+        assert_eq!(preview.favorite(std::slice::from_ref(&other)), None);
+        let copy = dir.path().join("saved").join(format!(
+            "{}.webp",
+            crate::backend::sticker_store::content_hash(b"sun")
+        ));
+        let saved = vec![other, copy.clone()];
+        assert_eq!(preview.favorite(&saved), Some(&copy));
+        let missing = StickerPreview::new(dir.path().join("gone.webp"));
+        assert_eq!(missing.favorite(&saved), None);
+        assert!(!missing.animated());
+    }
+
+    #[test]
+    fn a_sticker_moves_when_its_file_says_so_whatever_the_message_claimed() {
+        let dir = tempfile::tempdir().expect("temp");
+        let path = dir.path().join("moving.webp");
+        // A colour profile ahead of the animation chunk, as other apps write.
+        let mut moving = b"RIFF\0\0\0\0WEBPVP8X\x0a\0\0\0\x22\0\0\0\0\0\0\0\0\0".to_vec();
+        moving.extend_from_slice(b"ICCP\x00\x01\0\0");
+        moving.extend(std::iter::repeat_n(0u8, 256));
+        moving.extend_from_slice(b"ANIM");
+        std::fs::write(&path, &moving).expect("writes");
+        assert!(StickerPreview::new(path).animated());
+    }
+
     #[test]
     fn zooming_from_fit_starts_at_the_fitted_scale() {
-        let mut preview = PreviewState::new(PathBuf::from("photo.png"));
+        let mut preview = fixture();
         preview.set_fit_scale(0.4);
         preview.zoom_in();
         assert!(!preview.is_fit());
@@ -214,11 +523,37 @@ mod tests {
         assert!((preview.zoom() - 0.32).abs() < 1e-6);
     }
 
+    /// The viewer browses the album, so it opens what the album holds: a photo
+    /// it can decode, and a clip it can play. A clip is not an image, so the
+    /// image test alone would send it to the system player instead, and a GIF
+    /// is an inline animation the album leaves out.
+    #[test]
+    fn the_viewer_opens_photos_and_clips_but_not_anything_else() {
+        assert!(can_view(Path::new("photo.png")));
+        assert!(can_view(Path::new("clip.mp4")));
+        assert!(can_view(Path::new("holiday.MOV")));
+        assert!(!can_view(Path::new("anim.gif")));
+        assert!(!can_view(Path::new("sticker.webp.png.gif")));
+        assert!(!can_view(Path::new("notes.pdf")));
+        assert!(!can_view(Path::new("song.mp3")));
+        assert!(!can_view(Path::new("no-extension")));
+    }
+
     #[test]
     fn rendered_supported_images_route_to_the_preview() {
         assert_eq!(
             open_target(Path::new("photo.PNG"), true),
             OpenTarget::Preview
+        );
+        assert_eq!(
+            open_target(Path::new("clip.mp4"), true),
+            OpenTarget::Preview
+        );
+        // A GIF is an inline animation the album leaves out, so the preview has
+        // nothing to show for it and it goes to the system viewer.
+        assert_eq!(
+            open_target(Path::new("anim.gif"), true),
+            OpenTarget::External
         );
         assert_eq!(
             open_target(Path::new("photo.heic"), true),
@@ -228,6 +563,39 @@ mod tests {
             open_target(Path::new("photo.png"), false),
             OpenTarget::External
         );
+    }
+
+    /// A clip opened before the album arrives has no item to ask, so the file
+    /// name decides: handing an mp4 to the image decoder showed a load error.
+    #[test]
+    fn a_file_name_says_whether_it_is_a_clip() {
+        assert!(is_video(Path::new("clip.mp4")));
+        assert!(is_video(Path::new("holiday.MOV")));
+        assert!(!is_video(Path::new("photo.png")));
+        assert!(!is_video(Path::new("anim.gif")));
+        assert!(!is_video(Path::new("no-extension")));
+    }
+
+    /// The album is what the viewer can draw, so a photo format the image crate
+    /// is not built with stays out and opens in the system viewer instead of
+    /// failing to decode here.
+    #[test]
+    fn the_album_takes_only_the_photo_formats_the_decoder_draws() {
+        for name in ["photo.jpg", "photo.JPEG", "photo.png", "photo.webp"] {
+            assert_eq!(
+                crate::model::gallery_kind_for_path(Path::new(name)),
+                Some(crate::model::GalleryKind::Photo),
+                "{name}"
+            );
+        }
+        for name in ["scan.bmp", "scan.tif", "scan.tiff", "anim.gif", "notes.pdf"] {
+            assert_eq!(
+                crate::model::gallery_kind_for_path(Path::new(name)),
+                None,
+                "{name}"
+            );
+            assert!(!can_view(Path::new(name)), "{name}");
+        }
     }
 
     #[test]
@@ -308,8 +676,8 @@ mod tests {
 
     #[test]
     fn preview_starts_fitted_and_zoom_has_sensible_limits() {
-        let mut preview = PreviewState::new(PathBuf::from("photo.png"));
-        assert_eq!(preview.path(), Path::new("photo.png"));
+        let mut preview = fixture();
+        assert_eq!(preview.path(), Some(Path::new("photo.png")));
         assert!(preview.is_fit());
 
         preview.zoom_in();
@@ -331,7 +699,7 @@ mod tests {
 
     #[test]
     fn zooming_at_the_limits_never_goes_the_wrong_way() {
-        let mut preview = PreviewState::new(PathBuf::from("photo.png"));
+        let mut preview = fixture();
         preview.set_fit_scale(0.1);
         preview.zoom_by(0.8);
         assert_eq!(preview.scale(), 0.1, "a tiny fit must not jump up");

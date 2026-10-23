@@ -1,6 +1,6 @@
 //! Shortcuts, account, linking, contact, and chat dialogs.
 
-use egui::{Align, CornerRadius, Frame, Layout, Margin, Sense, Stroke, pos2, vec2};
+use egui::{Align, CornerRadius, Frame, Layout, Margin, Rect, Sense, Stroke, pos2, vec2};
 
 use crate::app::App;
 use crate::model::{Action, Dialog};
@@ -26,31 +26,38 @@ pub fn show(app: &mut App, ctx: &egui::Context) {
                 Dialog::About => 380.0,
                 Dialog::ConfirmUnlink => 380.0,
                 Dialog::ConfirmRemoveAccount(_) => 380.0,
+                Dialog::ConfirmClearMediaCache(_) => 380.0,
                 Dialog::ConfirmLeaveGroup(_) => 380.0,
                 Dialog::PairWithPhone => 380.0,
                 Dialog::NewContact => 380.0,
                 Dialog::NewChat => 420.0,
                 Dialog::UnlockLockedChats | Dialog::ConfirmLockChat(_) => 380.0,
-                Dialog::ChatInfo(_) => 360.0,
                 Dialog::ConfirmDeleteChat(_) | Dialog::JoinGroup | Dialog::ConfirmStartOver => {
                     380.0
                 }
                 Dialog::ConfirmClearChat(_) => 380.0,
-                Dialog::ConfirmDeleteMessage { .. } => 380.0,
+                Dialog::ConfirmDeleteMessage { .. } | Dialog::ConfirmDeleteSelection { .. } => {
+                    380.0
+                }
+                Dialog::ConfirmRemoveStickerPack { .. } => 380.0,
                 Dialog::StickerPack => 420.0,
                 Dialog::StickerMaker => 400.0,
                 Dialog::Forward { .. } => 420.0,
                 Dialog::CreatePoll(_) => 420.0,
+                Dialog::SendLocation(_) => 420.0,
                 Dialog::PollResults { .. }
                 | Dialog::InteractiveList { .. }
                 | Dialog::MessageInfo { .. } => {
                     420.0_f32.min((ui.ctx().content_rect().width() - 64.0).max(180.0))
                 }
                 Dialog::Labels => 460.0,
+                Dialog::AddGroupMembers(_) => 420.0,
+                Dialog::ConfirmResetInviteLink(_) | Dialog::ConfirmRemoveMember { .. } => 380.0,
             });
             ui.spacing_mut().item_spacing.y = 8.0;
             match dialog {
                 Dialog::CreatePoll(chat) => super::polls::create(app, ui, &chat),
+                Dialog::SendLocation(chat) => super::locations::send(app, ui, &chat),
                 Dialog::PollResults { chat, message } => {
                     super::polls::results(app, ui, &chat, &message)
                 }
@@ -64,13 +71,13 @@ pub fn show(app: &mut App, ctx: &egui::Context) {
                 Dialog::About => about(app, ui),
                 Dialog::ConfirmUnlink => confirm_unlink(app, ui),
                 Dialog::ConfirmRemoveAccount(id) => confirm_remove(app, ui, id),
+                Dialog::ConfirmClearMediaCache(id) => confirm_clear_media(app, ui, id),
                 Dialog::ConfirmLeaveGroup(id) => confirm_leave_group(app, ui, &id),
                 Dialog::PairWithPhone => pair_with_phone(app, ui),
                 Dialog::NewContact => new_contact(app, ui),
                 Dialog::NewChat => new_chat(app, ui),
                 Dialog::UnlockLockedChats => unlock_locked_chats(app, ui),
                 Dialog::ConfirmLockChat(id) => confirm_lock_chat(app, ui, &id),
-                Dialog::ChatInfo(id) => chat_info(app, ui, &id),
                 Dialog::ConfirmDeleteChat(id) => confirm_delete_chat(app, ui, &id),
                 Dialog::ConfirmClearChat(id) => confirm_clear_chat(app, ui, &id),
                 Dialog::ConfirmDeleteMessage {
@@ -78,13 +85,34 @@ pub fn show(app: &mut App, ctx: &egui::Context) {
                     message,
                     for_everyone,
                 } => confirm_delete_message(app, ui, &chat, &message, for_everyone),
-                Dialog::Forward { chat, messages } => forward(app, ui, &chat, &messages),
+                Dialog::ConfirmRemoveStickerPack { name, dir } => {
+                    confirm_remove_sticker_pack(app, ui, &name, dir)
+                }
+                Dialog::ConfirmDeleteSelection {
+                    chat,
+                    messages,
+                    for_everyone,
+                } => {
+                    confirm_delete_messages(app, ui, &chat, &messages, for_everyone, true);
+                }
+                Dialog::Forward { messages, .. } => forward(app, ui, &messages),
                 Dialog::JoinGroup => join_group(app, ui),
                 Dialog::ConfirmStartOver => confirm_start_over(app, ui),
                 Dialog::StickerPack => sticker_pack(app, ui),
                 Dialog::StickerMaker => sticker_maker(app, ui),
                 Dialog::MessageInfo { chat, message } => {
                     super::message_info::show(app, ui, &chat, &message)
+                }
+                Dialog::AddGroupMembers(_) => {
+                    if app.new_group.is_some() {
+                        super::new_group::show(app, ui);
+                    } else {
+                        app.actions.push(Action::CloseDialog);
+                    }
+                }
+                Dialog::ConfirmResetInviteLink(chat) => confirm_reset_invite_link(app, ui, &chat),
+                Dialog::ConfirmRemoveMember { chat, member } => {
+                    confirm_remove_member(app, ui, &chat, &member)
                 }
             }
         });
@@ -423,22 +451,13 @@ fn confirm_lock_chat(app: &mut App, ui: &mut egui::Ui, id: &str) {
 }
 
 fn new_chat(app: &mut App, ui: &mut egui::Ui) {
+    // Making a group turns the same dialog into its steps.
+    if app.new_group.is_some() {
+        super::new_group::show(app, ui);
+        return;
+    }
     let palette = app.palette;
     title(ui, app, &crate::i18n::gettext(app.locale, "New chat"));
-    // "Message yourself" heads the contact list below, as on the phone.
-    ui.horizontal_wrapped(|ui| {
-        if theme::soft_button(
-            ui,
-            &palette,
-            Some(Icon::Plus),
-            &crate::i18n::gettext(app.locale, "Add contact"),
-            false,
-        )
-        .clicked()
-        {
-            app.actions.push(Action::ShowDialog(Dialog::NewContact));
-        }
-    });
     let width = ui.available_width();
     let search = super::widgets::search_field(
         ui,
@@ -452,36 +471,22 @@ fn new_chat(app: &mut App, ui: &mut egui::Ui) {
         search.request_focus();
     }
     let needle = crate::util::search_key(app.new_chat_search.trim());
-    let mut contacts = app.contacts.clone();
-    for chat in &app.chats {
-        if chat.kind == crate::model::ChatKind::Direct {
-            contacts
-                .entry(chat.id.clone())
-                .or_insert_with(|| crate::model::Contact {
-                    id: chat.id.clone(),
-                    full_name: Some(app.chat_title(chat)),
-                    ..Default::default()
-                });
-        }
-    }
-    let mut contacts: Vec<_> = contacts
-        .into_values()
-        .filter(|contact| {
-            crate::model::phone_of(&contact.id).is_some()
-                && app.me.as_deref() != Some(contact.id.as_str())
-                && !app.chat(&contact.id).is_some_and(|chat| chat.locked)
-                && (needle.is_empty()
-                    || crate::util::search_key(&app.display_name(&contact.id)).contains(&needle)
-                    || crate::model::phone_of(&contact.id)
-                        .is_some_and(|phone| phone.contains(&needle)))
-        })
-        .collect();
-    contacts.sort_by_key(|contact| crate::util::search_key(&app.display_name(&contact.id)));
+    let contacts = contact_choices(app, &needle);
     egui::ScrollArea::vertical()
         .id_salt("new-chat-contacts")
         .max_height((ui.ctx().content_rect().height() - 280.0).clamp(100.0, 420.0))
         .auto_shrink([false, true])
         .show(ui, |ui| {
+            // New group and Add contact head the list, then "Message
+            // yourself", as on the phone.
+            let new_group = crate::i18n::gettext(app.locale, "New group");
+            if super::chats::action_row(app, ui, Icon::Users, &new_group).clicked() {
+                app.actions.push(Action::StartNewGroup);
+            }
+            let add_contact = crate::i18n::gettext(app.locale, "Add contact");
+            if super::chats::action_row(app, ui, Icon::Plus, &add_contact).clicked() {
+                app.actions.push(Action::ShowDialog(Dialog::NewContact));
+            }
             let offer_self = app.offers_self(&needle);
             if offer_self {
                 super::chats::self_row(app, ui);
@@ -502,20 +507,96 @@ fn new_chat(app: &mut App, ui: &mut egui::Ui) {
         });
 }
 
-fn forward(app: &mut App, ui: &mut egui::Ui, from_chat: &str, messages: &[String]) {
+/// The people New chat and New call offer, by name: the contacts and the
+/// one-to-one chats, without ourselves or a locked chat, matching `needle`
+/// (a `search_key`) by name or number.
+pub(super) fn contact_choices(app: &App, needle: &str) -> Vec<crate::model::Contact> {
+    let mut contacts = app.contacts.clone();
+    for chat in &app.chats {
+        if chat.kind == crate::model::ChatKind::Direct {
+            contacts
+                .entry(chat.id.clone())
+                .or_insert_with(|| crate::model::Contact {
+                    id: chat.id.clone(),
+                    full_name: Some(app.chat_title(chat)),
+                    ..Default::default()
+                });
+        }
+    }
+    let mut contacts: Vec<_> = contacts
+        .into_values()
+        .filter(|contact| {
+            crate::model::phone_of(&contact.id).is_some()
+                && app.me.as_deref() != Some(contact.id.as_str())
+                && !app.chat(&contact.id).is_some_and(|chat| chat.locked)
+                && (needle.is_empty()
+                    || crate::util::search_key(&app.display_name(&contact.id)).contains(needle)
+                    || crate::model::phone_of(&contact.id)
+                        .is_some_and(|phone| phone.contains(needle)))
+        })
+        .collect();
+    contacts.sort_by_key(|contact| crate::util::search_key(&app.display_name(&contact.id)));
+    contacts
+}
+
+/// Draws recipient selection or, for two or more recipients, their
+/// confirmation. A single recipient is forwarded to without one.
+fn forward(app: &mut App, ui: &mut egui::Ui, messages: &[String]) {
     let palette = app.palette;
     let heading = if messages.len() == 1 {
         crate::i18n::gettext(app.locale, "Forward message").into_owned()
     } else {
         crate::i18n::ngettext(
-            crate::i18n_extra::locale(),
-            "Forward {} message",
-            "Forward {} messages",
+            app.locale,
+            "Forward {count} message",
+            "Forward {count} messages",
             messages.len() as u32,
         )
-        .replace("{}", &messages.len().to_string())
+        .replace("{count}", &messages.len().to_string())
     };
     title(ui, app, &heading);
+    if app.forward_reviewing {
+        theme::text(
+            ui,
+            crate::i18n::gettext(app.locale, "Forward to these chats?"),
+            theme::medium(14.5),
+            palette.text,
+        );
+        ui.add_space(8.0);
+        egui::ScrollArea::vertical()
+            .max_height(260.0)
+            .show(ui, |ui| {
+                for id in &app.forward_recipients {
+                    if let Some(chat) = app.chat(id) {
+                        theme::text(ui, app.chat_title(chat), theme::regular(14.0), palette.text);
+                    }
+                }
+            });
+        ui.add_space(12.0);
+        ui.horizontal(|ui| {
+            if theme::pill_button(
+                ui,
+                &palette,
+                &crate::i18n::gettext(app.locale, "Back"),
+                false,
+            )
+            .clicked()
+            {
+                app.actions.push(Action::BackToForwardSelection);
+            }
+            if theme::pill_button(
+                ui,
+                &palette,
+                &crate::i18n::gettext(app.locale, "Forward"),
+                true,
+            )
+            .clicked()
+            {
+                app.actions.push(Action::ConfirmForward);
+            }
+        });
+        return;
+    }
     let width = ui.available_width();
     let search = super::widgets::search_field(
         ui,
@@ -546,7 +627,10 @@ fn forward(app: &mut App, ui: &mut egui::Ui, from_chat: &str, messages: &[String
 
     let row_height = 52.0;
     let max_height = (ui.ctx().content_rect().height() - 220.0).clamp(row_height * 3.0, 420.0);
-    let mut destination = None;
+    // With room for one recipient a click swaps it; otherwise a full list
+    // takes no more.
+    let full = app.forward_limit > 1 && app.forward_recipients.len() >= app.forward_limit;
+
     egui::ScrollArea::vertical()
         .id_salt("forward-chats")
         .max_height(max_height)
@@ -557,9 +641,34 @@ fn forward(app: &mut App, ui: &mut egui::Ui, from_chat: &str, messages: &[String
                 let title = app.chat_title(chat);
                 let (rect, response) =
                     ui.allocate_exact_size(vec2(ui.available_width(), row_height), Sense::click());
+                theme::reveal_focus(&response);
+                response.widget_info(|| {
+                    egui::WidgetInfo::selected(
+                        egui::WidgetType::SelectableLabel,
+                        ui.is_enabled(),
+                        app.forward_recipients.contains(&chat.id),
+                        &title,
+                    )
+                });
+                #[cfg(any(test, feature = "demo"))]
+                ui.ctx().data_mut(|data| {
+                    data.insert_temp(egui::Id::new(("forward-recipient", &chat.id)), rect)
+                });
+                let selected = app.forward_recipients.contains(&chat.id);
+                let blocked = full && !selected;
                 if ui.is_rect_visible(rect) {
-                    if response.hovered() {
+                    if (response.hovered() && !blocked) || selected {
                         super::widgets::dialog_row_highlight(ui, rect, palette.surface_hover);
+                    }
+                    let check = egui::Rect::from_center_size(
+                        pos2(rect.right() - 18.0, rect.center().y),
+                        egui::Vec2::splat(20.0),
+                    );
+                    if super::widgets::round_check(
+                        ui, &palette, check, &chat.id, selected, !blocked, &title,
+                    ) {
+                        app.actions
+                            .push(Action::ToggleForwardRecipient(chat.id.clone()));
                     }
                     let avatar = egui::Rect::from_center_size(
                         pos2(rect.left() + 23.0, rect.center().y),
@@ -579,20 +688,28 @@ fn forward(app: &mut App, ui: &mut egui::Ui, from_chat: &str, messages: &[String
                         &title,
                         theme::medium(14.5),
                         palette.text,
-                        rect.width() - 62.0,
+                        rect.width() - 90.0,
                         1,
                     );
+                    let colour = if blocked {
+                        palette.secondary
+                    } else {
+                        palette.text
+                    };
                     line.paint(
                         ui,
                         pos2(rect.left() + 50.0, rect.center().y - line.size().y / 2.0),
-                        palette.text,
+                        colour,
                     );
                 }
-                if response
-                    .on_hover_cursor(egui::CursorIcon::PointingHand)
-                    .clicked()
-                {
-                    destination = Some(chat.id.clone());
+                let response = if blocked {
+                    response
+                } else {
+                    response.on_hover_cursor(egui::CursorIcon::PointingHand)
+                };
+                if response.clicked() && !blocked {
+                    app.actions
+                        .push(Action::ToggleForwardRecipient(chat.id.clone()));
                 }
             }
         });
@@ -609,17 +726,80 @@ fn forward(app: &mut App, ui: &mut egui::Ui, from_chat: &str, messages: &[String
         });
         ui.add_space(12.0);
     }
-    if let Some(to_chat) = destination {
-        app.actions.push(Action::Forward {
-            from_chat: from_chat.to_owned(),
-            messages: messages.to_vec(),
-            to_chat,
-        });
+    ui.add_space(12.0);
+    // Says why no more chats can be picked, as WhatsApp does.
+    let limit = if app.forward_limit == 1 {
+        Some(
+            crate::i18n::gettext(
+                app.locale,
+                "Messages forwarded many times can be sent to one chat at a time",
+            )
+            .into_owned(),
+        )
+    } else if full {
+        Some(
+            crate::i18n::ngettext(
+                app.locale,
+                "You can forward to up to {count} chat",
+                "You can forward to up to {count} chats",
+                app.forward_limit as u32,
+            )
+            .replace("{count}", &app.forward_limit.to_string()),
+        )
+    } else {
+        None
+    };
+    if let Some(limit) = limit {
+        ui.add(
+            egui::Label::new(
+                egui::RichText::new(limit)
+                    .font(theme::regular(13.0))
+                    .color(palette.secondary),
+            )
+            .wrap(),
+        );
+        ui.add_space(8.0);
     }
+    let count = app.forward_recipients.len();
+    ui.horizontal(|ui| {
+        theme::text(
+            ui,
+            crate::i18n::ngettext(
+                app.locale,
+                "{count} recipient selected",
+                "{count} recipients selected",
+                count as u32,
+            )
+            .replace("{count}", &count.to_string()),
+            theme::regular(13.5),
+            palette.secondary,
+        );
+        // One recipient is sent to at once; several are confirmed first.
+        let (label, action) = if count > 1 {
+            (
+                crate::i18n::gettext(app.locale, "Review recipients"),
+                Action::ReviewForward,
+            )
+        } else {
+            (
+                crate::i18n::gettext(app.locale, "Forward"),
+                Action::ConfirmForward,
+            )
+        };
+        let button = ui
+            .add_enabled_ui(count > 0, |ui| {
+                theme::pill_button(ui, &palette, &label, true)
+            })
+            .inner;
+        if button.clicked() {
+            app.actions.push(action);
+        }
+    });
 }
 
+/// Uses the model's send permissions to reject unavailable forwarding destinations.
 fn forwardable(chat: &crate::model::Chat) -> bool {
-    chat.kind != crate::model::ChatKind::Broadcast && !chat.read_only && !chat.locked
+    chat.can_send()
 }
 
 fn title(ui: &mut egui::Ui, app: &mut App, label: &str) {
@@ -821,80 +1001,57 @@ fn about(app: &mut App, ui: &mut egui::Ui) {
     }
 }
 
+/// Formats the localized singular or plural selected-message count.
+fn selected_message_count(locale: crate::i18n::Locale, count: usize) -> String {
+    crate::i18n::ngettext(
+        locale,
+        "{count} selected message",
+        "{count} selected messages",
+        count as u32,
+    )
+    .replace("{count}", &count.to_string())
+}
+
 fn confirm_delete_chat(app: &mut App, ui: &mut egui::Ui, id: &str) {
-    let palette = app.palette;
+    let locale = app.locale;
     let name = app.chat(id).map_or_else(
-        || crate::i18n::gettext(app.locale, "this chat").into_owned(),
+        || crate::i18n::gettext(locale, "this chat").into_owned(),
         |chat| chat.name.clone(),
     );
-    title(ui, app, &crate::i18n::gettext(app.locale, "Delete chat?"));
-    theme::paragraph(
+    let body = crate::i18n::gettext(
+        locale,
+        "This deletes your chat with {name}, including all messages, on this computer and on your phone. It cannot be undone.",
+    )
+    .replace("{name}", &name);
+    confirm_destructive(
+        app,
         ui,
-        crate::i18n::gettext(
-            app.locale,
-            "This deletes your chat with {name}, including all messages, on this computer and on your phone. It cannot be undone.",
-        )
-        .replace("{name}", &name.to_string()),
-        theme::regular(13.5),
-        palette.text,
+        &crate::i18n::gettext(locale, "Delete chat?"),
+        &[&body],
+        &crate::i18n::gettext(locale, "Delete"),
+        [Action::DeleteChat(id.to_owned())],
     );
-    ui.add_space(10.0);
-    ui.horizontal(|ui| {
-        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-            if danger_button(ui, app, &crate::i18n::gettext(app.locale, "Delete")) {
-                app.actions.push(Action::DeleteChat(id.to_owned()));
-                app.actions.push(Action::CloseDialog);
-            }
-            if theme::pill_button(
-                ui,
-                &palette,
-                &crate::i18n::gettext(app.locale, "Cancel"),
-                false,
-            )
-            .clicked()
-            {
-                app.actions.push(Action::CloseDialog);
-            }
-        });
-    });
 }
 
 fn confirm_clear_chat(app: &mut App, ui: &mut egui::Ui, id: &str) {
-    let palette = app.palette;
+    let locale = app.locale;
     let name = app.chat(id).map_or_else(
-        || crate::i18n::gettext(app.locale, "this chat").into_owned(),
+        || crate::i18n::gettext(locale, "this chat").into_owned(),
         |chat| chat.name.clone(),
     );
-    title(ui, app, &crate::i18n::gettext(app.locale, "Clear chat?"));
-    theme::paragraph(
+    let body = crate::i18n::gettext(
+        locale,
+        "This clears every message in your chat with {name}, including downloaded media, on this computer and on your phone. The chat itself stays. It cannot be undone.",
+    )
+    .replace("{name}", &name);
+    confirm_destructive(
+        app,
         ui,
-        crate::i18n::gettext(
-            app.locale,
-            "This clears every message in your chat with {name}, including downloaded media, on this computer and on your phone. The chat itself stays. It cannot be undone.",
-        )
-        .replace("{name}", &name),
-        theme::regular(13.5),
-        palette.text,
+        &crate::i18n::gettext(locale, "Clear chat?"),
+        &[&body],
+        &crate::i18n::gettext(locale, "Clear chat"),
+        [Action::ClearChat(id.to_owned())],
     );
-    ui.add_space(10.0);
-    ui.horizontal(|ui| {
-        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-            if danger_button(ui, app, &crate::i18n::gettext(app.locale, "Clear chat")) {
-                app.actions.push(Action::ClearChat(id.to_owned()));
-                app.actions.push(Action::CloseDialog);
-            }
-            if theme::pill_button(
-                ui,
-                &palette,
-                &crate::i18n::gettext(app.locale, "Cancel"),
-                false,
-            )
-            .clicked()
-            {
-                app.actions.push(Action::CloseDialog);
-            }
-        });
-    });
 }
 
 fn join_group(app: &mut App, ui: &mut egui::Ui) {
@@ -908,13 +1065,10 @@ fn join_group(app: &mut App, ui: &mut egui::Ui) {
         InviteState::Loading => {
             title(ui, app, &crate::i18n::gettext(app.locale, "Group invite"));
             ui.horizontal(|ui| {
-                ui.spinner();
+                crate::motion::egui_spinner(ui);
                 ui.label(
-                    egui::RichText::new(&*crate::i18n::gettext(
-                        app.locale,
-                        "Looking up the group…",
-                    ))
-                    .color(palette.secondary),
+                    egui::RichText::new(&*crate::i18n::gettext(app.locale, "Looking up the group…"))
+                        .color(palette.secondary),
                 );
             });
             cancel_row(app, ui);
@@ -1206,44 +1360,34 @@ fn sticker_maker(app: &mut App, ui: &mut egui::Ui) {
 }
 
 fn confirm_start_over(app: &mut App, ui: &mut egui::Ui) {
-    let palette = app.palette;
-    title(ui, app, &crate::i18n::gettext(app.locale, "Start over?"));
-    theme::paragraph(
+    let locale = app.locale;
+    confirm_destructive(
+        app,
         ui,
-        &*crate::i18n::gettext(
-            app.locale,
-            "ZapFast keeps your unreadable archive as a separate file, creates a new one, and asks you to link again. Linking again brings back recent history from your phone. Afterwards, remove the old ZapFast entry under Linked devices on your phone.",
-        ),
-        theme::regular(13.5),
-        palette.text,
+        &crate::i18n::gettext(locale, "Start over?"),
+        &[
+            &crate::i18n::gettext(
+                locale,
+                "ZapFast keeps your unreadable archive as a separate file, creates a new one, and asks you to link again. Linking again brings back recent history from your phone. Afterwards, remove the old ZapFast entry under Linked devices on your phone.",
+            ),
+            &crate::i18n::gettext(
+                locale,
+                "If you can restore the original keyring instead, choose Cancel and Try again: nothing is lost that way.",
+            ),
+        ],
+        &crate::i18n::gettext(locale, "Start over"),
+        [Action::StartOverArchive],
     );
-    theme::paragraph(
-        ui,
-        &*crate::i18n::gettext(
-            app.locale,
-            "If you can restore the original keyring instead, choose Cancel and Try again: nothing is lost that way.",
-        ),
-        theme::regular(13.0),
-        palette.secondary,
-    );
-    ui.add_space(10.0);
-    ui.horizontal(|ui| {
-        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-            if danger_button(ui, app, &crate::i18n::gettext(app.locale, "Start over")) {
-                app.actions.push(Action::StartOverArchive);
-            }
-            if theme::pill_button(
-                ui,
-                &palette,
-                &crate::i18n::gettext(app.locale, "Cancel"),
-                false,
-            )
-            .clicked()
-            {
-                app.actions.push(Action::CloseDialog);
-            }
-        });
-    });
+}
+
+/// Formats localized deletion guidance for direct or selected messages and the chosen scope.
+fn deletion_body(locale: crate::i18n::Locale, for_everyone: bool, count: Option<usize>) -> String {
+    match (for_everyone, count) {
+        (false, None) => crate::i18n::gettext(locale, "This removes the message from your phone and linked devices. Other people keep their copy. Connect to WhatsApp to delete it. This cannot be undone.").into_owned(),
+        (true, None) => crate::i18n::gettext(locale, "Everyone in this chat will see \"This message was deleted\" instead. It cannot be undone.").into_owned(),
+        (false, Some(_)) => crate::i18n::gettext(locale, "This removes these messages from your phone and linked devices. Other people keep their copy. Connect to WhatsApp to delete them. This cannot be undone.").into_owned(),
+        (true, Some(count)) => crate::i18n::ngettext(locale, "Everyone in this chat will see \"This message was deleted\" in place of the selected message. This cannot be undone.", "Everyone in this chat will see \"This message was deleted\" in place of the selected messages. This cannot be undone.", count as u32).into_owned(),
+    }
 }
 
 /// Confirms deleting one message. Enter is deliberately not bound here: a
@@ -1255,117 +1399,250 @@ fn confirm_delete_message(
     id: &str,
     for_everyone: bool,
 ) {
-    let palette = app.palette;
-    let (heading, body) = if for_everyone {
-        (
-            crate::i18n::gettext(app.locale, "Delete for everyone?"),
-            crate::i18n::gettext(
-                app.locale,
-                "Everyone in this chat will see \"This message was deleted\" instead. It cannot be undone.",
-            ),
-        )
+    confirm_delete_messages(app, ui, chat, &[id.to_owned()], for_everyone, false);
+}
+
+/// Confirms deleting messages, one or the whole selection, and queues one
+/// deletion per message in the chosen scope. A confirmed selection ends.
+fn confirm_delete_messages(
+    app: &mut App,
+    ui: &mut egui::Ui,
+    chat: &str,
+    ids: &[String],
+    for_everyone: bool,
+    selection: bool,
+) {
+    let locale = app.locale;
+    let heading = if for_everyone {
+        crate::i18n::gettext(locale, "Delete for everyone?")
     } else {
-        (
-            crate::i18n::gettext(app.locale, "Delete for me?"),
-            crate::i18n::gettext(
-                app.locale,
-                "This removes the message from your phone and linked devices. Other people keep their copy. Connect to WhatsApp to delete it. This cannot be undone.",
-            ),
-        )
+        crate::i18n::gettext(locale, "Delete for me?")
     };
-    title(ui, app, &heading);
-    theme::paragraph(ui, body.into_owned(), theme::regular(13.5), palette.text);
-    ui.add_space(10.0);
-    ui.horizontal(|ui| {
-        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-            if danger_button(ui, app, &crate::i18n::gettext(app.locale, "Delete")) {
-                let (chat, id) = (chat.to_owned(), id.to_owned());
-                let action = if for_everyone {
-                    Action::DeleteForEveryone { chat, id }
-                } else {
-                    Action::DeleteForMe { chat, id }
-                };
-                app.actions.push(action);
-                app.actions.push(Action::CloseDialog);
+    let body = deletion_body(locale, for_everyone, selection.then_some(ids.len()));
+    let count = selected_message_count(locale, ids.len());
+    let paragraphs: Vec<&str> = if selection && !ids.is_empty() {
+        vec![&count, &body]
+    } else {
+        vec![&body]
+    };
+    let mut actions: Vec<Action> = ids
+        .iter()
+        .map(|id| {
+            let (chat, id) = (chat.to_owned(), id.clone());
+            if for_everyone {
+                Action::DeleteForEveryone { chat, id }
+            } else {
+                Action::DeleteForMe { chat, id }
             }
-            if theme::pill_button(
-                ui,
-                &palette,
-                &crate::i18n::gettext(app.locale, "Cancel"),
-                false,
-            )
-            .clicked()
-            {
-                app.actions.push(Action::CloseDialog);
-            }
-        });
-    });
+        })
+        .collect();
+    if selection {
+        actions.push(Action::CancelSelection);
+    }
+    confirm_destructive(
+        app,
+        ui,
+        &heading,
+        &paragraphs,
+        &crate::i18n::gettext(locale, "Delete"),
+        actions,
+    );
+}
+
+fn confirm_remove_sticker_pack(
+    app: &mut App,
+    ui: &mut egui::Ui,
+    name: &str,
+    dir: std::path::PathBuf,
+) {
+    let locale = app.locale;
+    let body = crate::i18n::gettext(
+        locale,
+        "This deletes \"{name}\" and its stickers from this computer. To use it again, import it again.",
+    )
+    .replace("{name}", name);
+    confirm_destructive(
+        app,
+        ui,
+        &crate::i18n::gettext(locale, "Remove sticker pack?"),
+        &[&body],
+        &crate::i18n::gettext(locale, "Remove"),
+        [Action::DeleteStickerPack(dir)],
+    );
 }
 
 fn confirm_unlink(app: &mut App, ui: &mut egui::Ui) {
-    let palette = app.palette;
-    title(
-        ui,
+    let locale = app.locale;
+    confirm_destructive(
         app,
-        &crate::i18n::gettext(app.locale, "Unlink this computer?"),
-    );
-    theme::paragraph(
         ui,
-        &*crate::i18n::gettext(
-            app.locale,
+        &crate::i18n::gettext(locale, "Unlink this computer?"),
+        &[&crate::i18n::gettext(
+            locale,
             "This removes the device from WhatsApp and deletes the chats stored here. You can link again with a new code.",
-        ),
-        theme::regular(13.5),
-        palette.text,
+        )],
+        &crate::i18n::gettext(locale, "Unlink"),
+        [Action::Unlink],
     );
+}
+
+fn confirm_clear_media(app: &mut App, ui: &mut egui::Ui, id: crate::model::AccountId) {
+    let locale = app.locale;
+    let account = app
+        .accounts
+        .iter()
+        .find(|account| account.id == id)
+        .map(|account| account.display_label(locale))
+        .unwrap_or_default();
+    confirm_destructive(
+        app,
+        ui,
+        &crate::i18n::gettext(locale, "Clear the media cache?"),
+        &[
+            &crate::i18n::gettext(
+                locale,
+                "This deletes the photos, videos, stickers and files {account} downloaded to this computer. Messages stay, and attachments download again when you open them, while WhatsApp still has them.",
+            )
+            .replace("{account}", &account),
+            &crate::i18n::gettext(
+                locale,
+                "Files in a download folder you chose are kept.",
+            ),
+        ],
+        &crate::i18n::gettext(locale, "Clear"),
+        [Action::ClearMediaCache(id)],
+    );
+}
+
+fn confirm_remove(app: &mut App, ui: &mut egui::Ui, id: crate::model::AccountId) {
+    let locale = app.locale;
+    confirm_destructive(
+        app,
+        ui,
+        &crate::i18n::gettext(locale, "Remove this account?"),
+        &[&crate::i18n::gettext(
+            locale,
+            "This unlinks the number on this computer and deletes its local chats. Other accounts stay.",
+        )],
+        &crate::i18n::gettext(locale, "Remove"),
+        [Action::RemoveAccount(id)],
+    );
+}
+
+/// A confirmation for something that cannot be undone: the question, what it
+/// destroys (the first paragraph in the text colour, any after it as a smaller
+/// note), then Cancel and a red button that queues `action` and closes the
+/// dialog. Callers pass translated text. Enter is deliberately not bound: a
+/// stray keypress must not destroy anything.
+fn confirm_destructive(
+    app: &mut App,
+    ui: &mut egui::Ui,
+    heading: &str,
+    body: &[&str],
+    button: &str,
+    actions: impl IntoIterator<Item = Action>,
+) {
+    let palette = app.palette;
+    title(ui, app, heading);
+    for (index, paragraph) in body.iter().enumerate() {
+        let (font, colour) = if index == 0 {
+            (theme::regular(13.5), palette.text)
+        } else {
+            (theme::regular(13.0), palette.secondary)
+        };
+        theme::paragraph(ui, *paragraph, font, colour);
+    }
     ui.add_space(10.0);
+    let cancel = crate::i18n::gettext(app.locale, "Cancel");
     ui.horizontal(|ui| {
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-            if danger_button(ui, app, &crate::i18n::gettext(app.locale, "Unlink")) {
-                app.actions.push(Action::Unlink);
+            if danger_button(ui, app, button).clicked() {
+                app.actions.extend(actions);
+                app.actions.push(Action::CloseDialog);
             }
-            if theme::pill_button(
-                ui,
-                &palette,
-                &crate::i18n::gettext(app.locale, "Cancel"),
-                false,
-            )
-            .clicked()
-            {
+            if theme::pill_button(ui, &palette, &cancel, false).clicked() {
                 app.actions.push(Action::CloseDialog);
             }
         });
     });
 }
 
-fn confirm_remove(app: &mut App, ui: &mut egui::Ui, id: crate::model::AccountId) {
+/// Asks before revoking a group's invite link: everyone holding the old
+/// one loses the way in.
+fn confirm_reset_invite_link(app: &mut App, ui: &mut egui::Ui, chat: &str) {
     let palette = app.palette;
     let locale = app.locale;
     title(
         ui,
         app,
-        &crate::i18n::gettext(locale, "Remove this account?"),
+        crate::i18n::gettext(locale, "Reset the invite link?").as_ref(),
     );
     theme::paragraph(
         ui,
         crate::i18n::gettext(
             locale,
-            "This unlinks the number on this computer and deletes its local chats. Other accounts stay.",
-        )
-        .as_ref(),
+            "The current link will stop working, and nobody can join with it any more. A new link replaces it.",
+        ),
         theme::regular(13.5),
         palette.text,
     );
     ui.add_space(10.0);
+    confirm_buttons(
+        app,
+        ui,
+        crate::i18n::gettext(locale, "Reset link").as_ref(),
+        Action::ResetInviteLink(chat.to_owned()),
+    );
+}
+
+/// Asks before removing someone from a group.
+fn confirm_remove_member(app: &mut App, ui: &mut egui::Ui, chat: &str, member: &str) {
+    let palette = app.palette;
+    let locale = app.locale;
+    let name = app.display_name(member);
+    let group = app
+        .chat(chat)
+        .map(|chat| app.chat_title(chat))
+        .unwrap_or_default();
+    title(
+        ui,
+        app,
+        crate::i18n::gettext(locale, "Remove from the group?").as_ref(),
+    );
+    theme::paragraph(
+        ui,
+        crate::i18n::gettext(
+            locale,
+            "{name} will no longer receive messages from {group}. You can add them again later.",
+        )
+        .replace("{name}", &name)
+        .replace("{group}", &group),
+        theme::regular(13.5),
+        palette.text,
+    );
+    ui.add_space(10.0);
+    confirm_buttons(
+        app,
+        ui,
+        crate::i18n::gettext(locale, "Remove").as_ref(),
+        Action::ChangeGroupMember {
+            chat: chat.to_owned(),
+            member: member.to_owned(),
+            change: crate::group_admin::MemberChange::Remove,
+        },
+    );
+}
+
+/// A destructive button and Cancel, at the right.
+fn confirm_buttons(app: &mut App, ui: &mut egui::Ui, label: &str, action: Action) {
+    let palette = app.palette;
+    let cancel = crate::i18n::gettext(app.locale, "Cancel");
     ui.horizontal(|ui| {
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-            if danger_button(ui, app, &crate::i18n::gettext(locale, "Remove")) {
-                app.actions.push(Action::RemoveAccount(id));
-                app.actions.push(Action::CloseDialog);
+            if danger_button(ui, app, label).clicked() {
+                app.actions.push(action);
             }
-            if theme::pill_button(ui, &palette, &crate::i18n::gettext(locale, "Cancel"), false)
-                .clicked()
-            {
+            if theme::pill_button(ui, &palette, cancel.as_ref(), false).clicked() {
                 app.actions.push(Action::CloseDialog);
             }
         });
@@ -1399,7 +1676,7 @@ fn confirm_leave_group(app: &mut App, ui: &mut egui::Ui, id: &str) {
     } else {
         crate::i18n::gettext(locale, "Leave group")
     };
-    if danger_button(ui, app, leave_label.as_ref()) {
+    if danger_button(ui, app, leave_label.as_ref()).clicked() {
         app.actions.push(Action::LeaveGroup {
             chat: id.to_owned(),
             archive: false,
@@ -1437,6 +1714,8 @@ fn confirm_leave_group(app: &mut App, ui: &mut egui::Ui, id: &str) {
 }
 
 /// Why the number dialogs cannot act yet.
+const INVALID_NUMBER: &str =
+    "Enter a phone number with its country code, using only digits, spaces, hyphens and brackets";
 const NUMBER_TOO_SHORT: &str = "Enter the whole number, starting with the country code";
 
 fn pair_with_phone(app: &mut App, ui: &mut egui::Ui) {
@@ -1534,41 +1813,36 @@ fn new_contact(app: &mut App, ui: &mut egui::Ui) {
         ui,
         &*crate::i18n::gettext(
             locale,
-            "Enter a phone number with its country code, without a plus sign or leading zero. Add a name to save the contact, or leave it blank to open the chat. WhatsApp uses the first name as the display name.",
+            "Enter a phone number with its country code. Add a name to save the contact, or leave it blank to message the number without saving it. WhatsApp uses the first name as the display name.",
         ),
         theme::regular(13.0),
         palette.secondary,
     );
     ui.add_space(4.0);
-    let boxed =
-        |ui: &mut egui::Ui, plus: bool, inner: &mut dyn FnMut(&mut egui::Ui) -> egui::Response| {
-            let field = Frame::new()
-                .fill(palette.surface)
-                .corner_radius(CornerRadius::same(theme::RADIUS))
-                .inner_margin(Margin::symmetric(12, 8))
-                .show(ui, |ui| {
-                    ui.horizontal(|ui| {
-                        // Use the field height to align the plus sign.
-                        ui.set_min_height(
-                            ui.ctx()
-                                .fonts_mut(|fonts| fonts.row_height(&theme::regular(16.0)))
-                                + 4.0,
-                        );
-                        if plus {
-                            theme::text(ui, "+", theme::semibold(16.0), palette.secondary);
-                        }
-                        inner(ui)
-                    })
-                    .inner
-                });
-            theme::focus_outline(
-                ui,
-                field.inner.id,
-                field.response.rect,
-                f32::from(theme::RADIUS),
-            );
-            field.inner
-        };
+    let boxed = |ui: &mut egui::Ui, inner: &mut dyn FnMut(&mut egui::Ui) -> egui::Response| {
+        let field = Frame::new()
+            .fill(palette.surface)
+            .corner_radius(CornerRadius::same(theme::RADIUS))
+            .inner_margin(Margin::symmetric(12, 8))
+            .show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    ui.set_min_height(
+                        ui.ctx()
+                            .fonts_mut(|fonts| fonts.row_height(&theme::regular(16.0)))
+                            + 4.0,
+                    );
+                    inner(ui)
+                })
+                .inner
+            });
+        theme::focus_outline(
+            ui,
+            field.inner.id,
+            field.response.rect,
+            f32::from(theme::RADIUS),
+        );
+        field.inner
+    };
     macro_rules! edit {
         ($buffer:expr, $salt:literal, $hint:expr, $width:expr) => {
             egui::TextEdit::singleline($buffer)
@@ -1585,11 +1859,11 @@ fn new_contact(app: &mut App, ui: &mut egui::Ui) {
         };
     }
     let phone_empty = app.new_contact_phone.is_empty();
-    let phone_field = boxed(ui, true, &mut |ui| {
+    let phone_field = boxed(ui, &mut |ui| {
         let response = ui.add(edit!(
             &mut app.new_contact_phone,
             "new-contact-phone",
-            "15551234567",
+            "+1 555 123 4567",
             f32::INFINITY
         ));
         if !response.has_focus() && phone_empty {
@@ -1615,7 +1889,7 @@ fn new_contact(app: &mut App, ui: &mut egui::Ui) {
             } else {
                 Align::LEFT
             };
-            let first = boxed(ui, false, &mut |ui| {
+            let first = boxed(ui, &mut |ui| {
                 ui.add(
                     edit!(
                         &mut app.new_contact_name,
@@ -1627,7 +1901,7 @@ fn new_contact(app: &mut App, ui: &mut egui::Ui) {
                     .layouter(&mut layouter),
                 )
             });
-            let last = boxed(ui, false, &mut |ui| {
+            let last = boxed(ui, &mut |ui| {
                 ui.add(
                     edit!(
                         &mut app.new_contact_last,
@@ -1642,12 +1916,10 @@ fn new_contact(app: &mut App, ui: &mut egui::Ui) {
             (first, last)
         })
         .inner;
-    let digits: String = app
-        .new_contact_phone
-        .chars()
-        .filter(char::is_ascii_digit)
-        .collect();
-    let ready = digits.len() >= 7 && !app.new_contact_pending;
+    // A leading plus, spaces, hyphens and brackets are formatting; anything
+    // else (an extension, a letter) would change the number, so it is refused.
+    let digits = crate::util::international_phone(&app.new_contact_phone).unwrap_or_default();
+    let ready = !digits.is_empty() && !app.new_contact_pending;
     let named = !app.new_contact_name.trim().is_empty() || !app.new_contact_last.trim().is_empty();
     let submitted =
         (phone_field.lost_focus() || first_field.lost_focus() || last_field.lost_focus())
@@ -1679,7 +1951,7 @@ fn new_contact(app: &mut App, ui: &mut egui::Ui) {
                     let hint = if app.new_contact_pending {
                         crate::i18n::gettext(locale, "Checking the number…")
                     } else {
-                        crate::i18n_extra::tr(NUMBER_TOO_SHORT)
+                        crate::i18n_extra::tr(INVALID_NUMBER)
                     };
                     let save = theme::pill_button(
                         ui,
@@ -1730,609 +2002,64 @@ fn new_contact(app: &mut App, ui: &mut egui::Ui) {
     });
 }
 
-fn chat_info(app: &mut App, ui: &mut egui::Ui, id: &str) {
-    let palette = app.palette;
-    // Group members may not have an existing chat.
-    let chat = app
-        .chat(id)
-        .cloned()
-        .unwrap_or_else(|| crate::model::Chat::new(id.to_owned(), app.display_name(id)));
-    let has_chat = app.chat(id).is_some();
-    let name = app.chat_title(&chat);
-    let heading = if chat.is_group() {
-        crate::i18n::gettext(app.locale, "Group")
-    } else if chat.is_channel() {
-        crate::i18n::gettext(app.locale, "Channel")
-    } else {
-        crate::i18n::gettext(app.locale, "Contact")
-    };
-    title(ui, app, heading.as_ref());
-    // Scale the photo and member list to fit the window.
-    let window = ui.ctx().content_rect().height();
-    let photo = (window * 0.34).clamp(120.0, 240.0);
-    let picture = app.avatar_full(id).or_else(|| app.avatar(id));
-    let mine = app.me.as_deref() == Some(id);
-    let editable = chat.phone().is_some() && !mine;
-    // Saving or cancelling leaves the editor buffer checked out.
-    let mut editing = app.contact_edit.take().filter(|_| editable);
-    let mut saved = None;
-    let mut leave = false;
-    let can_leave = chat.can_leave(&app.our_ids());
-    // A group's name and photo, when WhatsApp lets us change them. Nothing is
-    // offered while a change is on its way.
-    let saving = app.group_saving.contains(id);
-    let group_editable = chat.can_edit_info() && !saving;
-    let mut renaming = app.group_name_edit.take().filter(|_| group_editable);
-    let mut group_action = None;
-    ui.vertical_centered(|ui| {
-        if group_editable {
-            group_action = group_photo(app, ui, &name, id, photo, picture.as_deref());
-        } else {
-            super::widgets::avatar(ui, &palette, &name, id, photo, picture.as_deref());
-        }
-        ui.add_space(6.0);
-        if let Some(draft) = renaming.as_mut() {
-            match group_name_field(app, ui, draft) {
-                Some(true) => {
-                    let typed = draft.trim();
-                    // An empty or unchanged name closes the editor and sends nothing.
-                    group_action = Some(if typed.is_empty() || typed == chat.name {
-                        Action::CloseGroupName
-                    } else {
-                        Action::SetGroupName {
-                            chat: id.to_owned(),
-                            name: typed.to_owned(),
-                        }
-                    });
-                }
-                Some(false) => group_action = Some(Action::CloseGroupName),
-                None => {}
-            }
-        } else if group_editable {
-            let edit = crate::i18n::gettext(app.locale, "Edit group name");
-            // Center the name and its pencil together.
-            let button = 15.0 + 12.0;
-            let spacing = ui.spacing().item_spacing.x;
-            let available = ui.available_width();
-            let text_width = super::widgets::line(
-                ui,
-                &name,
-                theme::bold(19.0),
-                palette.text,
-                (available - button - spacing).max(40.0),
-                1,
-            )
-            .size()
-            .x;
-            ui.horizontal(|ui| {
-                ui.add_space(((available - text_width - spacing - button) / 2.0).max(0.0));
-                ui.allocate_ui(vec2(text_width + 1.0, 30.0), |ui| {
-                    super::widgets::selectable_rich_text(
-                        ui,
-                        &name,
-                        theme::bold(19.0),
-                        palette.text,
-                    );
-                });
-                let pencil = theme::icon_button(
-                    ui,
-                    Icon::Pencil,
-                    15.0,
-                    palette.secondary,
-                    palette.text,
-                    &edit,
-                );
-                ui.ctx()
-                    .data_mut(|data| data.insert_temp(group_name_button_id(), pencil.rect));
-                if pencil.clicked() {
-                    // The field appears next frame; egui keeps a focus
-                    // request that long.
-                    ui.memory_mut(|memory| memory.request_focus(group_name_field_id()));
-                    // An unnamed group starts empty rather than from its
-                    // members' summary, the title `chat_title` falls back to.
-                    let unnamed = chat.name.trim().is_empty()
-                        || (chat.name == "Group" && !chat.group_subject_known);
-                    group_action = Some(Action::EditGroupName(if unnamed {
-                        String::new()
-                    } else {
-                        chat.name.clone()
-                    }));
-                }
-            });
-        } else if let Some((first, last)) = editing.as_mut() {
-            let mut submit = false;
-            ui.horizontal(|ui| {
-                ui.add_space((ui.available_width() - 288.0).max(0.0) / 2.0);
-                let name_field =
-                    |ui: &mut egui::Ui, buffer: &mut String, salt: &str, hint: &str| {
-                        let format = egui::TextFormat::simple(theme::semibold(15.0), palette.text);
-                        let mut layouter =
-                            |ui: &egui::Ui, text: &dyn egui::TextBuffer, wrap: f32| {
-                                crate::bidi::layout_field(ui, text.as_str(), &format, wrap)
-                            };
-                        let align = if crate::bidi::base_rtl(buffer) {
-                            Align::RIGHT
-                        } else {
-                            Align::LEFT
-                        };
-                        let field = Frame::new()
-                            .fill(palette.surface)
-                            .corner_radius(CornerRadius::same(theme::RADIUS))
-                            .inner_margin(Margin::symmetric(10, 5))
-                            .show(ui, |ui| {
-                                ui.add(
-                                    egui::TextEdit::singleline(buffer)
-                                        .id(egui::Id::new(salt))
-                                        .hint_text(
-                                            egui::RichText::new(hint)
-                                                .color(palette.dim)
-                                                .font(theme::semibold(15.0)),
-                                        )
-                                        .font(theme::semibold(15.0))
-                                        .text_color(palette.text)
-                                        .frame(Frame::NONE)
-                                        .desired_width(108.0)
-                                        .horizontal_align(align)
-                                        .layouter(&mut layouter),
-                                )
-                            });
-                        theme::focus_outline(
-                            ui,
-                            field.inner.id,
-                            field.response.rect,
-                            f32::from(theme::RADIUS),
-                        );
-                        field.inner
-                    };
-                let first_field = name_field(
-                    ui,
-                    first,
-                    "contact-first",
-                    &crate::i18n::gettext(app.locale, "First name"),
-                );
-                let last_field = name_field(
-                    ui,
-                    last,
-                    "contact-last",
-                    &crate::i18n::gettext(app.locale, "Surname"),
-                );
-                if ui.memory(|memory| memory.focused().is_none()) {
-                    first_field.request_focus();
-                }
-                submit = (first_field.lost_focus() || last_field.lost_focus())
-                    && ui.input(|input| input.key_pressed(egui::Key::Enter));
-                if theme::icon_button(
-                    ui,
-                    Icon::Check,
-                    18.0,
-                    palette.secondary,
-                    palette.accent,
-                    &crate::i18n::gettext(app.locale, "Save name (Enter)"),
-                )
-                .clicked()
-                {
-                    submit = true;
-                }
-            });
-            if submit && !(first.trim().is_empty() && last.trim().is_empty()) {
-                saved = Some((first.trim().to_owned(), last.trim().to_owned()));
-            }
-        } else {
-            super::widgets::selectable_rich_text(ui, &name, theme::bold(19.0), palette.text);
-        }
-        if let Some(phone) = chat.phone() {
-            theme::selectable_text(
-                ui,
-                crate::util::phone(phone),
-                theme::regular(13.5),
-                palette.secondary,
-            );
-        }
-        if saving {
-            theme::text(
-                ui,
-                crate::i18n::gettext(app.locale, "Saving…"),
-                theme::regular(12.5),
-                palette.dim,
-            );
-        }
-        if chat.is_group() && !chat.participants.is_empty() {
-            theme::text(
-                ui,
-                crate::i18n::ngettext(
-                    app.locale,
-                    "{} member",
-                    "{} members",
-                    chat.participants.len() as u32,
-                )
-                .replace("{}", &chat.participants.len().to_string()),
-                theme::regular(13.5),
-                palette.secondary,
-            );
-        }
-        if let Some(presence) = app.presence.get(id) {
-            let status = if presence.online {
-                crate::i18n::gettext(app.locale, "online").into_owned()
-            } else if let Some(seen) = presence.last_seen {
-                crate::util::last_seen(app.locale, seen)
-            } else {
-                String::new()
-            };
-            if !status.is_empty() {
-                theme::text(ui, status, theme::regular(12.5), palette.dim);
-            }
-        }
-        if can_leave {
-            ui.add_space(8.0);
-            let leave_label = if chat.is_channel() {
-                crate::i18n::gettext(app.locale, "Leave channel")
-            } else {
-                crate::i18n::gettext(app.locale, "Leave group")
-            };
-            if danger_button(ui, app, leave_label.as_ref()) {
-                leave = true;
-            }
-        }
-    });
-    if let Some((first, last)) = saved {
-        editing = None;
-        app.actions.push(Action::SaveContact {
-            id: id.to_owned(),
-            first,
-            last,
-        });
-    }
-    app.contact_edit = editing;
-    app.group_name_edit = renaming;
-    if let Some(action) = group_action {
-        app.actions.push(action);
-    }
-    if leave {
-        app.actions
-            .push(Action::ShowDialog(Dialog::ConfirmLeaveGroup(id.to_owned())));
-    }
-    ui.add_space(8.0);
-    if chat.is_group() && !chat.participants.is_empty() {
-        let members = app.participant_list(&chat);
-        theme::text(
-            ui,
-            crate::i18n::gettext(crate::i18n_extra::locale(), "Members ({})")
-                .replace("{}", &members.len().to_string()),
-            theme::medium(12.5),
-            palette.secondary,
-        );
-        ui.add_space(4.0);
-        // Limit the visible rows because groups can have thousands of members.
-        let row_height = 30.0;
-        let rows = ((window - photo - 300.0) / row_height)
-            .floor()
-            .clamp(2.0, 8.0);
-        let mut open = None;
-        egui::ScrollArea::vertical()
-            .id_salt("members")
-            .max_height(row_height * rows)
-            .auto_shrink([false, true])
-            .show_rows(ui, row_height, members.len(), |ui, range| {
-                ui.spacing_mut().item_spacing.y = 0.0;
-                for (member, name) in &members[range] {
-                    let (rect, response) = ui.allocate_exact_size(
-                        egui::vec2(ui.available_width(), row_height),
-                        egui::Sense::click(),
-                    );
-                    if ui.is_rect_visible(rect) {
-                        if response.hovered() {
-                            super::widgets::dialog_row_highlight(ui, rect, palette.surface_hover);
-                        }
-                        let picture = app.avatar(member);
-                        let avatar = egui::Rect::from_center_size(
-                            egui::pos2(rect.left() + 16.0, rect.center().y),
-                            egui::Vec2::splat(24.0),
-                        );
-                        super::widgets::paint_avatar(
-                            ui,
-                            &palette,
-                            avatar,
-                            name.trim_start_matches('~'),
-                            member,
-                            picture.as_deref(),
-                        );
-                        let line = super::widgets::line(
-                            ui,
-                            name,
-                            theme::regular(13.0),
-                            palette.text,
-                            rect.width() - 40.0,
-                            1,
-                        );
-                        line.paint(
-                            ui,
-                            egui::pos2(rect.left() + 34.0, rect.center().y - line.size().y / 2.0),
-                            palette.text,
-                        );
-                    }
-                    if response
-                        .on_hover_cursor(egui::CursorIcon::PointingHand)
-                        .clicked()
-                    {
-                        open = Some(member.clone());
-                    }
-                }
-            });
-        if let Some(member) = open
-            && Some(member.as_str()) != app.me.as_deref()
-        {
-            app.actions
-                .push(Action::ShowDialog(Dialog::ChatInfo(member)));
-        }
-        ui.add_space(6.0);
-    }
-    if let Some(until) = chat.muted_until {
-        theme::text(
-            ui,
-            if until == 0 {
-                crate::i18n::gettext(app.locale, "Muted").into_owned()
-            } else {
-                crate::i18n::gettext(app.locale, "Muted until {}")
-                    .replace("{}", &crate::util::chat_stamp(app.locale, until))
-            },
-            theme::regular(12.5),
-            palette.secondary,
-        );
-    }
-    ui.add_space(4.0);
-    // Center the available actions below the picture.
-    let mut buttons: Vec<(Icon, std::borrow::Cow<'static, str>, Vec<Action>)> = Vec::new();
-    if !chat.is_group() && !mine {
-        buttons.push((
-            Icon::MessageCircle,
-            crate::i18n::gettext(app.locale, "Message"),
-            vec![
-                Action::StartChat {
-                    id: chat.id.clone(),
-                    name: name.clone(),
-                },
-                Action::CloseDialog,
-            ],
-        ));
-    }
-    if editable {
-        let known = app
-            .contacts
-            .get(id)
-            .and_then(|contact| contact.full_name.as_deref())
-            .is_some_and(|full| !full.is_empty());
-        buttons.push((
-            Icon::User,
-            if known {
-                crate::i18n::gettext(app.locale, "Rename")
-            } else {
-                crate::i18n::gettext(app.locale, "Add to contacts")
-            },
-            vec![Action::EditContact {
-                id: id.to_owned(),
-                name: name.trim_start_matches('~').to_owned(),
-            }],
-        ));
-    }
-    if let Some(phone) = chat.phone() {
-        buttons.push((
-            Icon::Copy,
-            crate::i18n::gettext(app.locale, "Copy number"),
-            vec![Action::CopyText(format!("+{phone}"))],
-        ));
-    }
-    if has_chat {
-        let muted = chat.muted(crate::util::now());
-        buttons.push(if muted {
-            (
-                Icon::Bell,
-                crate::i18n::gettext(app.locale, "Unmute"),
-                vec![Action::SetMuted(chat.id.clone(), None)],
-            )
-        } else {
-            (
-                Icon::BellOff,
-                crate::i18n::gettext(app.locale, "Mute"),
-                vec![Action::SetMuted(chat.id.clone(), Some(0))],
-            )
-        });
-        buttons.push((
-            if chat.pinned { Icon::PinOff } else { Icon::Pin },
-            if chat.pinned {
-                crate::i18n::gettext(app.locale, "Unpin")
-            } else {
-                crate::i18n::gettext(app.locale, "Pin")
-            },
-            vec![Action::SetPinned(chat.id.clone(), !chat.pinned)],
-        ));
-        buttons.push((
-            Icon::Archive,
-            if chat.archived {
-                crate::i18n::gettext(app.locale, "Unarchive")
-            } else {
-                crate::i18n::gettext(app.locale, "Archive")
-            },
-            vec![
-                Action::SetArchived(chat.id.clone(), !chat.archived),
-                Action::CloseDialog,
-            ],
-        ));
-    }
-    let spacing = ui.spacing().item_spacing.x;
-    let available = ui.available_width();
-    let mut fired: Option<Vec<Action>> = None;
-    let mut start = 0;
-    while start < buttons.len() {
-        // Fit and center as many buttons as each row allows.
-        let mut end = start;
-        let mut total = 0.0;
-        while end < buttons.len() {
-            let width = theme::soft_button_width(ui, &buttons[end].1, true);
-            let grown = if end == start {
-                width
-            } else {
-                total + spacing + width
-            };
-            if end > start && grown > available {
-                break;
-            }
-            total = grown;
-            end += 1;
-        }
-        ui.horizontal(|ui| {
-            ui.add_space((available - total).max(0.0) / 2.0);
-            for (icon, label, actions) in &buttons[start..end] {
-                if theme::soft_button(ui, &palette, Some(*icon), label, false).clicked() {
-                    fired = Some(actions.clone());
-                }
-            }
-        });
-        start = end;
-    }
-    if let Some(actions) = fired {
-        app.actions.extend(actions);
-    }
-}
-
-/// Where the pencil that renames a group was drawn, for interaction tests.
-pub fn group_name_button_id() -> egui::Id {
-    egui::Id::new("group-name-edit")
-}
-
-/// Where the group photo that opens its menu was drawn, for interaction tests.
-pub fn group_photo_id() -> egui::Id {
-    egui::Id::new("group-photo")
-}
-
-/// The group's big photo, which opens a menu to change or remove it.
-fn group_photo(
-    app: &App,
+/// The disappearing-message timer line, centred under a chat's photo with the
+/// same timer icon as the chat list badge, and what it drew.
+///
+/// The row is measured and centred by hand: a nested centred container claims
+/// the column's whole height in egui. The text is cut to what is left beside
+/// the icon, so a long translation cannot widen the dialog, and the horizontal
+/// item spacing is cleared because egui adds it on top of `gap`, which would
+/// otherwise make the row wider than the budget it was measured against.
+pub(super) fn disappearing_timer_row(
     ui: &mut egui::Ui,
-    name: &str,
-    id: &str,
-    size: f32,
-    picture: Option<&std::path::Path>,
-) -> Option<Action> {
-    let palette = app.palette;
-    let label = crate::i18n::gettext(app.locale, "Change group photo");
-    let response = super::widgets::clickable_avatar(ui, &palette, name, id, size, picture, &label)
-        .on_hover_cursor(egui::CursorIcon::PointingHand)
-        .on_hover_text(label.as_ref());
-    ui.ctx()
-        .data_mut(|data| data.insert_temp(group_photo_id(), response.rect));
-    let change = crate::i18n::gettext(app.locale, "Change photo");
-    let remove = crate::i18n::gettext(app.locale, "Remove photo");
-    let width = super::widgets::menu_width(ui, &[change.as_ref(), remove.as_ref()], true);
-    let mut chosen = None;
-    egui::Popup::menu(&response)
-        .width(width)
-        .frame(super::widgets::menu_frame(&palette))
-        .show(|ui| {
-            if super::widgets::menu_item(ui, &palette, Some(Icon::Image), &change) {
-                chosen = Some(Action::PickGroupPicture(id.to_owned()));
-                ui.close();
-            }
-            // Only a photo that is there can be removed.
-            if picture.is_some()
-                && super::widgets::menu_item(ui, &palette, Some(Icon::Trash), &remove)
-            {
-                chosen = Some(Action::RemoveGroupPicture(id.to_owned()));
-                ui.close();
-            }
-        });
-    chosen
-}
-
-/// The group name being typed. Returns `Some(true)` when Enter or the check
-/// submits it, `Some(false)` when the cross cancels it.
-fn group_name_field(app: &App, ui: &mut egui::Ui, draft: &mut String) -> Option<bool> {
-    let palette = app.palette;
-    let mut outcome = None;
+    palette: &theme::Palette,
+    text: &str,
+) -> TimerRow {
+    const ICON: f32 = 12.0;
+    const GAP: f32 = 5.0;
+    let font = theme::regular(12.5);
+    let line = super::widgets::line(
+        ui,
+        text,
+        font,
+        palette.secondary,
+        (ui.available_width() - ICON - GAP).max(0.0),
+        1,
+    );
+    let height = line.size().y;
+    let mut drawn = TimerRow {
+        text: text.to_owned(),
+        rect: Rect::NOTHING,
+    };
     ui.horizontal(|ui| {
-        let buttons = 2.0 * (18.0 + 12.0) + 2.0 * ui.spacing().item_spacing.x;
-        let width = 240.0_f32.min(ui.available_width() - buttons);
-        ui.add_space(((ui.available_width() - width - buttons) / 2.0).max(0.0));
-        let format = egui::TextFormat::simple(theme::semibold(15.0), palette.text);
-        let mut layouter = |ui: &egui::Ui, text: &dyn egui::TextBuffer, wrap: f32| {
-            crate::bidi::layout_field(ui, text.as_str(), &format, wrap)
-        };
-        let align = if crate::bidi::base_rtl(draft) {
-            Align::RIGHT
-        } else {
-            Align::LEFT
-        };
-        let hint = crate::i18n::gettext(app.locale, "Group name");
-        let field = Frame::new()
-            .fill(palette.surface)
-            .corner_radius(CornerRadius::same(theme::RADIUS))
-            .inner_margin(Margin::symmetric(10, 5))
-            .show(ui, |ui| {
-                ui.add(
-                    egui::TextEdit::singleline(draft)
-                        .id(group_name_field_id())
-                        .hint_text(
-                            egui::RichText::new(hint.as_ref())
-                                .color(palette.dim)
-                                .font(theme::semibold(15.0)),
-                        )
-                        .font(theme::semibold(15.0))
-                        .text_color(palette.text)
-                        .frame(Frame::NONE)
-                        // WhatsApp refuses longer names.
-                        .char_limit(crate::model::GROUP_NAME_LIMIT)
-                        .desired_width(width - 20.0)
-                        .horizontal_align(align)
-                        .layouter(&mut layouter),
-                )
-            });
-        theme::focus_outline(
-            ui,
-            field.inner.id,
-            field.response.rect,
-            f32::from(theme::RADIUS),
-        );
-        // Read before focus is requested again below: egui answers
-        // `lost_focus` from the current focus, not from this frame's input.
-        if field.inner.lost_focus() && ui.input(|input| input.key_pressed(egui::Key::Enter)) {
-            outcome = Some(true);
-        } else if ui.memory(|memory| memory.focused().is_none()) {
-            field.inner.request_focus();
-        }
-        if theme::icon_button(
-            ui,
-            Icon::Check,
-            18.0,
-            palette.secondary,
-            palette.accent,
-            &crate::i18n::gettext(app.locale, "Save name (Enter)"),
-        )
-        .clicked()
-        {
-            outcome = Some(true);
-        }
-        if theme::icon_button(
-            ui,
-            Icon::X,
-            18.0,
-            palette.secondary,
-            palette.text,
-            &crate::i18n::gettext(app.locale, "Cancel (Escape)"),
-        )
-        .clicked()
-        {
-            outcome = Some(false);
-        }
+        ui.spacing_mut().item_spacing.x = 0.0;
+        ui.add_space(((ui.available_width() - ICON - GAP - line.size().x) / 2.0).max(0.0));
+        let (slot, _) = ui.allocate_exact_size(vec2(ICON, height), Sense::hover());
+        let icon = Rect::from_center_size(slot.center(), vec2(ICON, ICON));
+        theme::paint_icon(ui, Icon::Timer, icon, ICON, palette.secondary);
+        ui.add_space(GAP);
+        let (slot, _) = ui.allocate_exact_size(line.size(), Sense::hover());
+        line.paint(ui, slot.min, palette.secondary);
+        drawn.rect = icon.union(slot);
     });
-    outcome
+    drawn
 }
 
-/// The group name editor's text field.
-pub fn group_name_field_id() -> egui::Id {
-    egui::Id::new("group-name-field")
+/// Where the disappearing-message timer row was drawn, for tests: what it
+/// said and where it landed, and nothing at all when no row was drawn.
+pub fn disappearing_timer_id() -> egui::Id {
+    egui::Id::new("disappearing-timer")
+}
+
+/// The timer row as drawn, for tests.
+#[derive(Clone, Debug)]
+pub struct TimerRow {
+    pub text: String,
+    pub rect: egui::Rect,
 }
 
 /// A filled button for a destructive action.
-pub(super) fn danger_button(ui: &mut egui::Ui, app: &mut App, label: &str) -> bool {
+pub(super) fn danger_button(ui: &mut egui::Ui, app: &mut App, label: &str) -> egui::Response {
     let palette = app.palette;
     let galley = ui.painter().layout_no_wrap(
         label.to_owned(),
@@ -2341,8 +2068,9 @@ pub(super) fn danger_button(ui: &mut egui::Ui, app: &mut App, label: &str) -> bo
     );
     let size = galley.size() + egui::vec2(36.0, 16.0);
     let (rect, response) = ui.allocate_exact_size(size, egui::Sense::click());
-    // Reachable and announced like every other button: the keyboard walks to
-    // it and AccessKit reads its label.
+    // Announced like every other button: AccessKit reads its label. In a
+    // dialog egui's own Tab order reaches it; in the info panel the caller
+    // puts it in the main cycle.
     theme::reveal_focus(&response);
     theme::focus_outline(ui, response.id, rect, rect.height() / 2.0);
     response.widget_info(|| {
@@ -2361,14 +2089,77 @@ pub(super) fn danger_button(ui: &mut egui::Ui, app: &mut App, label: &str) -> bo
             egui::Color32::WHITE,
         );
     }
-    response
-        .on_hover_cursor(egui::CursorIcon::PointingHand)
-        .clicked()
+    response.on_hover_cursor(egui::CursorIcon::PointingHand)
 }
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn chinese_delete_body_is_neutral_for_one_or_multiple_selected_messages() {
+        for count in [1, 2] {
+            let body =
+                super::deletion_body(crate::i18n::Locale::ChineseSimplified, false, Some(count));
+            assert!(body.contains("手机和关联设备"), "{body}");
+            assert!(body.contains("所选消息"), "{body}");
+            assert!(!body.contains("这些消息"), "{body}");
+        }
+    }
     use crate::model::{Chat, ChatKind};
+    use crate::theme;
+
+    /// The timer line stays inside the chat info dialog's own width whatever it
+    /// has to say: a label longer than the dialog is cut, not laid out wider,
+    /// and a short one is centred on it.
+    #[test]
+    fn the_timer_row_fits_the_dialog_however_long_its_label() {
+        let width = 360.0_f32;
+        for label in [
+            "Disappearing messages: 24 hours",
+            "Disappearing messages: 90 days",
+            &"Disappearing messages: a translation far longer than any chat info dialog can be "
+                .repeat(4),
+        ] {
+            let bounds = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(width, 400.0));
+            let ctx = egui::Context::default();
+            let slot = std::cell::RefCell::new(None);
+            let mut output = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(bounds),
+                    ..Default::default()
+                },
+                |ui| {
+                    let mut row_ui = egui::Ui::new(
+                        ui.ctx().clone(),
+                        egui::Id::new("timer-row-test"),
+                        egui::UiBuilder::new().max_rect(bounds),
+                    );
+                    *slot.borrow_mut() = Some(super::disappearing_timer_row(
+                        &mut row_ui,
+                        &theme::Palette::dark(),
+                        label,
+                    ));
+                },
+            );
+            // Headless tests must apply font-atlas updates themselves.
+            output.textures_delta.clear();
+            let drawn = slot.into_inner().expect("a drawn row");
+            assert!(
+                drawn.rect.left() >= bounds.left() - 0.5,
+                "{label:?}: {} starts left of the dialog",
+                drawn.rect.left()
+            );
+            assert!(
+                drawn.rect.right() <= bounds.right() + 0.5,
+                "{label:?}: {} runs past the dialog",
+                drawn.rect.right()
+            );
+            assert!(
+                (drawn.rect.center().x - bounds.center().x).abs() < 1.0,
+                "{label:?}: off centre by {}",
+                drawn.rect.center().x - bounds.center().x
+            );
+        }
+    }
 
     #[test]
     fn locked_chats_are_not_forward_destinations() {
@@ -2382,5 +2173,30 @@ mod tests {
 
         chat.kind = ChatKind::Broadcast;
         assert!(!super::forwardable(&chat));
+    }
+}
+
+#[cfg(test)]
+mod deletion_count_tests {
+    #[test]
+    fn confirmation_counts_include_a_single_selected_message() {
+        assert_eq!(
+            super::selected_message_count(crate::i18n::Locale::English, 1),
+            "1 selected message"
+        );
+        assert_eq!(
+            super::selected_message_count(crate::i18n::Locale::English, 2),
+            "2 selected messages"
+        );
+        for (count, expected) in [
+            (1, "1 сообщение выбрано"),
+            (2, "2 сообщения выбрано"),
+            (5, "5 сообщений выбрано"),
+        ] {
+            assert_eq!(
+                super::selected_message_count(crate::i18n::Locale::Russian, count),
+                expected
+            );
+        }
     }
 }

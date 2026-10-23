@@ -34,11 +34,13 @@ pub enum Locale {
     ChineseTraditional,
     #[serde(rename = "tr")]
     Turkish,
+    #[serde(rename = "id")]
+    Indonesian,
 }
 
 impl Locale {
     /// Every locale shown in the language picker, in a stable order.
-    pub const ALL: [Locale; 10] = [
+    pub const ALL: [Locale; 11] = [
         Self::English,
         Self::PortugueseBrazil,
         Self::German,
@@ -49,6 +51,7 @@ impl Locale {
         Self::ChineseSimplified,
         Self::ChineseTraditional,
         Self::Turkish,
+        Self::Indonesian,
     ];
 
     /// The language's own name, for the picker.
@@ -64,6 +67,7 @@ impl Locale {
             Self::ChineseSimplified => "简体中文",
             Self::ChineseTraditional => "繁體中文",
             Self::Turkish => "Türkçe",
+            Self::Indonesian => "Bahasa Indonesia",
         }
     }
 
@@ -85,6 +89,7 @@ impl Locale {
             "fr" => Self::French,
             "ru" => Self::Russian,
             "tr" => Self::Turkish,
+            "id" => Self::Indonesian,
             "zh" => match (tag.script.as_deref(), tag.region.as_deref()) {
                 // An explicit script decides on its own: a tag that asks for
                 // Simplified and names a region where Traditional is the
@@ -114,6 +119,7 @@ impl fastframe_i18n::Locale for Locale {
             Self::ChineseSimplified => Some(&zh_hans::Translator),
             Self::ChineseTraditional => Some(&zh_hant::Translator),
             Self::Turkish => Some(&tr::Translator),
+            Self::Indonesian => Some(&id::Translator),
             Self::English => None,
         }
     }
@@ -205,6 +211,8 @@ mod tests {
         );
         assert_eq!(Locale::from_system("tr-TR"), Some(Locale::Turkish));
         assert_eq!(Locale::from_system("tr"), Some(Locale::Turkish));
+        assert_eq!(Locale::from_system("id-ID"), Some(Locale::Indonesian));
+        assert_eq!(Locale::from_system("id"), Some(Locale::Indonesian));
         assert_eq!(Locale::from_system("en-US"), Some(Locale::English));
         assert_eq!(Locale::from_system("ja-JP"), None);
         assert_eq!(Locale::default(), Locale::English);
@@ -245,6 +253,81 @@ mod tests {
         let missing = "A string nobody has translated";
         assert_eq!(gettext(Locale::PortugueseBrazil, missing), missing);
         assert_eq!(gettext(Locale::German, missing), missing);
+    }
+
+    /// Checks that private reply controls use dedicated translated catalog entries.
+    #[test]
+    fn private_reply_labels_use_their_own_catalog_entries() {
+        for (locale, reply, unavailable) in [
+            (
+                Locale::German,
+                "Privat antworten",
+                "Die ursprüngliche Gruppennachricht ist nicht verfügbar",
+            ),
+            (
+                Locale::Spanish,
+                "Responder en privado",
+                "El mensaje original del grupo no está disponible",
+            ),
+            (
+                Locale::French,
+                "Répondre en privé",
+                "Le message original du groupe est indisponible",
+            ),
+            (
+                Locale::Italian,
+                "Rispondi in privato",
+                "Il messaggio originale del gruppo non è disponibile",
+            ),
+            (
+                Locale::PortugueseBrazil,
+                "Responder em particular",
+                "Mensagem original do grupo indisponível",
+            ),
+            (
+                Locale::Russian,
+                "Ответить лично",
+                "Исходное сообщение группы недоступно",
+            ),
+            (Locale::ChineseSimplified, "私下回复", "原始群组消息不可用"),
+            (
+                Locale::ChineseTraditional,
+                "私下回覆",
+                "無法取得原始群組訊息",
+            ),
+            (
+                Locale::Indonesian,
+                "Balas secara pribadi",
+                "Pesan grup asli tidak tersedia",
+            ),
+            (
+                Locale::Turkish,
+                "Özel olarak yanıtla",
+                "Orijinal grup mesajı kullanılamıyor",
+            ),
+        ] {
+            assert_eq!(gettext(locale, "Reply privately"), reply, "{locale:?}");
+            assert_eq!(
+                gettext(locale, "Original group message unavailable"),
+                unavailable,
+                "{locale:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn message_selection_labels_use_the_portuguese_catalog() {
+        assert_eq!(
+            gettext(Locale::PortugueseBrazil, "Select messages"),
+            "Selecionar mensagens"
+        );
+        assert_eq!(
+            gettext(
+                Locale::PortugueseBrazil,
+                "Select message from {sender}, {time}: {summary}"
+            ),
+            "Selecionar mensagem de {sender} ({time}): {summary}"
+        );
     }
 
     #[test]
@@ -314,8 +397,8 @@ mod tests {
 
     #[test]
     fn contextual_lookups_stay_separate_from_plain_ones() {
-        // The pilot catalog has no msgctxt entries, so a contextual lookup is
-        // distinct from gettext but still falls back to the source.
+        // An unknown context is distinct from gettext and still falls back to
+        // the source. The mention-everyone word uses its own context.
         assert_eq!(pgettext(Locale::PortugueseBrazil, "verb", "Chats"), "Chats");
         assert_eq!(pgettext(Locale::English, "verb", "Chats"), "Chats");
         assert_eq!(gettext(Locale::PortugueseBrazil, "Chats"), "Conversas");
@@ -441,6 +524,26 @@ mod tests {
         for (count, expected) in [(1, "{} üye"), (2, "{} üye"), (5, "{} üye")] {
             assert_eq!(
                 ngettext(Locale::Turkish, "{} member", "{} members", count),
+                expected
+            );
+        }
+    }
+
+    #[test]
+    fn indonesian_catalog_translates() {
+        assert_eq!(gettext(Locale::Indonesian, "Chats"), "Pesan");
+        assert_eq!(gettext(Locale::Indonesian, "Search"), "Cari");
+        assert_eq!(gettext(Locale::Indonesian, "Settings"), "Pengaturan");
+        assert_eq!(gettext(Locale::Indonesian, "Type a message"), "Ketik pesan");
+        assert_eq!(gettext(Locale::Indonesian, "Monday"), "Senin");
+        assert_eq!(gettext(Locale::Indonesian, "Yesterday"), "Kemarin");
+    }
+
+    #[test]
+    fn indonesian_plural_rules_cover_singular_and_plural() {
+        for (count, expected) in [(1, "{} anggota"), (2, "{} anggota"), (5, "{} anggota")] {
+            assert_eq!(
+                ngettext(Locale::Indonesian, "{} member", "{} members", count),
                 expected
             );
         }

@@ -72,6 +72,50 @@ fn attempts(path: &Path) -> Vec<Attempt<'_>> {
     attempts
 }
 
+/// Opens the window's web links the way attachments and folders are opened.
+///
+/// eframe hands `ctx.open_url` to the `webbrowser` crate, which on Linux and
+/// the BSDs starts the browser as a child of ZapFast and never waits for it,
+/// so each clicked link left a defunct process behind until the app quit
+/// (#446). This takes every `OpenUrl` out of the frame's output before eframe
+/// sees it and opens it with `open::that_detached`, whose launcher is
+/// double-forked and reaped. Every link, from message bodies to egui's own
+/// `Hyperlink`, goes through it. macOS and Windows open links through the
+/// system without a child process, so they keep eframe's own handling.
+#[cfg(all(unix, not(target_os = "macos")))]
+pub struct DetachedLinks {
+    open: fn(&str) -> std::io::Result<()>,
+}
+
+#[cfg(all(unix, not(target_os = "macos")))]
+impl Default for DetachedLinks {
+    fn default() -> Self {
+        Self {
+            open: |url| open::that_detached(url),
+        }
+    }
+}
+
+#[cfg(all(unix, not(target_os = "macos")))]
+impl egui::plugin::Plugin for DetachedLinks {
+    fn debug_name(&self) -> &'static str {
+        "zapfast-links"
+    }
+
+    fn output_hook(&mut self, _ctx: &egui::Context, output: &mut egui::FullOutput) {
+        output.platform_output.commands.retain(|command| {
+            let egui::OutputCommand::OpenUrl(link) = command else {
+                return true;
+            };
+            if let Err(error) = (self.open)(&link.url) {
+                // The address may come from a message, so it is not logged.
+                log::warn!("could not open a link: {error}");
+            }
+            false
+        });
+    }
+}
+
 #[cfg(all(unix, not(target_os = "macos")))]
 mod linux {
     use std::path::Path;
@@ -194,6 +238,37 @@ mod tests {
             file_uri(Path::new("/home/José Ω/a#b%c.log")),
             "file:///home/Jos%C3%A9%20%CE%A9/a%23b%25c.log"
         );
+    }
+
+    #[cfg(all(unix, not(target_os = "macos")))]
+    #[test]
+    fn links_are_opened_detached_instead_of_by_eframe() {
+        use std::sync::Mutex;
+        static OPENED: Mutex<Vec<String>> = Mutex::new(Vec::new());
+        let ctx = egui::Context::default();
+        ctx.add_plugin(DetachedLinks {
+            open: |url| {
+                OPENED.lock().unwrap().push(url.to_owned());
+                Ok(())
+            },
+        });
+        let mut output = ctx.run_ui(Default::default(), |ui| {
+            ui.ctx()
+                .open_url(egui::OpenUrl::new_tab("https://example.invalid/a"));
+            ui.ctx().copy_text("kept".into());
+            ui.ctx()
+                .open_url(egui::OpenUrl::same_tab("https://example.invalid/b"));
+        });
+        output.textures_delta.clear();
+        assert_eq!(
+            *OPENED.lock().unwrap(),
+            ["https://example.invalid/a", "https://example.invalid/b"]
+        );
+        // eframe sees no link to open itself; other commands pass through.
+        assert!(matches!(
+            output.platform_output.commands.as_slice(),
+            [egui::OutputCommand::CopyText(text)] if text == "kept"
+        ));
     }
 
     /// A launcher's exit status decides: a failure is reported, a success

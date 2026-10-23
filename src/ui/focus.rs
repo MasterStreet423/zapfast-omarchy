@@ -1,5 +1,5 @@
-//! Deliberate Tab navigation for the main chat view. Message content and chat
-//! rows remain pointer/accessibility targets, not stops in the primary cycle.
+//! Deliberate Tab navigation for the main chat view. Message text and chat rows
+//! remain pointer/accessibility targets; phone links join the primary cycle.
 
 use egui::{Context, FocusDirection, Id, Response};
 
@@ -9,6 +9,7 @@ pub enum Stop {
     Send,
     Attach,
     Emoji,
+    PhoneLink(u32),
     /// The chat header's Search, then the search pane's controls in reading
     /// order. The arrows walk its results from the field.
     ChatSearch,
@@ -16,20 +17,34 @@ pub enum Stop {
     ChatSearchDate,
     ChatSearchField,
     ChatSearchDay,
-    Back,
-    Profile,
-    Sidebar,
-    NewChat,
+    /// The info panel's close or back button, then its buttons and tabs
+    /// in reading order. Its members, pictures, documents and links are
+    /// pointer and accessibility targets, like chat rows.
+    InfoClose,
+    InfoControl(u8),
+    /// The rail on the left, top to bottom, then the list header's Back
+    /// and buttons. Show the chat list takes the rail's top while the
+    /// list is hidden, and keeps Hide the chat list's place in the order.
+    Chats,
+    Calls,
+    Starred,
+    Archived,
+    Locked,
     Settings,
+    Profile,
+    Back,
+    NewChat,
+    Sidebar,
     Search,
+    /// The first chip, All, on the chat list and on the Calls page.
     All,
+    /// The Calls page's Missed chip.
+    Missed,
     Unread,
     Private,
     Favorites,
     Groups,
     Channels,
-    Archived,
-    Locked,
     /// One chip in the label row, by its position among the labels.
     Label(u8),
     ManageLabels,
@@ -74,6 +89,23 @@ impl TabStop for Response {
         }
         self
     }
+}
+
+/// Register each phone link in draw order so Tab can reach every link,
+/// including multiple wrapped hit regions in a conversation.
+pub(crate) fn phone_link(response: Response) -> Response {
+    let index = response.ctx.data_mut(|data| {
+        data.get_temp_mut_or_default::<Order>(order_id())
+            .controls
+            .iter()
+            .filter_map(|(stop, _)| match stop {
+                Stop::PhoneLink(index) => Some(*index),
+                _ => None,
+            })
+            .max()
+            .map_or(0, |index| index.saturating_add(1))
+    });
+    response.tab_stop(Stop::PhoneLink(index))
 }
 
 /// The widget last registered for `stop`, such as an icon button without
@@ -215,7 +247,7 @@ mod tests {
             (Some(Stop::Composer), -1, 2),
             (Some(Stop::Attach), 1, 2),
             (Some(Stop::Attach), -1, 1),
-            (Some(Stop::Locked), 1, 0),
+            (Some(Stop::Channels), 1, 0),
             (None, 1, 0),
             (None, -1, 2),
             (Some(Stop::Composer), 5, 2),

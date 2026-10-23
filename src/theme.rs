@@ -85,6 +85,23 @@ pub struct Palette {
     pub link: Color32,
     /// Read-receipt blue.
     pub read: Color32,
+    /// How message bubbles are shaped. Neither palette files nor the copy
+    /// of a palette cached in settings can set it, so custom themes keep
+    /// WhatsApp's: only the built-in Messages palettes choose another.
+    #[serde(skip)]
+    pub bubbles: BubbleStyle,
+}
+
+/// The shape of message bubbles.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum BubbleStyle {
+    /// Softly rounded, lifted by a shadow, with a tail at the top of a run.
+    #[default]
+    WhatsApp,
+    /// As macOS Messages draws them: rounder, flat, with a curled tail under
+    /// the last message of a run.
+    Messages,
 }
 
 impl Palette {
@@ -114,6 +131,73 @@ impl Palette {
             bubble_out: Color32::from_rgb(0x00, 0x5c, 0x4b),
             link: Color32::from_rgb(0x53, 0xbd, 0xeb),
             read: Color32::from_rgb(0x53, 0xbd, 0xeb),
+            bubbles: BubbleStyle::WhatsApp,
+        }
+    }
+
+    /// A dark theme in the neutral greys of macOS, with bubbles shaped and
+    /// coloured as a default Mac's Messages draws them: others' in its grey,
+    /// yours in iMessage blue with white text, shaded down the view. The
+    /// accent is the system blue, as on the Mac.
+    pub fn messages() -> Self {
+        Self {
+            dark: true,
+            window: Color32::from_rgb(0x1e, 0x1e, 0x1e),
+            panel: Color32::from_rgb(0x26, 0x26, 0x27),
+            surface: Color32::from_rgb(0x32, 0x32, 0x34),
+            surface_hover: Color32::from_rgb(0x3a, 0x3a, 0x3c),
+            surface_active: Color32::from_rgb(0x46, 0x46, 0x49),
+            outline: Color32::from_rgb(0x38, 0x38, 0x3a),
+            text: Color32::from_rgb(0xf5, 0xf5, 0xf7),
+            secondary: Color32::from_rgb(0xae, 0xae, 0xb2),
+            dim: Color32::from_rgb(0xa4, 0xa4, 0xa9),
+            // `NSColor.systemBlue` in Dark Aqua, lightening on hover to
+            // Messages' own lighter blue, white on it as on the Mac.
+            accent: Color32::from_rgb(0x00, 0x91, 0xff),
+            accent_hover: Color32::from_rgb(0x40, 0x9c, 0xff),
+            on_accent: Color32::WHITE,
+            danger: Color32::from_rgb(0xff, 0x45, 0x3a),
+            warning: Color32::from_rgb(0xff, 0xd6, 0x0a),
+            overlay: Color32::from_rgb(0x2c, 0x2c, 0x2e),
+            shadow: Color32::from_black_alpha(150),
+            chat: Color32::from_rgb(0x1e, 0x1e, 0x1e),
+            bubble_in: MESSAGES_GRAY_DARK,
+            bubble_out: MESSAGES_BLUE_DARK[0],
+            link: Color32::from_rgb(0x64, 0xd2, 0xff),
+            read: Color32::from_rgb(0x64, 0xd2, 0xff),
+            bubbles: BubbleStyle::Messages,
+        }
+    }
+
+    /// The Messages theme in macOS's light greys, with Messages' light grey
+    /// and its light iMessage blue, white text on it.
+    pub fn messages_light() -> Self {
+        Self {
+            dark: false,
+            window: Color32::WHITE,
+            panel: Color32::from_rgb(0xf2, 0xf2, 0xf4),
+            surface: Color32::from_rgb(0xe8, 0xe8, 0xea),
+            surface_hover: Color32::from_rgb(0xde, 0xde, 0xe0),
+            surface_active: Color32::from_rgb(0xd1, 0xd1, 0xd6),
+            outline: Color32::from_rgb(0xd8, 0xd8, 0xdc),
+            text: Color32::from_rgb(0x1d, 0x1d, 0x1f),
+            secondary: Color32::from_rgb(0x5e, 0x5e, 0x63),
+            dim: Color32::from_rgb(0x64, 0x64, 0x69),
+            // `NSColor.systemBlue` in Aqua, deepening on hover to the
+            // Mac's own deeper blue, `NSColor.linkColor`.
+            accent: Color32::from_rgb(0x00, 0x88, 0xff),
+            accent_hover: Color32::from_rgb(0x00, 0x68, 0xda),
+            on_accent: Color32::WHITE,
+            danger: Color32::from_rgb(0xd7, 0x00, 0x15),
+            warning: Color32::from_rgb(0xa0, 0x5a, 0x00),
+            overlay: Color32::WHITE,
+            shadow: Color32::from_black_alpha(LIGHT_SHADOW_ALPHA),
+            chat: Color32::WHITE,
+            bubble_in: MESSAGES_GRAY_LIGHT,
+            bubble_out: MESSAGES_BLUE_LIGHT[0],
+            link: Color32::from_rgb(0x00, 0x66, 0xcc),
+            read: Color32::from_rgb(0x00, 0x66, 0xcc),
+            bubbles: BubbleStyle::Messages,
         }
     }
 
@@ -146,7 +230,110 @@ impl Palette {
             link: Color32::from_rgb(0x02, 0x7e, 0xb5),
             // The lighter blue vanished on the green outgoing bubble.
             read: Color32::from_rgb(0x02, 0x7e, 0xb5),
+            bubbles: BubbleStyle::WhatsApp,
         }
+    }
+
+    /// The two ends of the gradient your own bubbles run through in the
+    /// Messages style, top of the view to bottom: ChatKit draws them with a
+    /// dynamic gradient (`CKUIBehavior.shouldUseDynamicGradient`, on for the
+    /// Mac). [`Palette::bubble_out`] is the top, the lighter end, against
+    /// which the text on the bubble is checked. `None` elsewhere.
+    pub fn bubble_out_gradient(&self) -> Option<(Color32, Color32)> {
+        (self.bubbles == BubbleStyle::Messages).then(|| {
+            let [_, bottom] = if self.dark {
+                MESSAGES_BLUE_DARK
+            } else {
+                MESSAGES_BLUE_LIGHT
+            };
+            (self.bubble_out, bottom)
+        })
+    }
+
+    /// Whether this is the Messages theme's glass: a frosted header, glass
+    /// pills and tints, on every platform. Whether the desktop also shows
+    /// through the window is [`crate::backdrop::active`].
+    pub fn vibrant(&self) -> bool {
+        self.bubbles == BubbleStyle::Messages
+    }
+
+    /// The chat list's background. Over a window's material it only darkens
+    /// it a little; without one, it is the panel's own colour.
+    pub fn sidebar(&self) -> Color32 {
+        if self.vibrant() && crate::backdrop::active() {
+            self.panel.gamma_multiply(SIDEBAR_TINT)
+        } else {
+            self.panel
+        }
+    }
+
+    /// The navigation rail's background: the chat list's, one shade darker,
+    /// so the two read as separate columns without a line between them. A
+    /// translucent sidebar darkens the same way, with a little more of it
+    /// opaque.
+    pub fn rail(&self) -> Color32 {
+        let sidebar = self.sidebar();
+        let shade = if self.dark {
+            DARK_RAIL_SHADE
+        } else {
+            RAIL_SHADE
+        };
+        let keep = 1.0 - shade;
+        let channel = |value: u8| (f32::from(value) * keep).round() as u8;
+        Color32::from_rgba_premultiplied(
+            channel(sidebar.r()),
+            channel(sidebar.g()),
+            channel(sidebar.b()),
+            (f32::from(sidebar.a()) + (255.0 - f32::from(sidebar.a())) * shade).round() as u8,
+        )
+    }
+
+    /// The conversation's background on a vibrant theme: mostly `color`,
+    /// with a little of the material behind the window showing through.
+    pub fn vibrant_chat(&self, color: Color32) -> Color32 {
+        color.gamma_multiply(CHAT_TINT)
+    }
+
+    /// The veil of a vibrant header over the frosted messages under it, a
+    /// light one: its name and buttons sit on pills of their own.
+    pub fn vibrant_header(&self, color: Color32) -> Color32 {
+        // A light veil over dark content reads as fog where a dark one
+        // reads as shade, so the light palette's is thinner.
+        color.gamma_multiply(if self.dark {
+            HEADER_TINT
+        } else {
+            LIGHT_HEADER_TINT
+        })
+    }
+
+    /// A glass pill under a vibrant header's name or buttons: much more of
+    /// `color` than the veil, so text on it reads over any picture.
+    pub fn vibrant_pill(&self, color: Color32) -> Color32 {
+        // White glass reads as an opaque box well before dark glass does.
+        color.gamma_multiply(if self.dark {
+            PILL_TINT
+        } else {
+            LIGHT_PILL_TINT
+        })
+    }
+
+    /// A see-through tint of the text colour, for surfaces over a vibrant
+    /// window's material: white in a dark palette and black in a light one,
+    /// `strength` of the way to opaque, so the blur shows through.
+    pub fn tint(&self, strength: f32) -> Color32 {
+        let [r, g, b, _] = self.text.to_srgba_unmultiplied();
+        Color32::from_rgba_unmultiplied(r, g, b, (strength * 255.0).round() as u8)
+    }
+
+    /// Glass: what floats over a vibrant conversation, such as the header's
+    /// pills, the composer and the day chips.
+    pub fn glass(&self) -> Color32 {
+        self.vibrant_pill(self.chat)
+    }
+
+    /// The faint edge around glass.
+    pub fn glass_edge(&self) -> Stroke {
+        Stroke::new(1.0, self.text.gamma_multiply(0.08))
     }
 
     /// The palette for a message bubble's contents. Secondary and dim text,
@@ -155,11 +342,52 @@ impl Palette {
     /// on the outgoing bubble. Works for custom themes as well.
     pub fn on_bubble(&self, own: bool) -> Self {
         let fill = if own { self.bubble_out } else { self.bubble_in };
+        // Buttons and icons inside a bubble tint it with the accent, which in
+        // Messages is the bubble's own blue: draw them white on your own.
+        let own_messages = own && self.bubbles == BubbleStyle::Messages;
+        // Light Messages draws your own bubble saturated, with white on it.
+        if own_messages && !self.dark {
+            let soft = Color32::WHITE.lerp_to_gamma(fill, 0.2);
+            return Self {
+                text: Color32::WHITE,
+                secondary: readable_on(fill, soft, Color32::WHITE, 4.5),
+                dim: readable_on(fill, soft, Color32::WHITE, 4.5),
+                link: Color32::WHITE,
+                read: Color32::WHITE,
+                // Cards inside the bubble wash it with the window colour,
+                // and buttons tint it with the accent: darker blue and white
+                // keep both visible under white text.
+                window: fill.lerp_to_gamma(Color32::BLACK, 0.55),
+                accent: Color32::WHITE,
+                accent_hover: Color32::WHITE,
+                on_accent: fill,
+                ..*self
+            };
+        }
+        let (accent, on_accent) = if own_messages {
+            (Color32::WHITE, fill)
+        } else {
+            (self.accent, self.on_accent)
+        };
         Self {
             secondary: readable_on(fill, self.secondary, self.text, 4.5),
             dim: readable_on(fill, self.dim, self.text, 4.5),
             // Icons need 3:1 (WCAG 1.4.11).
             read: readable_on(fill, self.read, self.text, 3.0),
+            accent,
+            accent_hover: if own_messages {
+                accent
+            } else {
+                self.accent_hover
+            },
+            on_accent,
+            // The palette's cyan all but vanishes on the blue; white, as in
+            // the light palette and in Messages, stands out.
+            link: if own_messages {
+                Color32::WHITE
+            } else {
+                self.link
+            },
             ..*self
         }
     }
@@ -306,6 +534,52 @@ impl fastframe_theme::Palette for Palette {
     }
 }
 
+/// How strong the tint of a field over a vibrant window is, and of a row
+/// under the pointer and a selected one.
+pub const TINT_FIELD: f32 = 0.08;
+pub const TINT_HOVER: f32 = 0.06;
+pub const TINT_SELECTED: f32 = 0.12;
+// Messages' balloon colours, as ChatKit's asset catalogue defines them
+// (`/System/iOSSupport/System/Library/PrivateFrameworks/ChatKit.framework/
+// Resources/Assets.car`, macOS 27 build 26A428, `assetutil --info`) and
+// `CKUITheme` resolves them for light and dark. Others' balloons are
+// `gray_balloonColors`, flat. Your own are iMessage blue, `blue_balloonColors`
+// (`CKBlueBalloonColor0` to `CKBlueBalloonColor1`) in their default
+// appearances, as a Mac with default settings draws them. White text on
+// them is Apple's choice and falls short of WCAG AA (about 1.9:1 at the
+// light top, 3.3:1 at the dark bottom); see `own_messages_bubbles_follow_apple`.
+/// Messages' grey for others' balloons in the light appearance.
+pub const MESSAGES_GRAY_LIGHT: Color32 = Color32::from_rgb(0xe9, 0xe9, 0xeb);
+/// Messages' grey for others' balloons in the dark appearance.
+pub const MESSAGES_GRAY_DARK: Color32 = Color32::from_rgb(0x3b, 0x3b, 0x3d);
+/// iMessage blue, top and bottom, in the light appearance.
+pub const MESSAGES_BLUE_LIGHT: [Color32; 2] = [
+    Color32::from_rgb(0x5a, 0xc8, 0xfa),
+    Color32::from_rgb(0x00, 0x88, 0xff),
+];
+/// iMessage blue, top and bottom, in the dark appearance.
+pub const MESSAGES_BLUE_DARK: [Color32; 2] = [
+    Color32::from_rgb(0x40, 0x9c, 0xff),
+    Color32::from_rgb(0x00, 0x91, 0xff),
+];
+
+/// How opaque a vibrant theme's header is over the messages under it.
+const HEADER_TINT: f32 = 0.3;
+/// The same in a light palette, where a veil over dark content reads as fog.
+const LIGHT_HEADER_TINT: f32 = 0.2;
+/// How opaque the glass pills under a vibrant header's name and buttons are.
+const PILL_TINT: f32 = 0.72;
+/// The same in a light palette.
+const LIGHT_PILL_TINT: f32 = 0.5;
+/// How opaque a vibrant theme's conversation background is.
+const CHAT_TINT: f32 = 0.82;
+/// How much of the panel colour tints a vibrant sidebar.
+const SIDEBAR_TINT: f32 = 0.35;
+/// How much black the rail lays over the chat list's colour in a light
+/// palette.
+const RAIL_SHADE: f32 = 0.05;
+/// The same in a dark palette, whose panel is already near black.
+const DARK_RAIL_SHADE: f32 = 0.22;
 /// How much denser than the palette's shadow colour a bubble's shadow is.
 const SHADOW_DENSITY: f32 = 1.04;
 /// How far a dark theme's raised edge moves from the surface toward the text.
@@ -387,6 +661,8 @@ pub fn install(ctx: &egui::Context) {
     // Served by a loader that never forgets them, so `reduce_texture_memory`
     // below cannot leave an icon drawn at two sizes without bytes.
     fastframe_icons::install::<Icon>(ctx);
+    // The drawn caption buttons' fallback glyphs.
+    fastframe_titlebar::install(ctx);
     // Drop the raw bytes and the decoded pixels once a texture is on the GPU.
     // egui keeps all three copies of every image otherwise, and only ever
     // evicts the textures of SVGs.
@@ -646,6 +922,7 @@ fastframe_icons::icons! {
         Image => "image",
         Info => lucide "info",
         Keyboard => "keyboard",
+        Link => "link",
         Lock => lucide "lock",
         LockOpen => "lock-open",
         LogOut => lucide "log-out",
@@ -653,37 +930,52 @@ fastframe_icons::icons! {
         Maximize => lucide "maximize-2",
         MessageCircle => "message-circle",
         Mic => lucide "mic",
+        MicOff => "mic-off",
         Minimize => lucide "minimize-2",
         Minus => lucide "minus",
         Monitor => lucide "monitor",
         Moon => lucide "moon",
+        Music => "music",
         PanelLeft => lucide "panel-left",
         Paperclip => "paperclip",
         Pause => lucide "pause",
         Pencil => lucide "pencil",
         Phone => "phone",
+        PhoneIncoming => "phone-incoming",
+        PhoneMissed => "phone-missed",
+        PhoneOff => "phone-off",
+        PhoneOutgoing => "phone-outgoing",
+        PhonePlus => "phone-plus",
         Pin => lucide "pin",
         PinOff => lucide "pin-off",
         Play => lucide "play",
         Plus => lucide "plus",
         QrCode => "qr-code",
         Refresh => lucide "refresh-cw",
+        RotateLeft => "rotate-ccw",
+        RotateRight => "rotate-cw",
         Reply => "reply",
         Search => lucide "search",
         Send => "send",
         Settings => lucide "settings",
+        Shield => "shield",
+        ShieldOff => "shield-off",
         Smartphone => lucide "smartphone",
         Smile => "smile",
         SquarePen => lucide "square-pen",
         Star => "star",
+        StarFill => "star-fill",
         StarOff => "star-off",
         Sticker => "sticker",
         Sun => lucide "sun",
         Tag => "tag",
         Trash => lucide "trash-2",
         User => lucide "user",
+        UserMinus => "user-minus",
+        UserPlus => "user-plus",
         Users => lucide "users",
         Video => "video",
+        VideoOff => "video-off",
         Volume2 => lucide "volume-2",
         VolumeX => lucide "volume-x",
         WifiOff => "wifi-off",
@@ -702,6 +994,10 @@ pub fn paint_icon(ui: &egui::Ui, icon: Icon, rect: egui::Rect, size: f32, color:
     icon.image(color, size).paint_at(ui, icon_rect);
 }
 
+/// The room an icon button keeps around its icon: one is this much wider
+/// than its icon.
+pub const ICON_BUTTON_PAD: f32 = 12.0;
+
 /// Frameless icon button with hover color.
 pub fn icon_button(
     ui: &mut egui::Ui,
@@ -711,7 +1007,7 @@ pub fn icon_button(
     hover: Color32,
     tooltip: &str,
 ) -> Response {
-    let edge = size + 12.0;
+    let edge = size + ICON_BUTTON_PAD;
     let (rect, response) = ui.allocate_exact_size(Vec2::splat(edge), Sense::click());
     reveal_focus(&response);
     response.widget_info(|| {
@@ -969,6 +1265,23 @@ fn focus_outline_on_fill(
 /// this itself, and a scroll target only counts when set while the widget's
 /// scroll area is being laid out, so each focusable widget calls this.
 pub fn reveal_focus(response: &Response) {
+    reveal_focus_aligned(response, None);
+}
+
+/// [`reveal_focus`] for a widget in `ui`'s scroll area that may be too short
+/// for the margin egui keeps around a scroll target (ours, and the item
+/// spacing at each end): there egui would line the margin up with the top
+/// and leave the widget's foot cut off, so the widget is centred instead.
+pub fn reveal_focus_in(ui: &egui::Ui, response: &Response) {
+    let margin = 2.0 * (FOCUS_SCROLL_MARGIN + ui.spacing().item_spacing.y);
+    let short = response.rect.height() + margin > ui.clip_rect().height();
+    reveal_focus_aligned(response, short.then_some(egui::Align::Center));
+}
+
+/// Room kept around a widget [`reveal_focus`] scrolls into view.
+const FOCUS_SCROLL_MARGIN: f32 = 4.0;
+
+fn reveal_focus_aligned(response: &Response, align: Option<egui::Align>) {
     let keyboard = response
         .ctx
         .data(|data| data.get_temp::<bool>(keyboard_focus_id()).unwrap_or(false));
@@ -979,8 +1292,8 @@ pub fn reveal_focus(response: &Response) {
         // A small margin avoids subpixel clipping when scroll offsets round to
         // device pixels, and leaves room for the focus stroke.
         let mut target = response.clone();
-        target.rect = target.rect.expand(4.0);
-        target.scroll_to_me_animation(None, egui::style::ScrollAnimation::none());
+        target.rect = target.rect.expand(FOCUS_SCROLL_MARGIN);
+        target.scroll_to_me_animation(align, egui::style::ScrollAnimation::none());
     }
 }
 
@@ -998,8 +1311,7 @@ pub fn paint_spinner(ui: &egui::Ui, rect: egui::Rect, size: f32, color: Color32)
     if !ui.is_rect_visible(rect) {
         return;
     }
-    ui.ctx()
-        .request_repaint_after(std::time::Duration::from_millis(33));
+    crate::motion::request_frame_after(ui.ctx(), std::time::Duration::from_millis(33));
     let radius = size / 2.0 - 2.0;
     let start = ui.input(|input| input.time) * std::f64::consts::TAU * 1.2;
     let sweep = 250_f64.to_radians();
@@ -1140,17 +1452,78 @@ pub fn preview_macos(ctx: &egui::Context) {
     ctx.data_mut(|data| data.insert_temp(egui::Id::new("macos-preview"), true));
 }
 
-/// Horizontal clearance for native buttons; they do not scale with UI zoom.
+/// Horizontal clearance for the window's buttons at the left of its top
+/// edge: the traffic lights on macOS, which do not scale with UI zoom, or the
+/// caption buttons ZapFast draws where the desktop puts them on the left.
 pub fn traffic_light_inset(ctx: &egui::Context) -> f32 {
     if cfg!(target_os = "macos") {
-        fastframe_macos::traffic_light_inset(ctx)
+        fastframe_titlebar::footprint(ctx, TOP_BAR_HEIGHT).left
     } else if macos_chrome(ctx) && !ctx.input(|input| input.viewport().fullscreen.unwrap_or(false))
     {
         // The demo's preview of the macOS layout on other platforms.
-        fastframe_macos::TRAFFIC_LIGHTS_WIDTH / ctx.zoom_factor()
+        fastframe_titlebar::TRAFFIC_LIGHTS_WIDTH / ctx.zoom_factor()
     } else {
-        0.0
+        caption_footprint(ctx).left
     }
+}
+
+/// Whether ZapFast draws the window's title bar itself: on Windows and
+/// Linux when Settings > Appearance > Custom title bar is on
+/// (fastframe-titlebar), or in a layout test's preview of it.
+pub fn drawn_titlebar(ctx: &egui::Context) -> bool {
+    #[cfg(any(test, feature = "demo"))]
+    if ctx.data(|data| {
+        data.get_temp::<fastframe_titlebar::Footprint>(titlebar_preview_id())
+            .is_some()
+    }) {
+        return true;
+    }
+    let _ = ctx;
+    fastframe_titlebar::enabled()
+}
+
+/// Whether the headers run to the window's top edge and share it with the
+/// window's buttons: macOS's hidden title bar, or the one ZapFast draws.
+/// Status banners then go under the open chat's header, not across the top.
+pub fn chrome_in_headers(ctx: &egui::Context) -> bool {
+    macos_chrome(ctx) || drawn_titlebar(ctx)
+}
+
+/// The room the caption buttons ZapFast draws take at each end of the top
+/// edge, beside a header [`TOP_BAR_HEIGHT`] tall. Zero on macOS (the traffic
+/// lights are [`traffic_light_inset`]), under the desktop's own title bar,
+/// and in full screen.
+pub fn caption_footprint(ctx: &egui::Context) -> fastframe_titlebar::Footprint {
+    #[cfg(any(test, feature = "demo"))]
+    if let Some(preview) =
+        ctx.data(|data| data.get_temp::<fastframe_titlebar::Footprint>(titlebar_preview_id()))
+    {
+        let fullscreen = ctx.input(|input| input.viewport().fullscreen.unwrap_or(false));
+        return if fullscreen {
+            fastframe_titlebar::Footprint::default()
+        } else {
+            preview
+        };
+    }
+    if cfg!(target_os = "macos") {
+        return fastframe_titlebar::Footprint::default();
+    }
+    fastframe_titlebar::footprint(ctx, TOP_BAR_HEIGHT)
+}
+
+#[cfg(any(test, feature = "demo"))]
+fn titlebar_preview_id() -> egui::Id {
+    egui::Id::new("titlebar-preview")
+}
+
+/// Lays the window out around drawn caption buttons taking `footprint`, for
+/// layout tests. The buttons themselves follow the process-wide choice
+/// (`fastframe_titlebar::set_enabled`), which tests running side by side
+/// must not change, so only the room they take is previewed here; the demo
+/// binary's `--demo-titlebar` makes the choice for real.
+#[cfg(any(test, feature = "demo"))]
+pub fn preview_titlebar(ctx: &egui::Context, footprint: fastframe_titlebar::Footprint) {
+    ctx.data_mut(|data| data.insert_temp(titlebar_preview_id(), footprint));
 }
 
 /// Traffic-light strip used only while linking, before the chat header exists.
@@ -1293,7 +1666,12 @@ mod tests {
     /// hints. They must reach WCAG AA wherever the built-in themes put them.
     #[test]
     fn built_in_text_colours_reach_aa() {
-        for (name, p) in [("dark", Palette::dark()), ("light", Palette::light())] {
+        for (name, p) in [
+            ("dark", Palette::dark()),
+            ("light", Palette::light()),
+            ("messages", Palette::messages()),
+            ("messages light", Palette::messages_light()),
+        ] {
             let mut pairs = Vec::new();
             for (surface, background) in [
                 ("window", p.window),
@@ -1308,8 +1686,15 @@ mod tests {
                 ));
                 pairs.push(("dim on ".to_owned() + surface, p.dim, background));
             }
-            pairs.push(("accent text on panel".into(), p.accent, p.panel));
-            pairs.push(("button label on accent".into(), p.on_accent, p.accent));
+            // The Messages palettes take the Mac's system blue as their
+            // accent, with white labels on it, exactly as macOS draws its
+            // own controls; Apple accepts under 4.5:1 there, so they are
+            // checked against Apple's colours in `messages_accent_is_apples`
+            // instead. Their text colours above still reach AA.
+            if p.bubbles != BubbleStyle::Messages {
+                pairs.push(("accent text on panel".into(), p.accent, p.panel));
+                pairs.push(("button label on accent".into(), p.on_accent, p.accent));
+            }
             let pairs: Vec<_> = pairs
                 .iter()
                 .map(|(what, color, background)| (what.as_str(), *color, *background))
@@ -1327,15 +1712,85 @@ mod tests {
         );
     }
 
+    /// Links in others' Messages bubbles reach WCAG AA, as does their
+    /// secondary text.
+    #[test]
+    fn links_read_on_messages_bubbles() {
+        for palette in [Palette::messages(), Palette::messages_light()] {
+            let fill = palette.bubble_in;
+            let inside = palette.on_bubble(false);
+            for (what, color) in [("link", inside.link), ("secondary", inside.secondary)] {
+                let ratio = contrast(color, fill);
+                assert!(ratio >= 4.5, "dark {}, {what}: {ratio:.2}:1", palette.dark);
+            }
+        }
+    }
+
+    /// The Messages palettes' accent is the Mac's system blue
+    /// (`NSColor.systemBlue`, macOS 27: `#0088FF` in Aqua, `#0091FF` in
+    /// Dark Aqua), with white on it, as macOS draws its controls.
+    #[test]
+    fn messages_accent_is_apples() {
+        let light = Palette::messages_light();
+        assert_eq!(light.accent, Color32::from_rgb(0x00, 0x88, 0xff));
+        assert_eq!(light.on_accent, Color32::WHITE);
+        let dark = Palette::messages();
+        assert_eq!(dark.accent, Color32::from_rgb(0x00, 0x91, 0xff));
+        assert_eq!(dark.on_accent, Color32::WHITE);
+    }
+
+    /// Your own Messages bubbles follow a default Mac exactly rather than
+    /// WCAG: iMessage blue with white text, links and ticks on it, which
+    /// Apple accepts at under 4.5:1 (about 1.9:1 at the light gradient's
+    /// cyan top). Their colours are Apple's, and everything on them is
+    /// white, the most any colour reaches on that blue.
+    #[test]
+    fn own_messages_bubbles_follow_apple() {
+        for (palette, blue) in [
+            (Palette::messages(), MESSAGES_BLUE_DARK),
+            (Palette::messages_light(), MESSAGES_BLUE_LIGHT),
+        ] {
+            assert_eq!(palette.bubble_out_gradient(), Some((blue[0], blue[1])));
+            let inside = palette.on_bubble(true);
+            let white = |c: Color32| {
+                contrast(c, palette.bubble_out)
+                    >= contrast(Color32::WHITE, palette.bubble_out) * 0.9
+            };
+            assert!(white(inside.text), "dark {}: text", palette.dark);
+            assert!(white(inside.link), "dark {}: link", palette.dark);
+            assert_eq!(inside.accent, Color32::WHITE);
+        }
+    }
+
+    /// The bubble style never comes from a stored palette, so a cached or
+    /// edited one cannot turn a custom theme into the Messages style.
+    #[test]
+    fn stored_palettes_keep_whatsapp_bubbles() {
+        let mut stored = serde_json::to_value(Palette::messages()).unwrap();
+        stored["bubbles"] = "messages".into();
+        let palette: Palette = serde_json::from_value(stored).unwrap();
+        assert_eq!(palette.bubbles, BubbleStyle::WhatsApp);
+    }
+
     /// Bubble contents stay readable for every palette, custom ones included.
     #[test]
     fn bubble_text_is_readable_in_every_palette() {
-        let palettes = [("dark", Palette::dark()), ("light", Palette::light())]
-            .into_iter()
-            .map(|(name, palette)| (name.to_owned(), palette))
-            .chain(presets().map(|theme| (theme.filename.clone(), theme.palette)));
+        let palettes = [
+            ("dark", Palette::dark()),
+            ("light", Palette::light()),
+            ("messages", Palette::messages()),
+            ("messages light", Palette::messages_light()),
+        ]
+        .into_iter()
+        .map(|(name, palette)| (name.to_owned(), palette))
+        .chain(presets().map(|theme| (theme.filename.clone(), theme.palette)));
         for (name, palette) in palettes {
             for own in [false, true] {
+                // Your own Messages bubbles are Apple's white on iMessage
+                // blue: see `own_messages_bubbles_follow_apple`.
+                if own && palette.bubbles == BubbleStyle::Messages {
+                    continue;
+                }
                 let fill = if own {
                     palette.bubble_out
                 } else {
@@ -1346,6 +1801,7 @@ mod tests {
                 assert_readable(
                     &name,
                     &[
+                        ("text", bubble.text, fill),
                         ("secondary", bubble.secondary, fill),
                         ("dim", bubble.dim, fill),
                     ],

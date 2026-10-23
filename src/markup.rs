@@ -1,8 +1,8 @@
 //! WhatsApp message markup for egui.
 //!
 //! `*bold*`, `_italic_`, `~struck~`, `` `mono` ``, fenced blocks, `> `
-//! quotes, `* ` lists, links, email addresses, and named `@mentions`. Emoji
-//! go through [`crate::emoji`].
+//! quotes, `* ` lists, links, phone numbers, email addresses, and named
+//! `@mentions`. Emoji go through [`crate::emoji`].
 
 use std::ops::Range;
 use std::sync::Arc;
@@ -195,6 +195,22 @@ pub fn paint_selectable(
     if visible {
         emoji::paint(ui, &text.galley, pos, &text.placements);
     }
+}
+
+/// The web addresses in `text`, each once, in reading order, found the way
+/// a bubble underlines them. Mail addresses are left out: they do not open
+/// in a browser.
+pub fn links(text: &str) -> Vec<String> {
+    let mut found: Vec<String> = Vec::new();
+    for span in parse(text, &[]) {
+        if let Some(link) = span.link
+            && !link.starts_with("mailto:")
+            && !found.contains(&link)
+        {
+            found.push(link);
+        }
+    }
+    found
 }
 
 /// Plain text with resolved mentions, used in previews.
@@ -394,6 +410,35 @@ fn link_and_mention(span: Span, mentions: &[Mention]) -> Vec<Span> {
                 .next_back()
                 .is_some_and(|c| c.is_alphanumeric());
         if at_boundary {
+            if (bytes[i].is_ascii_digit() || matches!(bytes[i], b'+' | b'('))
+                && let Some((end, digits, valid)) = phone_at(text, i)
+            {
+                if valid {
+                    push_plain(&mut out, &span, &text[plain_start..i]);
+                    out.push(Span {
+                        text: text[i..end].to_owned(),
+                        link: Some(format!("tel:{digits}")),
+                        bold: span.bold,
+                        italic: span.italic,
+                        strike: span.strike,
+                        quote: span.quote,
+                        ..Default::default()
+                    });
+                    plain_start = end;
+                    i = end;
+                    continue;
+                }
+                if digits.is_empty() && end > i {
+                    i = end;
+                    continue;
+                }
+                // Don't retry a suffix of an oversized number as a new link.
+                // Let the email parser inspect the whole token when it ends in @.
+                if digits.len() > 15 && !text[end..].starts_with('@') {
+                    i = end;
+                    continue;
+                }
+            }
             if bytes[i] == b'@'
                 && let Some((end, mention)) = mention_at(text, i, mentions)
             {
@@ -433,6 +478,59 @@ fn link_and_mention(span: Span, mentions: &[Mention]) -> Vec<Span> {
     out
 }
 
+/// Finds a phone candidate with optional spaces, hyphens, and parentheses.
+/// Dots are excluded so formatted tax IDs such as XXX.XXX.XXX-XX stay plain.
+/// The validity flag lets the caller skip an oversized number as one token.
+fn phone_at(text: &str, at: usize) -> Option<(usize, String, bool)> {
+    // Reject an ISO date before scanning through the space after it; the next
+    // token may be a time or a separate phone number.
+    let date_at = at + usize::from(text[at..].starts_with('('));
+    let iso_date = text
+        .as_bytes()
+        .get(date_at..date_at + 10)
+        .is_some_and(|date| {
+            date[4] == b'-'
+                && date[7] == b'-'
+                && date[..4].iter().all(u8::is_ascii_digit)
+                && date[5..7].iter().all(u8::is_ascii_digit)
+                && date[8..].iter().all(u8::is_ascii_digit)
+        });
+    if iso_date {
+        return Some((date_at + 10, String::new(), false));
+    }
+
+    let mut end = at;
+    let mut digits = String::new();
+    for (offset, c) in text[at..].char_indices() {
+        if c.is_ascii_digit() {
+            digits.push(c);
+        } else if matches!(c, '+' | ' ' | '-' | '(' | ')') {
+            if c == '+' && offset != 0 {
+                break;
+            }
+        } else {
+            break;
+        }
+        end = at + offset + c.len_utf8();
+    }
+    while end > at && text[..end].ends_with([' ', '-', '(']) {
+        end -= text[..end].chars().next_back()?.len_utf8();
+    }
+    let following = text[end..].chars().next();
+    let valid = digits.len() >= 7
+        && digits.len() <= 15
+        && following.is_none_or(|c| !c.is_ascii_alphanumeric() && c != '@');
+    (!digits.is_empty()).then_some((
+        end,
+        if text[at..].starts_with('+') {
+            format!("+{digits}")
+        } else {
+            digits
+        },
+        valid,
+    ))
+}
+
 fn push_plain(out: &mut Vec<Span>, template: &Span, text: &str) {
     if !text.is_empty() {
         out.push(Span {
@@ -445,6 +543,13 @@ fn push_plain(out: &mut Vec<Span>, template: &Span, text: &str) {
 }
 
 fn mention_at<'m>(text: &str, at: usize, mentions: &'m [Mention]) -> Option<(usize, &'m Mention)> {
+    if let Some(end) = crate::mentions::everyone_token_end(text, at)
+        && let Some(mention) = mentions
+            .iter()
+            .find(|mention| mention.user == crate::mentions::ALL_USER)
+    {
+        return Some((end, mention));
+    }
     let rest = &text[at + 1..];
     let digits: String = rest.chars().take_while(char::is_ascii_digit).collect();
     if digits.len() < 5 {
@@ -784,6 +889,50 @@ mod tests {
     }
 
     #[test]
+    fn phone_numbers_become_links_without_linking_tax_ids() {
+        let links = |text: &str| -> Vec<String> {
+            parse(text, &[])
+                .into_iter()
+                .filter_map(|span| span.link)
+                .collect()
+        };
+        assert_eq!(
+            links("CPF 000.000.000-00; call 000 0000-0000 or +00 (00) 00000-0000."),
+            vec!["tel:00000000000", "tel:+0000000000000"]
+        );
+        assert_eq!(links("Call (212) 555-1212"), vec!["tel:2125551212"]);
+        assert_eq!(
+            parse("Call (212) 555-1212", &[])
+                .into_iter()
+                .find(|span| span.link.is_some())
+                .unwrap()
+                .text,
+            "(212) 555-1212"
+        );
+        assert_eq!(links("Call +1 (212) 555-1212"), vec!["tel:+12125551212"]);
+        let spans = parse("Call +1 (212) 555-1212", &[]);
+        assert_eq!(
+            spans.iter().find(|span| span.link.is_some()).unwrap().text,
+            "+1 (212) 555-1212"
+        );
+        assert!(links("Date 2026-10-01").is_empty());
+        assert!(links("Date (2026-10-01)").is_empty());
+        assert!(links("Date 2026-10-01 12:30").is_empty());
+        assert_eq!(links("Date 2026-10-01 1234567"), vec!["tel:1234567"]);
+        assert!(links("Reference 12345678-90123456").is_empty());
+        assert_eq!(
+            links("1234567@example.com"),
+            vec!["mailto:1234567@example.com"]
+        );
+        assert_eq!(
+            links("1234567890123456@example.com"),
+            vec!["mailto:1234567890123456@example.com"]
+        );
+        assert!(links("id 000000; long id 0000000000000000").is_empty());
+        assert!(links("abc00000000000").is_empty());
+    }
+
+    #[test]
     fn mentions_become_names() {
         let mentions = [Mention {
             user: "174057861464188".into(),
@@ -797,6 +946,28 @@ mod tests {
             "hi @+49 176 31141665"
         );
         assert_eq!(plain("hi @123", &mentions), "hi @123");
+    }
+
+    #[test]
+    fn everyone_is_highlighted_only_with_its_mention() {
+        let everyone = [Mention {
+            user: "all".into(),
+            name: "all".into(),
+        }];
+        let spans = parse("heading over @all tonight", &everyone);
+        let mention = spans.iter().find(|span| span.mention).expect("mention");
+        assert_eq!(mention.text, "@all");
+        assert!(
+            parse("heading over @all tonight", &[])
+                .iter()
+                .all(|span| !span.mention)
+        );
+        assert!(
+            parse("mail@all.com and @alligator", &everyone)
+                .iter()
+                .all(|span| !span.mention)
+        );
+        assert_eq!(plain("ping @all", &everyone), "ping @all");
     }
 }
 
@@ -838,5 +1009,15 @@ mod monospace_tests {
         let spans = mono("```\ncode\n```\nafter");
         assert!(spans.iter().any(|(text, mono)| text == "code" && *mono));
         assert!(spans.iter().any(|(text, mono)| text == "after" && !*mono));
+    }
+
+    #[test]
+    fn web_links_are_listed_once_without_mail_addresses() {
+        assert_eq!(
+            links("see https://a.b/c, then spotifast.rocks and https://a.b/c again"),
+            vec!["https://a.b/c", "https://spotifast.rocks"]
+        );
+        assert!(links("mail hello@section8berlin.com or nothing").is_empty());
+        assert!(links("version 0.3.0 of main.rs").is_empty());
     }
 }

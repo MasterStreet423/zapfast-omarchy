@@ -33,5 +33,9 @@ if not info.get("NSMicrophoneUsageDescription", "").strip():
     sys.exit("The release app is missing its microphone permission description")
 if entitlements.get("com.apple.security.device.audio-input") is not True:
     sys.exit("The signed release app is missing its audio-input entitlement")
-print("Verified microphone permission metadata in the signed universal app")
+if not info.get("NSCameraUsageDescription", "").strip():
+    sys.exit("The release app is missing its camera permission description")
+if entitlements.get("com.apple.security.device.camera") is not True:
+    sys.exit("The signed release app is missing its camera entitlement")
+print("Verified microphone and camera permission metadata in the signed universal app")
 PY

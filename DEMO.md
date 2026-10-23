@@ -11,6 +11,7 @@ cargo run --features demo -- --demo-shot shot.png --demo-page chat,light
 cargo run --features demo -- --demo-tour      # Space starts/replays a 41-second tour
 cargo run --features demo -- --demo-tour --demo-tour-script whats-new # what 0.16 added
 cargo run --features demo -- --demo-hover 900,400 # holds a fake pointer there
+cargo run --features demo -- --demo --demo-titlebar # Windows/Linux: the drawn title bar
 cargo test --all-features                      # includes a headless layout of every screen
 cargo clippy --all-targets --all-features -- -D warnings
 ```
@@ -64,24 +65,47 @@ Demo runs never open the microphone: recording plays back a synthetic tone.
 Use `--demo-page rtl-self` for a self-chat of mixed Hebrew, Arabic, and
 English lines.
 Use `--demo-page composer-tools` to preview the WhatsApp-style composer pill
-and its attachment and poll menu. `typing`, `mention`, and
+and its attachment and poll menu, or `--demo-page location` for the location
+dialog with a spot pasted in. `typing`, `mention`, and
 `emoji-complete` preview the multiline field and inline suggestions.
+`mention-everyone` shows the group's synthetic `@all` message with the
+everyone suggestion at the top of the composer list.
 Use `--demo-page chat-menu` to preview the compact chat context menu,
 `--demo-page chat-header-menu` for the menu at the top of an open chat, and
 `--demo-page chat,voice,voice-menu` for a voice message's menu with its speeds.
+`--demo-page motion` shows a motion photo, `motion-playing` plays its clip in
+the bubble, `motion-preview` opens the photo in the full-window viewer, and
+`motion-viewer` plays its clip there over the photo. `carousel-viewer` opens a
+carousel card's picture in the viewer, among the card's other pictures.
+`--demo-page private-reply-menu` shows a group message's menu with **Reply
+privately**, `private-reply` the sender's chat with the group quote in the
+composer, and `private-reply-locked-source` the same quote while its group is
+locked.
+`--demo-page call-bubbles` ends a group with one call entry of each kind
+(answered with a length, unanswered, missed and declined, voice and video,
+ours and members'), and `call-entries` files the sample calls in a chat.
 `--demo-page video` shows a video and round video messages,
-`--demo-page video-expanded` the video over the whole window, and
+`--demo-page video-expanded` the video playing in the full-window viewer, and
 `video-playing` or `note-playing` starts one of them, silently.
 Locked chats preview with `channel`, `locked`, `locked-open` (the code is
 `demo-code`), `locked-prompt`, `locked-setup`, and `keyring`; the app lock
 with `app-lock` (the password is `demo-password`), `app-lock-wrong`,
 `app-lock-forgot`, `app-lock-settings`, and `app-lock-setup`. `new-chat`,
-`unnamed-group`, and `react-picker` show those dialogs; `group-info`,
+`new-contact`, `unnamed-group`, and `react-picker` show those dialogs
+(`new-contact-number` with a formatted number and no name); `new-group` New
+chat's New group with two people picked and a search, `new-group-name` the
+group being named, and `new-group-creating` it on its way; `group-info`,
 `group-info-rename`, `group-info-saving`, and `group-info-locked` a group's
 editable info; `meta-ai` a Meta AI reply with code and a table.
+The editable group includes a multiline description; the locked group has none.
 For deterministic theme screenshots, `--demo-page settings,omarchy` and
 `--demo-page settings,omarchy-light` preview following dark and light Omarchy
 palettes without changing the desktop theme.
+
+Use `--demo-page preview` for a photo viewer with three pictures, text between
+the second and third picture. Hover over the photo to show the previous/next
+arrows on it, or use Left/Right arrow keys. Use `--demo-hover 590,450` to
+include the arrows in a screenshot.
 
 Use `--demo-page shared-contact` for an offline shared-contact card with synthetic
 vCard data, or `--demo-page interactive` for text and button messages, or

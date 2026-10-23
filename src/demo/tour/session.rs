@@ -79,6 +79,59 @@ pub fn respond(app: &mut App) {
                     .collect();
                 append(app, row);
             }
+            Command::InspectPicture { target, path } => {
+                let size = std::fs::read(&path)
+                    .map_err(|error| error.to_string())
+                    .and_then(|bytes| crate::backend::picture_edit::inspect(&bytes));
+                match size {
+                    Ok((width, height)) => {
+                        app.picture_edit = Some(crate::model::PictureEdit::new(
+                            target,
+                            crate::model::PictureSource::File(path),
+                            width,
+                            height,
+                        ));
+                    }
+                    Err(error) => app.toast_error(error),
+                }
+            }
+            Command::ApplyPictureEdit {
+                target,
+                source,
+                width,
+                height,
+                crop,
+                turns,
+            } => {
+                // The same work the worker would do, on this thread instead.
+                let written = crate::backend::picture_edit::write(
+                    &source,
+                    width,
+                    height,
+                    crop,
+                    turns,
+                    &app.dirs.media_cache_dir().join("edited"),
+                );
+                match written {
+                    // Applied the same way the app applies it: only while that
+                    // attachment is still staged.
+                    Ok(path) => {
+                        if let Some(at) = app.staged_at(target) {
+                            app.pending[at].item = crate::app::Pending::File(path);
+                            if let Some(origin) = app.picture_applying.remove(&target) {
+                                app.picture_origins.insert(target, origin);
+                            }
+                        } else {
+                            app.picture_applying.remove(&target);
+                        }
+                    }
+                    Err(error) => {
+                        app.picture_applying.remove(&target);
+                        app.toast_error(error);
+                    }
+                }
+                app.picture_edit = None;
+            }
             Command::SendSticker {
                 chat,
                 path,
@@ -201,14 +254,20 @@ pub fn respond(app: &mut App) {
     }
 }
 
-fn quote(app: &App, chat: &str, id: String) -> Option<Quoted> {
-    let row = app.conversations.get(chat)?.message(&id)?;
+/// Resolves an explicit quote source rather than assuming it belongs to the destination chat.
+fn quote(app: &App, chat: &str, target: crate::model::ReplyTarget) -> Option<Quoted> {
+    let row = app
+        .conversations
+        .get(target.source_chat(chat))?
+        .message(&target.id)?;
     Some(Quoted {
+        labelled: Some(row.content.labelled()),
+        chat: target.chat,
         sender: row.sender.clone(),
         sender_name: row.sender_name.clone(),
         summary: row.summary(),
         mentions: row.mentions.clone(),
-        id,
+        id: target.id,
     })
 }
 
@@ -230,6 +289,7 @@ fn append(app: &mut App, row: Message) {
     if let Some(chat) = app.chats.iter_mut().find(|chat| chat.id == row.chat) {
         chat.last_activity = row.timestamp;
         chat.last = Some(LastMessage {
+            labelled: row.content.labelled(),
             from_me: row.from_me,
             sender: row.sender.clone(),
             sender_name: row.sender_name.clone(),
