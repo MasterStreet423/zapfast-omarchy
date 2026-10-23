@@ -1182,9 +1182,15 @@ fn navigation_overlay(
     }
     let inset = INSET.min((band.width() - 2.0 * DIAMETER) / 2.0);
     let (previous, next) = if clip {
-        ("Previous", "Next")
+        (
+            crate::i18n::gettext(locale, "Previous"),
+            crate::i18n::gettext(locale, "Next"),
+        )
     } else {
-        ("Previous (Left arrow)", "Next (Right arrow)")
+        (
+            crate::i18n::gettext(locale, "Previous (Left arrow)"),
+            crate::i18n::gettext(locale, "Next (Right arrow)"),
+        )
     };
     for (right, icon, hint, step) in [
         (false, Icon::ChevronLeft, previous, -1i8),
@@ -1209,7 +1215,8 @@ fn navigation_overlay(
                     palette.overlay.gamma_multiply(0.85),
                     palette.surface_hover,
                     palette.text,
-                    crate::i18n::gettext(locale, hint).as_ref(),
+                    hint.as_ref(),
+
                 )
                 .clicked()
                 {

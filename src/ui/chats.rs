@@ -173,7 +173,7 @@ fn header(app: &mut App, ui: &mut egui::Ui) {
                             18.0,
                             palette.secondary,
                             palette.text,
-                            "Back to chats",
+                            &crate::i18n::gettext(app.locale, "Back to chats"),
                         )
                         .tab_stop(Stop::Back)
                         .clicked()
@@ -386,7 +386,11 @@ fn header_button_row(app: &mut App, ui: &mut egui::Ui, buttons: &[HeaderButton],
                     HEADER_ICON,
                     palette.secondary,
                     palette.text,
-                    if macos { "New chat (⌘N)" } else { "New chat" },
+                    &if macos {
+                        crate::i18n::gettext(app.locale, "New chat (⌘N)")
+                    } else {
+                        crate::i18n::gettext(app.locale, "New chat")
+                    },
                 )
                 .tab_stop(Stop::NewChat)
                 .clicked()
@@ -416,10 +420,10 @@ fn header_button_row(app: &mut App, ui: &mut egui::Ui, buttons: &[HeaderButton],
                     HEADER_ICON,
                     palette.secondary,
                     palette.text,
-                    if macos {
-                        "Hide the chat list (⌘B)"
+                    &if macos {
+                        crate::i18n::gettext(app.locale, "Hide the chat list (⌘B)")
                     } else {
-                        "Hide the chat list (Ctrl+B)"
+                        crate::i18n::gettext(app.locale, "Hide the chat list (Ctrl+B)")
                     },
                 )
                 .tab_stop(Stop::Sidebar)
@@ -505,7 +509,7 @@ fn macos_header(app: &mut App, ui: &mut egui::Ui) {
                         18.0,
                         palette.secondary,
                         palette.text,
-                        "Back to chats",
+                        &crate::i18n::gettext(app.locale, "Back to chats"),
                     )
                     .tab_stop(Stop::Back)
                     .clicked()
@@ -633,11 +637,17 @@ fn filter_chips(app: &mut App, ui: &mut egui::Ui) {
                         .all(|chat| chat.muted(now));
                     chip.context_menu(|ui| {
                         let (icon, label) = if all_muted {
-                            (Icon::Bell, "Unmute all channels")
+                            (
+                                Icon::Bell,
+                                crate::i18n::gettext(app.locale, "Unmute all channels"),
+                            )
                         } else {
-                            (Icon::BellOff, "Mute all channels")
+                            (
+                                Icon::BellOff,
+                                crate::i18n::gettext(app.locale, "Mute all channels"),
+                            )
                         };
-                        if widgets::menu_item(ui, &palette, Some(icon), label) {
+                        if widgets::menu_item(ui, &palette, Some(icon), &label) {
                             app.actions.push(Action::MuteAllChannels(!all_muted));
                             ui.close();
                         }
@@ -1091,7 +1101,7 @@ fn locked_entry(app: &mut App, ui: &mut egui::Ui) {
         ui.painter().text(
             pos2(rect.left() + 76.0, rect.center().y),
             egui::Align2::LEFT_CENTER,
-            "Locked chats",
+            crate::i18n::gettext(app.locale, "Locked chats"),
             theme::medium(14.5),
             palette.text,
         );
@@ -1120,8 +1130,11 @@ fn locked_list(app: &mut App, ui: &mut egui::Ui) {
             ui,
             &palette,
             Icon::LockOpen,
-            "No locked chats",
-            "Lock a chat from its context menu to hide it here.",
+            &crate::i18n::gettext(app.locale, "No locked chats"),
+            &crate::i18n::gettext(
+                app.locale,
+                "Lock a chat from its context menu to hide it here.",
+            ),
         );
         return;
     }
@@ -1193,8 +1206,8 @@ fn results(app: &mut App, ui: &mut egui::Ui) {
             ui,
             &palette,
             Icon::Search,
-            "No results",
-            "Try another name, number, or message text.",
+            &crate::i18n::gettext(app.locale, "No results"),
+            &crate::i18n::gettext(app.locale, "Try another name, number, or message text."),
         );
         return;
     }
@@ -1299,7 +1312,7 @@ fn hit_row(app: &mut App, ui: &mut egui::Ui, hit: &Message) {
         if hit.from_me {
             let who = widgets::line(
                 ui,
-                "You: ",
+                &crate::i18n::gettext(app.locale, "You: "),
                 theme::regular(13.0),
                 palette.dim,
                 (right - x) * 0.5,
@@ -1572,9 +1585,12 @@ fn row(app: &mut App, ui: &mut egui::Ui, chat: &Chat) -> egui::Response {
         };
         let preview = if !typing.is_empty() {
             let who = if chat.is_group() {
-                format!("{} is typing…", typing[0].1.trim_start_matches('~'))
+                crate::i18n::gettext(app.locale, "{one} is typing…")
+                    .replace("{one}", typing[0].1.trim_start_matches('~'))
+
             } else {
-                "typing…".to_owned()
+                crate::i18n::gettext(app.locale, "typing…").into_owned()
+
             };
             widgets::line(
                 ui,
@@ -1683,18 +1699,18 @@ fn row(app: &mut App, ui: &mut egui::Ui, chat: &Chat) -> egui::Response {
     let menu_width = widgets::menu_width(
         ui,
         &[
-            "Mark as read",
-            "Mark as unread",
-            "Pin to top",
+            &crate::i18n::gettext(app.locale, "Mark as read"),
+            &crate::i18n::gettext(app.locale, "Mark as unread"),
+            &crate::i18n::gettext(app.locale, "Pin to top"),
             favorite_label.as_ref(),
-            "Unarchive",
+            &crate::i18n::gettext(app.locale, "Unarchive"),
             &crate::i18n::gettext(app.locale, "Leave group"),
             &crate::i18n::gettext(app.locale, "Leave channel"),
-            "Mute for 8 hours",
-            "Mute for a week",
-            "Mute indefinitely",
-            "Unlock chat",
-            "Copy number",
+            &crate::i18n::gettext(app.locale, "Mute for 8 hours"),
+            &crate::i18n::gettext(app.locale, "Mute for a week"),
+            &crate::i18n::gettext(app.locale, "Mute indefinitely"),
+            &crate::i18n::gettext(app.locale, "Unlock chat"),
+            &crate::i18n::gettext(app.locale, "Copy number"),
         ],
         true,
     )
@@ -1703,8 +1719,8 @@ fn row(app: &mut App, ui: &mut egui::Ui, chat: &Chat) -> egui::Response {
         widgets::menu_width(
             ui,
             &[
-                "Notification sound",
-                "Voice message speed",
+                &crate::i18n::gettext(app.locale, "Notification sound"),
+                &crate::i18n::gettext(app.locale, "Voice message speed"),
                 &crate::i18n::gettext(app.locale, "Labels"),
             ],
             true,
@@ -1920,7 +1936,11 @@ fn compact_locked_entry(app: &mut App, ui: &mut egui::Ui) {
         ui.allocate_exact_size(vec2(ui.available_width(), COMPACT_CELL), Sense::click());
     theme::reveal_focus(&response);
     response.widget_info(|| {
-        egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), "Locked chats")
+        egui::WidgetInfo::labeled(
+            egui::WidgetType::Button,
+            ui.is_enabled(),
+            crate::i18n::gettext(app.locale, "Locked chats"),
+        )
     });
     if ui.is_rect_visible(rect) {
         if response.hovered() {
@@ -1938,7 +1958,7 @@ fn compact_locked_entry(app: &mut App, ui: &mut egui::Ui) {
         .data_mut(|data| data.insert_temp(compact_locked_id(), response.rect));
     if response
         .on_hover_cursor(egui::CursorIcon::PointingHand)
-        .on_hover_text("Locked chats")
+        .on_hover_text(crate::i18n::gettext(app.locale, "Locked chats").into_owned())
         .clicked()
     {
         app.actions.push(Action::OpenLockedFolder);
@@ -2032,13 +2052,24 @@ fn compact_badge_center(avatar: Rect) -> egui::Pos2 {
 }
 
 fn context_menu(app: &mut App, ui: &mut egui::Ui, chat: &Chat, palette: &Palette) {
+    let locale = app.locale;
     if chat.looks_unread()
-        && widgets::menu_item(ui, palette, Some(Icon::CheckCheck), "Mark as read")
+        && widgets::menu_item(
+            ui,
+            palette,
+            Some(Icon::CheckCheck),
+            &crate::i18n::gettext(locale, "Mark as read"),
+        )
     {
         app.actions.push(Action::MarkRead(chat.id.clone()));
     }
     if !chat.looks_unread()
-        && widgets::menu_item(ui, palette, Some(Icon::MessageCircle), "Mark as unread")
+        && widgets::menu_item(
+            ui,
+            palette,
+            Some(Icon::MessageCircle),
+            &crate::i18n::gettext(locale, "Mark as unread"),
+        )
     {
         app.actions.push(Action::MarkUnread(chat.id.clone()));
     }
@@ -2046,7 +2077,11 @@ fn context_menu(app: &mut App, ui: &mut egui::Ui, chat: &Chat, palette: &Palette
         ui,
         palette,
         Some(if chat.pinned { Icon::PinOff } else { Icon::Pin }),
-        if chat.pinned { "Unpin" } else { "Pin to top" },
+        &if chat.pinned {
+            crate::i18n::gettext(locale, "Unpin")
+        } else {
+            crate::i18n::gettext(locale, "Pin to top")
+        },
     ) {
         app.actions
             .push(Action::SetPinned(chat.id.clone(), !chat.pinned));
@@ -2068,10 +2103,10 @@ fn context_menu(app: &mut App, ui: &mut egui::Ui, chat: &Chat, palette: &Palette
         ui,
         palette,
         Some(Icon::Archive),
-        if chat.archived {
-            "Unarchive"
+        &if chat.archived {
+            crate::i18n::gettext(locale, "Unarchive")
         } else {
-            "Archive"
+            crate::i18n::gettext(locale, "Archive")
         },
     ) {
         app.actions
@@ -2093,16 +2128,27 @@ fn context_menu(app: &mut App, ui: &mut egui::Ui, chat: &Chat, palette: &Palette
     }
     let now = crate::util::now();
     if chat.muted(now) {
-        if widgets::menu_item(ui, palette, Some(Icon::Bell), "Unmute") {
+        if widgets::menu_item(
+            ui,
+            palette,
+            Some(Icon::Bell),
+            &crate::i18n::gettext(locale, "Unmute"),
+        ) {
             app.actions.push(Action::SetMuted(chat.id.clone(), None));
         }
     } else {
         for (label, until) in [
-            ("Mute for 8 hours", Some(now + 8 * 3600)),
-            ("Mute for a week", Some(now + 7 * 86_400)),
-            ("Mute indefinitely", Some(0)),
+            (
+                crate::i18n::gettext(locale, "Mute for 8 hours"),
+                Some(now + 8 * 3600),
+            ),
+            (
+                crate::i18n::gettext(locale, "Mute for a week"),
+                Some(now + 7 * 86_400),
+            ),
+            (crate::i18n::gettext(locale, "Mute indefinitely"), Some(0)),
         ] {
-            if widgets::menu_item(ui, palette, Some(Icon::BellOff), label) {
+            if widgets::menu_item(ui, palette, Some(Icon::BellOff), &label) {
                 app.actions.push(Action::SetMuted(chat.id.clone(), until));
             }
         }
@@ -2118,10 +2164,10 @@ fn context_menu(app: &mut App, ui: &mut egui::Ui, chat: &Chat, palette: &Palette
         } else {
             Icon::Lock
         }),
-        if chat.locked {
-            "Unlock chat"
+        &if chat.locked {
+            crate::i18n::gettext(locale, "Unlock chat")
         } else {
-            "Lock chat"
+            crate::i18n::gettext(locale, "Lock chat")
         },
     ) {
         app.actions.push(if chat.locked {
@@ -2132,18 +2178,34 @@ fn context_menu(app: &mut App, ui: &mut egui::Ui, chat: &Chat, palette: &Palette
     }
     widgets::menu_separator(ui, palette);
     if let Some(phone) = chat.phone()
-        && widgets::menu_item(ui, palette, Some(Icon::Copy), "Copy number")
+        && widgets::menu_item(
+            ui,
+            palette,
+            Some(Icon::Copy),
+            &crate::i18n::gettext(locale, "Copy number"),
+        )
     {
         app.actions.push(Action::CopyText(format!("+{phone}")));
     }
-    if widgets::menu_item(ui, palette, Some(Icon::Info), "Info") {
+    if widgets::menu_item(
+        ui,
+        palette,
+        Some(Icon::Info),
+        &crate::i18n::gettext(locale, "Info"),
+    ) {
         // The panel sits beside the conversation, so the chat opens first.
         app.actions.push(Action::OpenChat(chat.id.clone()));
         app.actions.push(Action::OpenInfo(chat.id.clone()));
     }
     // Deleting reaches the phone, so it waits for a connection.
     let connected = matches!(app.link, LinkStatus::Connected);
-    if widgets::menu_item_enabled(ui, palette, Some(Icon::Trash), "Delete chat", connected) {
+    if widgets::menu_item_enabled(
+        ui,
+        palette,
+        Some(Icon::Trash),
+        &crate::i18n::gettext(locale, "Delete chat"),
+        connected,
+    ) {
         app.actions
             .push(Action::ShowDialog(Dialog::ConfirmDeleteChat(
                 chat.id.clone(),
@@ -2167,40 +2229,53 @@ fn unread_announcement(title: &str, chat: &Chat) -> String {
 fn sound_menu(app: &mut App, ui: &mut egui::Ui, palette: &Palette, chat: &Chat) {
     use crate::settings::NotificationSound;
     let current = chat.notification_sound.clone();
+    let locale = app.locale;
     let sounds = [
-        (None, "Default"),
-        (Some(NotificationSound::Receive), "Pidgin"),
-        (Some(NotificationSound::Alert), "Pidgin alert"),
-        (Some(NotificationSound::System), "System sound"),
-        (Some(NotificationSound::None), "No sound"),
+        (None, crate::i18n::gettext(locale, "Default")),
+        (
+            Some(NotificationSound::Receive),
+            std::borrow::Cow::Borrowed("Pidgin"),
+        ),
+        (
+            Some(NotificationSound::Alert),
+            crate::i18n::gettext(locale, "Pidgin alert"),
+        ),
+        (
+            Some(NotificationSound::System),
+            crate::i18n::gettext(locale, "System sound"),
+        ),
+        (
+            Some(NotificationSound::None),
+            crate::i18n::gettext(locale, "No sound"),
+        ),
     ];
     let custom = match &current {
         Some(NotificationSound::Custom(path)) => Some(path.file_name().map_or_else(
-            || "Custom".to_owned(),
+            || crate::i18n::gettext(locale, "Custom").into_owned(),
             |name| name.to_string_lossy().into_owned(),
         )),
         _ => None,
     };
-    let choose = "Choose a file…";
+    let choose = crate::i18n::gettext(locale, "Choose a file…");
     let items: Vec<&str> = sounds
         .iter()
-        .map(|(_, label)| *label)
+        .map(|(_, label)| label.as_ref())
         .chain(custom.as_deref())
-        .chain([choose])
+        .chain([choose.as_ref()])
         .collect();
     widgets::submenu(
         ui,
         palette,
         Icon::Volume2,
-        "Notification sound",
+        &crate::i18n::gettext(locale, "Notification sound"),
         &items,
         |ui| {
-            for (sound, label) in sounds {
-                let checked = current == sound;
+            for (sound, label) in &sounds {
+                let checked = current == *sound;
                 if widgets::menu_item(ui, palette, checked.then_some(Icon::Check), label) {
                     app.actions.push(Action::SetChatSound {
                         chat: chat.id.clone(),
-                        sound,
+                        sound: sound.clone(),
                     });
                     ui.close();
                 }
@@ -2208,7 +2283,7 @@ fn sound_menu(app: &mut App, ui: &mut egui::Ui, palette: &Palette, chat: &Chat) 
             if let Some(name) = &custom {
                 widgets::menu_item(ui, palette, Some(Icon::Check), name);
             }
-            if widgets::menu_item(ui, palette, None, choose) {
+            if widgets::menu_item(ui, palette, None, &choose) {
                 app.actions.push(Action::PickChatSound(chat.id.clone()));
                 ui.close();
             }
@@ -2220,10 +2295,8 @@ fn sound_menu(app: &mut App, ui: &mut egui::Ui, palette: &Palette, chat: &Chat) 
 fn voice_speed_menu(app: &mut App, ui: &mut egui::Ui, palette: &Palette, chat: &Chat) {
     let options: Vec<(Option<f32>, String)> = std::iter::once((
         None,
-        format!(
-            "Default ({})",
-            crate::audio::speed_label(app.settings.voice_speed)
-        ),
+        crate::i18n::gettext(app.locale, "Default ({})")
+            .replace("{}", &crate::audio::speed_label(app.settings.voice_speed)),
     ))
     .chain(
         crate::audio::SPEEDS
@@ -2236,7 +2309,8 @@ fn voice_speed_menu(app: &mut App, ui: &mut egui::Ui, palette: &Palette, chat: &
         ui,
         palette,
         Icon::Play,
-        "Voice message speed",
+        &crate::i18n::gettext(app.locale, "Voice message speed"),
+
         &items,
         |ui| {
             for (speed, label) in &options {

@@ -489,7 +489,7 @@ fn deliver(
             let Some(wait) = before_showing(&mut cancelled) else { return; };
             wait
         } else { false };
-        let mut notification = Notification::new(title).body(body).category("im.received").sound(native_sound(sound)).action("default", &crate::i18n::gettext(crate::i18n_extra::locale(), "Open"));
+        let mut notification = Notification::new(title).body(body).category("im.received").sound(native_sound(sound)).action("default", crate::i18n::gettext(crate::i18n_extra::locale(), "Open"));
         if let Some(picture) = picture { notification = notification.image(picture); }
         let (events, mut responses) = tokio::sync::mpsc::unbounded_channel();
         let handle = match client.show_with(notification, move |event| { let _ = events.send(event); }) {

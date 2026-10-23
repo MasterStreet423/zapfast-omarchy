@@ -28,6 +28,8 @@ use crate::theme::{self, Palette};
 fn download_notice(error: String) -> String {
     if error.contains("403") || error.contains("404") {
         "No longer available on WhatsApp's servers".to_owned()
+
+
     } else {
         error
     }
@@ -1092,6 +1094,8 @@ fn tray_action(event: fastframe_tray::Event, window_hidden: bool) -> Option<Acti
 /// `App::sync_tray` shows or hides it as the password is set or removed.
 fn tray_config(lockable: bool) -> fastframe_tray::Config {
     use fastframe_tray::MenuItem;
+    // The tray is built once, in the language the app started in.
+    let locale = crate::i18n_extra::locale();
     fastframe_tray::Config {
         id: "zapfast",
         title: "ZapFast".into(),
@@ -1101,10 +1105,14 @@ fn tray_config(lockable: bool) -> fastframe_tray::Config {
         // may use the installed one.
         themed_icon: true,
         menu: vec![
-            MenuItem::action(TRAY_SHOW, "Show or hide ZapFast"),
-            MenuItem::action(TRAY_LOCK, "Lock ZapFast").visible(lockable),
+            MenuItem::action(
+                TRAY_SHOW,
+                crate::i18n::gettext(locale, "Show or hide ZapFast"),
+            ),
+            MenuItem::action(TRAY_LOCK, crate::i18n::gettext(locale, "Lock ZapFast"))
+                .visible(lockable),
             MenuItem::Separator,
-            MenuItem::action(TRAY_QUIT, "Quit"),
+            MenuItem::action(TRAY_QUIT, crate::i18n::gettext(locale, "Quit")),
         ],
     }
 }

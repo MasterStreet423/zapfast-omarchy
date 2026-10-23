@@ -630,11 +630,11 @@ fn header(app: &mut App, ui: &mut egui::Ui, chat: &Chat) -> Rect {
                     let width = widgets::menu_width(
                         ui,
                         &[
-                            "Info",
+                            &crate::i18n::gettext(app.locale, "Info"),
                             select_messages_label.as_ref(),
-                            "Pin to top",
-                            "Unarchive",
-                            "Clear chat",
+                            &crate::i18n::gettext(app.locale, "Pin to top"),
+                            &crate::i18n::gettext(app.locale, "Unarchive"),
+                            &crate::i18n::gettext(app.locale, "Clear chat"),
                             leave_label.as_ref(),
                             &crate::i18n::gettext(app.locale, "Copy number"),
                             &crate::i18n::gettext(app.locale, "Close chat"),
@@ -650,7 +650,12 @@ fn header(app: &mut App, ui: &mut egui::Ui, chat: &Chat) -> Rect {
                         .width(width)
                         .frame(widgets::menu_frame(&palette))
                         .show(|ui| {
-                            if widgets::menu_item(ui, &palette, Some(Icon::Info), "Info") {
+                            if widgets::menu_item(
+                                ui,
+                                &palette,
+                                Some(Icon::Info),
+                                &crate::i18n::gettext(app.locale, "Info"),
+                            ) {
                                 app.actions.push(Action::OpenInfo(chat.id.clone()));
                             }
                             if widgets::menu_item(
@@ -1493,7 +1498,7 @@ fn composer(app: &mut App, ui: &mut egui::Ui, chat: &Chat) {
                                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                                     if theme::icon_button(
                                         ui, Icon::X, 16.0, palette.secondary, palette.text,
-                                        "Cancel reply (Esc)",
+                                        &crate::i18n::gettext(app.locale, "Cancel reply (Esc)"),
                                     ).clicked() {
                                         app.actions.push(Action::CancelReply);
                                     }
@@ -7385,14 +7390,11 @@ fn album_content(
         if theme::pill_button(
             ui,
             &view.palette,
-            &crate::i18n::gettext(
-                view.locale,
-                if downloading {
-                    "Downloading…"
-                } else {
-                    "Download all"
-                },
-            ),
+            &if downloading {
+                crate::i18n::gettext(view.locale, "Downloading…")
+            } else {
+                crate::i18n::gettext(view.locale, "Download all")
+            },
             !downloading,
         )
         .clicked()
@@ -7523,7 +7525,10 @@ fn album_tile(
     // Each member keeps its own failure: the others stay usable, and a click
     // on this one retries it.
     let response = if let MediaState::Failed(error) = &media.state {
-        response.on_hover_text(format!("{error} · Click to retry"))
+        response.on_hover_text(
+            crate::i18n::gettext(view.locale, "{error} · Click to retry")
+                .replace("{error}", &crate::i18n_extra::tr(error)),
+        )
     } else {
         response
     };
@@ -7633,7 +7638,10 @@ fn carousel_picture(
                 ui.painter().text(
                     rect.center() + vec2(0.0, 24.0),
                     Align2::CENTER_CENTER,
-                    "Could not display this picture. Click to open it.",
+                    crate::i18n::gettext(
+                        view.locale,
+                        "Could not display this picture. Click to open it.",
+                    ),
                     theme::regular(11.5),
                     view.palette.secondary,
                 );
@@ -7650,7 +7658,7 @@ fn carousel_picture(
                     ui.painter().text(
                         rect.center() + vec2(0.0, 34.0),
                         Align2::CENTER_CENTER,
-                        "Download failed. Click to retry.",
+                        crate::i18n::gettext(view.locale, "Download failed. Click to retry."),
                         theme::regular(11.5),
                         Color32::WHITE,
                     );
@@ -7672,7 +7680,10 @@ fn carousel_picture(
     let response = response.on_hover_cursor(egui::CursorIcon::PointingHand);
     let clicked = response.clicked();
     if let MediaState::Failed(error) = &media.state {
-        response.on_hover_text(format!("{error} · Click to retry"));
+        response.on_hover_text(
+            crate::i18n::gettext(view.locale, "{error} · Click to retry")
+                .replace("{error}", &crate::i18n_extra::tr(error)),
+        );
     }
     if let Some(path) = &media.path {
         if clicked {
@@ -9907,7 +9918,12 @@ fn selection_bar(app: &mut App, ui: &mut egui::Ui, chat: &str, selected: &[Strin
             // boxes do; there is nothing to forward until one is ticked.
             let forward = ui
                 .add_enabled_ui(!selected.is_empty(), |ui| {
-                    theme::pill_button(ui, &palette, "Forward…", true)
+                    theme::pill_button(
+                        ui,
+                        &palette,
+                        &crate::i18n::gettext(app.locale, "Forward…"),
+                        true,
+                    )
                 })
                 .inner;
             if forward.clicked() {
@@ -9918,7 +9934,13 @@ fn selection_bar(app: &mut App, ui: &mut egui::Ui, chat: &str, selected: &[Strin
             }
             let delete = ui
                 .add_enabled_ui(!selected.is_empty(), |ui| {
-                    theme::pill_button(ui, &palette, "Delete…", false)
+                    theme::pill_button(
+                        ui,
+                        &palette,
+                        &crate::i18n::gettext(app.locale, "Delete…"),
+                        false,
+                    )
+
                 })
                 .inner;
             // Demo/test: hold this menu open for a screenshot.

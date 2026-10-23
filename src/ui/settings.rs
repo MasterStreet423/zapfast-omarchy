@@ -262,7 +262,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
                             20.0,
                             palette.secondary,
                             palette.text,
-                            "Back (Esc)",
+                            &crate::i18n::gettext(app.locale, "Back (Esc)"),
                         )
                         .clicked()
                         {
@@ -1138,7 +1138,7 @@ fn theme_picker(ui: &mut egui::Ui, app: &mut App) {
             ui,
             &palette,
             Some(Icon::ExternalLink),
-            "Open themes folder",
+            &crate::i18n::gettext(app.locale, "Open themes folder"),
             false,
         )
         .clicked()
@@ -1256,13 +1256,18 @@ pub fn wallpaper_show(app: &mut App, ui: &mut egui::Ui) {
                                 20.0,
                                 palette.secondary,
                                 palette.text,
-                                "Back to settings",
+                                &crate::i18n::gettext(app.locale, "Back to settings"),
                             )
                             .clicked()
                             {
                                 app.actions.push(Action::Open(Page::Settings));
                             }
-                            theme::text(ui, "Set chat wallpaper", theme::bold(18.0), palette.text);
+                            theme::text(
+                                ui,
+                                crate::i18n::gettext(app.locale, "Set chat wallpaper"),
+                                theme::bold(18.0),
+                                palette.text,
+                            );
                         },
                     );
 
@@ -1347,7 +1352,7 @@ pub fn wallpaper_show(app: &mut App, ui: &mut egui::Ui) {
                     ui.painter().text(
                         header.center(),
                         egui::Align2::CENTER_CENTER,
-                        "Wallpaper preview",
+                        crate::i18n::gettext(app.locale, "Wallpaper preview"),
                         theme::bold(18.0),
                         palette.text,
                     );
@@ -1963,7 +1968,8 @@ fn sound_control(ui: &mut egui::Ui, app: &mut App, mention: bool) {
     ];
     let selected = match &current {
         NotificationSound::Custom(path) => path.file_name().map_or_else(
-            || "Custom".to_owned(),
+            || crate::i18n::gettext(locale, "Custom").into_owned(),
+
             |name| name.to_string_lossy().into_owned(),
         ),
         sound => choices
