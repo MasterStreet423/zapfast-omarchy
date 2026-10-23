@@ -1666,6 +1666,9 @@ impl App {
             .ok();
         self.applied_dark = None;
         self.theme_transition = fastframe_theme::Transition::default();
+        // The desktop background's texture belonged to the closed window's
+        // painter; the new one must upload it again.
+        self.wallpaper = (0, None);
         self.zoom_applied = false;
         self.window_hidden = false;
         self.paste_before_release = false;
@@ -8211,6 +8214,24 @@ mod tests {
             app.label_editing.is_none(),
             "the editor let go of the label"
         );
+    }
+
+    #[test]
+    fn a_reopened_window_uploads_the_desktop_background_again() {
+        let mut app = app();
+        app.desktop_background
+            .show(egui::ColorImage::filled([2, 2], egui::Color32::RED));
+        // Closing to the tray drops the window with its painter; the tray
+        // brings back a new one with its own egui context.
+        for _ in 0..2 {
+            let ctx = egui::Context::default();
+            app.attach(&ctx);
+            let mut output = ctx.run_ui(egui::RawInput::default(), |_| app.apply_theme(&ctx));
+            output.textures_delta.clear();
+            let id = app.wallpaper.1.as_ref().expect("uploaded").id();
+            let name = ctx.tex_manager().read().meta(id).map(|meta| meta.name.clone());
+            assert_eq!(name.as_deref(), Some("omarchy-wallpaper"));
+        }
     }
 
     #[test]

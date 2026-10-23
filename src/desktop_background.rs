@@ -86,6 +86,12 @@ impl DesktopBackground {
     pub fn image(&self) -> (u64, Option<&Arc<egui::ColorImage>>) {
         (self.generation, self.image.as_ref())
     }
+
+    #[cfg(test)]
+    pub fn show(&mut self, image: egui::ColorImage) {
+        self.image = Some(Arc::new(image));
+        self.generation += 1;
+    }
 }
 
 fn current_key() -> Option<Key> {
