@@ -6,7 +6,7 @@ msgstr ""
 "Project-Id-Version: ZapFast\n"
 "Report-Msgid-Bugs-To: https://github.com/crmne/zapfast/issues/new?"
 "template=translation.yml\n"
-"POT-Creation-Date: 2026-10-23 20:42-0300\n"
+"POT-Creation-Date: 2026-11-03 15:10-0300\n"
 "PO-Revision-Date: 2026-09-22 00:00-0300\n"
 "Last-Translator: ZapFast contributors\n"
 "Language-Team: Spanish\n"
@@ -72,142 +72,149 @@ msgstr ""
 "No se pudo añadir a {names} al grupo. Es posible que su configuración de "
 "privacidad no lo permita."
 
-#: src/model.rs:196 src/model.rs:233
+#: src/model.rs:203 src/model.rs:240
 msgid "All"
 msgstr "Todos"
 
-#: src/model.rs:197
+#: src/model.rs:204 src/a11y.rs:112 src/a11y.rs:697
 msgid "Unread"
 msgstr "No leídos"
 
-#: src/model.rs:198
+#: src/model.rs:205
 msgid "Private"
 msgstr "Privados"
 
-#: src/model.rs:199 src/ui/picker.rs:1263
+#: src/model.rs:206 src/ui/picker.rs:1346
 msgid "Favorites"
 msgstr "Favoritos"
 
-#: src/model.rs:200 src/settings.rs:382
+#: src/model.rs:207 src/settings.rs:382
 msgid "Groups"
 msgstr "Grupos"
 
-#: src/model.rs:201
+#: src/model.rs:208
 msgid "Channels"
 msgstr "Canales"
 
-#: src/model.rs:234
+#: src/model.rs:241
 msgid "Missed"
 msgstr "Perdidas"
 
-#: src/model.rs:1610 src/ui/image_preview.rs:1024 src/ui/info.rs:1240
+#: src/model.rs:1738 src/ui/conversation.rs:2428 src/ui/image_preview.rs:1061
+#: src/ui/info.rs:1434 src/a11y.rs:199
 msgid "Photo"
 msgstr "Foto"
 
-#: src/model.rs:1611 src/ui/conversation.rs:8749 src/ui/image_preview.rs:1022
-#: src/ui/info.rs:1238
+#: src/model.rs:1739 src/ui/conversation.rs:10586 src/ui/image_preview.rs:1059
+#: src/ui/info.rs:1432 src/a11y.rs:211
 msgid "Video"
 msgstr "Video"
 
-#: src/model.rs:1612
+#: src/model.rs:1740 src/ui/picker.rs:141 src/a11y.rs:207
 msgid "GIF"
 msgstr "GIF"
 
-#: src/model.rs:1613
+#: src/model.rs:1741 src/a11y.rs:209
 msgid "Video message"
 msgstr "Videomensaje"
 
-#: src/model.rs:1614
+#: src/model.rs:1742 src/app.rs:11102 src/a11y.rs:221
 msgid "Voice message"
 msgstr "Mensaje de voz"
 
-#: src/model.rs:1615 src/ui/conversation.rs:9709
+#: src/model.rs:1743 src/ui/conversation.rs:11583 src/a11y.rs:223
 msgid "Audio"
 msgstr "Audio"
 
-#: src/model.rs:1616
+#: src/model.rs:1744 src/a11y.rs:228
 msgid "Document"
 msgstr "Documento"
 
-#: src/model.rs:1617
+#: src/model.rs:1745 src/a11y.rs:232
 msgid "Sticker"
 msgstr "Sticker"
 
-#: src/model.rs:1618 src/ui/dialogs.rs:1175
+#: src/model.rs:1746 src/ui/dialogs.rs:1252 src/a11y.rs:234
 msgid "Sticker pack"
 msgstr "Paquete de stickers"
 
-#: src/model.rs:1619 src/ui/conversation.rs:6724
+#: src/model.rs:1747 src/ui/conversation.rs:8394 src/a11y.rs:239
 msgid "Location"
 msgstr "Ubicación"
 
-#: src/model.rs:1620 src/ui/conversation.rs:6771 src/ui/conversation.rs:6994
+#: src/model.rs:1748 src/ui/conversation.rs:8441 src/ui/conversation.rs:8667
+#: src/a11y.rs:243 src/a11y.rs:275
 msgid "Live location"
 msgstr "Ubicación en tiempo real"
 
-#: src/model.rs:1621 src/ui/conversation.rs:6769
+#: src/model.rs:1749 src/ui/conversation.rs:8439 src/a11y.rs:262
 msgid "Live location ended"
 msgstr "Ubicación en tiempo real finalizada"
 
-#: src/model.rs:1622
+#: src/model.rs:1750 src/a11y.rs:245
 msgid "Contact"
 msgstr "Contacto"
 
-#: src/model.rs:1623
+#: src/model.rs:1751
 msgid "Poll"
 msgstr "Encuesta"
 
-#: src/model.rs:1624 src/ui/conversation.rs:6971
+#: src/model.rs:1752 src/ui/conversation.rs:7920 src/ui/conversation.rs:8644
+#: src/a11y.rs:267 src/a11y.rs:695
 msgid "This message was deleted"
 msgstr "Se eliminó este mensaje"
 
-#: src/model.rs:1625
+#: src/model.rs:1753
 msgid "Unsupported message"
 msgstr "Mensaje no compatible"
 
-#: src/model.rs:1626
+#: src/model.rs:1754 src/a11y.rs:279
 msgid "View once photo"
 msgstr "Foto de visualización única"
 
-#: src/model.rs:1627
+#: src/model.rs:1755 src/a11y.rs:280
 msgid "View once video"
 msgstr "Video de visualización única"
 
-#: src/model.rs:1628
+#: src/model.rs:1756 src/a11y.rs:281
 msgid "View once voice message"
 msgstr "Mensaje de voz de visualización única"
 
-#: src/model.rs:1629
+#: src/model.rs:1757 src/a11y.rs:282
 msgid "View once audio"
 msgstr "Audio de visualización única"
 
-#: src/model.rs:1630
+#: src/model.rs:1758 src/a11y.rs:287
 msgid "View once message"
 msgstr "Mensaje de visualización única"
 
-#: src/model.rs:1631
+#: src/model.rs:1759 src/a11y.rs:288
 msgid "Message on your phone"
 msgstr "Mensaje en tu teléfono"
 
-#: src/model.rs:1632 src/ui/calls.rs:94
+#: src/model.rs:1760 src/ui/calls.rs:100
 msgid "Missed voice call"
 msgstr "Llamada de voz perdida"
 
-#: src/model.rs:1633 src/ui/calls.rs:95
+#: src/model.rs:1761 src/ui/calls.rs:101
 msgid "Missed video call"
 msgstr "Videollamada perdida"
 
-#: src/model.rs:1634 src/ui/conversation.rs:756 src/ui/conversation.rs:4292
-#: src/ui/calls.rs:98 src/ui/calls.rs:383
+#: src/model.rs:1762 src/ui/conversation.rs:690 src/ui/conversation.rs:857
+#: src/ui/conversation.rs:5355 src/ui/calls.rs:104 src/ui/calls.rs:389
 msgid "Voice call"
 msgstr "Llamada de voz"
 
-#: src/model.rs:1635 src/ui/conversation.rs:784 src/ui/conversation.rs:4300
-#: src/ui/calls.rs:99 src/ui/calls.rs:381
+#: src/model.rs:1763 src/ui/conversation.rs:691 src/ui/conversation.rs:885
+#: src/ui/conversation.rs:5372 src/ui/calls.rs:105 src/ui/calls.rs:387
 msgid "Video call"
 msgstr "Videollamada"
 
-#: src/util.rs:245 src/util.rs:365
+#: src/model.rs:1773 src/util.rs:303 src/ui/info.rs:578 src/a11y.rs:265
+msgid "Disappearing messages"
+msgstr "Mensajes temporales"
+
+#: src/util.rs:245 src/util.rs:386
 msgid "Yesterday"
 msgstr "Ayer"
 
@@ -226,560 +233,584 @@ msgstr "{weekday} a las {time}"
 msgid "{date} at {time}"
 msgstr "{date} a las {time}"
 
-#: src/util.rs:305 src/settings.rs:380
+#: src/util.rs:312 src/settings.rs:380 src/ui/info.rs:641
 msgid "Off"
 msgstr "Desactivado"
 
-#: src/util.rs:306
+#: src/util.rs:313 src/ui/info.rs:642
 msgid "24 hours"
 msgstr "24 horas"
 
-#: src/util.rs:307
+#: src/util.rs:314 src/ui/info.rs:643
 msgid "7 days"
 msgstr "7 días"
 
-#: src/util.rs:308
+#: src/util.rs:315 src/ui/info.rs:644
 msgid "90 days"
 msgstr "90 días"
 
-#: src/util.rs:311
-msgid "Disappearing messages"
+#: src/util.rs:325
+#, fuzzy, rust-format
+msgid "{name} turned off disappearing messages"
 msgstr "Mensajes temporales"
 
-#: src/util.rs:335
+#: src/util.rs:329
+#, rust-format
+msgid "{name} changed the disappearing messages setting to {duration}"
+msgstr ""
+
+#: src/util.rs:356
 #, rust-format
 msgid "last seen today at {time}"
 msgstr "últ. vez hoy a las {time}"
 
-#: src/util.rs:336
+#: src/util.rs:357
 #, rust-format
 msgid "last seen yesterday at {time}"
 msgstr "últ. vez ayer a las {time}"
 
-#: src/util.rs:344
+#: src/util.rs:365
 #, rust-format
 msgid "last seen {weekday} at {time}"
 msgstr "últ. vez el {weekday} a las {time}"
 
-#: src/util.rs:348
+#: src/util.rs:369
 #, rust-format
 msgid "last seen {date}"
 msgstr "últ. vez el {date}"
 
-#: src/util.rs:364
+#: src/util.rs:385
 msgid "Today"
 msgstr "Hoy"
 
-#: src/util.rs:400
+#: src/util.rs:421
 msgid "Monday"
 msgstr "Lunes"
 
-#: src/util.rs:401
+#: src/util.rs:422
 msgid "Tuesday"
 msgstr "Martes"
 
-#: src/util.rs:402
+#: src/util.rs:423
 msgid "Wednesday"
 msgstr "Miércoles"
 
-#: src/util.rs:403
+#: src/util.rs:424
 msgid "Thursday"
 msgstr "Jueves"
 
-#: src/util.rs:404
+#: src/util.rs:425
 msgid "Friday"
 msgstr "Viernes"
 
-#: src/util.rs:405
+#: src/util.rs:426
 msgid "Saturday"
 msgstr "Sábado"
 
-#: src/util.rs:406
+#: src/util.rs:427
 msgid "Sunday"
 msgstr "Domingo"
 
-#: src/util.rs:414
+#: src/util.rs:435
 msgid "January"
 msgstr "Enero"
 
-#: src/util.rs:415
+#: src/util.rs:436
 msgid "February"
 msgstr "Febrero"
 
-#: src/util.rs:416
+#: src/util.rs:437
 msgid "March"
 msgstr "Marzo"
 
-#: src/util.rs:417
+#: src/util.rs:438
 msgid "April"
 msgstr "Abril"
 
-#: src/util.rs:418
+#: src/util.rs:439
 msgid "May"
 msgstr "Mayo"
 
-#: src/util.rs:419
+#: src/util.rs:440
 msgid "June"
 msgstr "Junio"
 
-#: src/util.rs:420
+#: src/util.rs:441
 msgid "July"
 msgstr "Julio"
 
-#: src/util.rs:421
+#: src/util.rs:442
 msgid "August"
 msgstr "Agosto"
 
-#: src/util.rs:422
+#: src/util.rs:443
 msgid "September"
 msgstr "Septiembre"
 
-#: src/util.rs:423
+#: src/util.rs:444
 msgid "October"
 msgstr "Octubre"
 
-#: src/util.rs:424
+#: src/util.rs:445
 msgid "November"
 msgstr "Noviembre"
 
-#: src/util.rs:425
+#: src/util.rs:446
 msgid "December"
 msgstr "Diciembre"
 
-#: src/util.rs:581
+#: src/util.rs:637
 #, rust-format
 msgid "{seconds} s"
 msgstr "{seconds} s"
 
-#: src/util.rs:582
+#: src/util.rs:638
 #, rust-format
 msgid "{minutes} min"
 msgstr "{minutes} min"
 
-#: src/util.rs:583
+#: src/util.rs:639
 #, rust-format
 msgid "{minutes} min {seconds} s"
 msgstr "{minutes} min {seconds} s"
 
-#: src/util.rs:584
+#: src/util.rs:640
 #, rust-format
 msgid "{hours} h"
 msgstr "{hours} h"
 
-#: src/util.rs:585
+#: src/util.rs:641
 #, rust-format
 msgid "{hours} h {minutes} min"
 msgstr "{hours} h {minutes} min"
 
-#: src/ui/chats.rs:176 src/ui/chats.rs:197 src/ui/chats.rs:512
-#: src/ui/chats.rs:533
+#: src/ui/chats.rs:179 src/ui/chats.rs:200 src/ui/chats.rs:518
+#: src/ui/chats.rs:539
 msgid "Back to chats"
 msgstr "Volver a los chats"
 
-#: src/ui/chats.rs:185 src/ui/chats.rs:521 src/app.rs:3263
+#: src/ui/chats.rs:188 src/ui/chats.rs:527 src/app.rs:3857
 msgid "Starred"
 msgstr "Destacados"
 
-#: src/ui/chats.rs:210 src/ui/chats.rs:546 src/ui/chats.rs:1104
-#: src/ui/chats.rs:1940 src/ui/chats.rs:1959 src/ui/dialogs.rs:317
-msgid "Locked chats"
-msgstr "Chats bloqueados"
-
-#: src/ui/chats.rs:212 src/ui/chats.rs:548 src/ui/rail.rs:317
-msgid "Archived"
-msgstr "Archivados"
-
-#: src/ui/chats.rs:262 src/ui/conversation.rs:850
+#: src/ui/chats.rs:268 src/ui/conversation.rs:953
 msgid "Back to the calls"
 msgstr "Volver a las llamadas"
 
-#: src/ui/chats.rs:271 src/ui/chats.rs:408
+#: src/ui/chats.rs:277 src/ui/chats.rs:414
 msgid "New call"
 msgstr "Nueva llamada"
 
-#: src/ui/chats.rs:285
+#: src/ui/chats.rs:291
 msgid "Search name or number"
 msgstr "Buscar nombre o número"
 
-#: src/ui/chats.rs:318 src/ui/pane.rs:260
+#: src/ui/chats.rs:324 src/ui/pane.rs:260
 msgid "Search"
 msgstr "Buscar"
 
-#: src/ui/chats.rs:390
+#: src/ui/chats.rs:396
 msgid "New chat (⌘N)"
 msgstr "Nuevo chat (⌘N)"
 
-#: src/ui/chats.rs:392 src/ui/dialogs.rs:460
+#: src/ui/chats.rs:398 src/ui/dialogs.rs:489
 msgid "New chat"
 msgstr "Nuevo chat"
 
-#: src/ui/chats.rs:424
+#: src/ui/chats.rs:430
 msgid "Hide the chat list (⌘B)"
 msgstr "Ocultar la lista de chats (⌘B)"
 
-#: src/ui/chats.rs:426
+#: src/ui/chats.rs:432
 msgid "Hide the chat list (Ctrl+B)"
 msgstr "Ocultar la lista de chats (Ctrl+B)"
 
-#: src/ui/chats.rs:642
+#: src/ui/chats.rs:651
 msgid "Unmute all channels"
 msgstr "Activar el sonido de todos los canales"
 
-#: src/ui/chats.rs:647
+#: src/ui/chats.rs:656
 msgid "Mute all channels"
 msgstr "Silenciar todos los canales"
 
-#: src/ui/chats.rs:696
+#: src/ui/chats.rs:705
 msgid "No starred messages"
 msgstr "No hay mensajes destacados"
 
-#: src/ui/chats.rs:699
+#: src/ui/chats.rs:708
 msgid "Right-click a message and choose Star to keep it here."
 msgstr "Haz clic derecho en un mensaje y elige Destacar para guardarlo aquí."
 
-#: src/ui/chats.rs:937
+#: src/ui/chats.rs:946
 msgid "Nothing archived"
 msgstr "No hay nada archivado"
 
-#: src/ui/chats.rs:938
+#: src/ui/chats.rs:947
 msgid "Archived chats appear here."
 msgstr "Los chats archivados aparecen aquí."
 
-#: src/ui/chats.rs:942
+#: src/ui/chats.rs:951
 msgid "No unread chats"
 msgstr "No hay chats sin leer"
 
-#: src/ui/chats.rs:943
+#: src/ui/chats.rs:952
 msgid "No private chats"
 msgstr "No hay chats individuales"
 
-#: src/ui/chats.rs:944
+#: src/ui/chats.rs:953
 msgid "No channels"
 msgstr "Sin canales"
 
-#: src/ui/chats.rs:945
+#: src/ui/chats.rs:954
 msgid "No favorites yet"
 msgstr "Aún no hay favoritos"
 
-#: src/ui/chats.rs:946
+#: src/ui/chats.rs:955
 msgid "No groups"
 msgstr "No hay grupos"
 
-#: src/ui/chats.rs:950
+#: src/ui/chats.rs:959
 msgid "Choose All to see every chat."
 msgstr "Elige Todos para ver todos los chats."
 
-#: src/ui/chats.rs:954
+#: src/ui/chats.rs:963
 msgid "Loading your chats"
 msgstr "Cargando tus chats"
 
-#: src/ui/chats.rs:955
+#: src/ui/chats.rs:964
 msgid "Receiving history from your phone."
 msgstr "Recibiendo el historial desde tu teléfono."
 
-#: src/ui/chats.rs:959
+#: src/ui/chats.rs:968
 msgid "No chats yet"
 msgstr "Todavía no hay chats"
 
-#: src/ui/chats.rs:960
+#: src/ui/chats.rs:969
 msgid "Use New chat to message a contact or yourself."
 msgstr "Usa Nuevo chat para escribirle a un contacto o a ti mismo."
 
-#: src/ui/chats.rs:1133
+#: src/ui/chats.rs:1113 src/ui/chats.rs:1986 src/ui/dialogs.rs:352
+msgid "Locked chats"
+msgstr "Chats bloqueados"
+
+#: src/ui/chats.rs:1142
 msgid "No locked chats"
 msgstr "No hay chats bloqueados"
 
-#: src/ui/chats.rs:1136
+#: src/ui/chats.rs:1145
 msgid "Lock a chat from its context menu to hide it here."
 msgstr "Bloquea un chat desde su menú contextual para ocultarlo aquí."
 
-#: src/ui/chats.rs:1209
+#: src/ui/chats.rs:1218
 msgid "No results"
 msgstr "Sin resultados"
 
-#: src/ui/chats.rs:1210
+#: src/ui/chats.rs:1219
 msgid "Try another name, number, or message text."
 msgstr "Prueba con otro nombre, número o texto del mensaje."
 
-#: src/ui/chats.rs:1220 src/ui/settings.rs:440 src/i18n_extra.rs:54
+#: src/ui/chats.rs:1229 src/ui/settings.rs:438 src/i18n_extra.rs:54
 #: src/ui/rail.rs:293
 msgid "Chats"
 msgstr "Chats"
 
-#: src/ui/chats.rs:1234
+#: src/ui/chats.rs:1273
 msgid "Messages"
 msgstr "Mensajes"
 
-#: src/ui/chats.rs:1240
+#: src/ui/chats.rs:1279
 msgid "Contacts"
 msgstr "Contactos"
 
-#: src/ui/chats.rs:1315
+#: src/ui/chats.rs:1362
 msgid "You: "
 msgstr "Tú: "
 
-#: src/ui/chats.rs:1375 src/app.rs:2619
+#: src/ui/chats.rs:1422 src/app.rs:3123
 msgid "Message yourself"
 msgstr "Mensaje para ti"
 
-#: src/ui/chats.rs:1588 src/ui/conversation.rs:901
+#: src/ui/chats.rs:1636 src/ui/conversation.rs:1020
 #, rust-format
-msgid "{one} is typing…"
-msgstr "{one} está escribiendo…"
+msgid "{name} is recording audio…"
+msgstr ""
 
-#: src/ui/chats.rs:1591 src/ui/conversation.rs:911
+#: src/ui/chats.rs:1641 src/ui/conversation.rs:1040
+#, fuzzy
+msgid "recording audio…"
+msgstr "Enviando el paquete de stickers…"
+
+#: src/ui/chats.rs:1643 src/ui/conversation.rs:1042
 msgid "typing…"
 msgstr "escribiendo…"
 
-#: src/ui/chats.rs:1603
+#: src/ui/chats.rs:1655
 msgid "Draft:"
 msgstr "Borrador:"
 
-#: src/ui/chats.rs:1693 src/ui/chats.rs:2091 src/ui/picker.rs:1694
+#: src/ui/chats.rs:1745 src/ui/chats.rs:2142 src/ui/picker.rs:1777
 msgid "Remove from favorites"
 msgstr "Quitar de favoritos"
 
-#: src/ui/chats.rs:1695 src/ui/chats.rs:2093 src/ui/conversation.rs:5754
-#: src/ui/conversation.rs:6241 src/ui/dialogs.rs:1349 src/ui/picker.rs:1695
+#: src/ui/chats.rs:1747 src/ui/chats.rs:2144 src/ui/conversation.rs:7111
+#: src/ui/conversation.rs:7636 src/ui/dialogs.rs:1426 src/ui/picker.rs:1778
 msgid "Add to favorites"
 msgstr "Añadir a favoritos"
 
-#: src/ui/chats.rs:1700 src/ui/chats.rs:2059
+#: src/ui/chats.rs:1752 src/ui/chats.rs:2109
 msgid "Mark as read"
 msgstr "Marcar como leído"
 
-#: src/ui/chats.rs:1701 src/ui/chats.rs:2069
+#: src/ui/chats.rs:1753 src/ui/chats.rs:2119
 msgid "Mark as unread"
 msgstr "Marcar como no leído"
 
-#: src/ui/chats.rs:1702 src/ui/chats.rs:2081 src/ui/conversation.rs:635
-#: src/ui/conversation.rs:676
+#: src/ui/chats.rs:1754 src/ui/chats.rs:2127 src/ui/conversation.rs:678
 msgid "Pin to top"
 msgstr "Fijar arriba"
 
-#: src/ui/chats.rs:1704 src/ui/chats.rs:2105 src/ui/conversation.rs:636
-#: src/ui/conversation.rs:687 src/ui/info.rs:690
+#: src/ui/chats.rs:1756 src/ui/chats.rs:2152 src/ui/conversation.rs:681
+#: src/ui/info.rs:884
 msgid "Unarchive"
 msgstr "Desarchivar"
 
-#: src/ui/chats.rs:1705 src/ui/chats.rs:2117 src/ui/conversation.rs:607
-#: src/ui/dialogs.rs:1680 src/ui/info.rs:596
+#: src/ui/chats.rs:1757 src/ui/chats.rs:2164 src/ui/conversation.rs:651
+#: src/ui/dialogs.rs:1763 src/ui/info.rs:790
 msgid "Leave group"
 msgstr "Salir del grupo"
 
-#: src/ui/chats.rs:1706 src/ui/chats.rs:2115 src/ui/conversation.rs:605
-#: src/ui/dialogs.rs:1678 src/ui/info.rs:594
+#: src/ui/chats.rs:1758 src/ui/chats.rs:2162 src/ui/conversation.rs:649
+#: src/ui/dialogs.rs:1761 src/ui/info.rs:788
 msgid "Leave channel"
 msgstr "Salir del canal"
 
-#: src/ui/chats.rs:1707 src/ui/chats.rs:2140
-msgid "Mute for 8 hours"
-msgstr "Silenciar por 8 horas"
+#: src/ui/chats.rs:1761 src/ui/chats.rs:2239 src/ui/chats.rs:2510
+#: src/ui/conversation.rs:686 src/ui/dialogs.rs:1136
+msgid "Clear chat"
+msgstr "Vaciar chat"
 
-#: src/ui/chats.rs:1708 src/ui/chats.rs:2144
-msgid "Mute for a week"
-msgstr "Silenciar por una semana"
-
-#: src/ui/chats.rs:1709 src/ui/chats.rs:2147
-msgid "Mute indefinitely"
-msgstr "Silenciar siempre"
-
-#: src/ui/chats.rs:1710 src/ui/chats.rs:2166
-msgid "Unlock chat"
-msgstr "Desbloquear chat"
-
-#: src/ui/chats.rs:1711 src/ui/chats.rs:2183 src/ui/conversation.rs:639
-#: src/ui/conversation.rs:728 src/ui/conversation.rs:8098 src/ui/info.rs:656
-msgid "Copy number"
-msgstr "Copiar número"
-
-#: src/ui/chats.rs:1720 src/ui/chats.rs:2268
-msgid "Notification sound"
-msgstr "Sonido de notificación"
-
-#: src/ui/chats.rs:1721 src/ui/chats.rs:2310
-msgid "Voice message speed"
-msgstr "Velocidad de los mensajes de voz"
-
-#: src/ui/chats.rs:1722 src/ui/labels.rs:178 src/ui/labels.rs:223
-msgid "Labels"
-msgstr "Etiquetas"
-
-#: src/ui/chats.rs:2079 src/ui/conversation.rs:674 src/ui/info.rs:681
-msgid "Unpin"
-msgstr "Desfijar"
-
-#: src/ui/chats.rs:2107 src/ui/conversation.rs:689 src/ui/info.rs:692
-msgid "Archive"
-msgstr "Archivar"
-
-#: src/ui/chats.rs:2133 src/ui/conversation.rs:9106 src/ui/call.rs:522
-#: src/ui/info.rs:664
-msgid "Unmute"
-msgstr "Activar sonido"
-
-#: src/ui/chats.rs:2168 src/ui/dialogs.rs:429
-msgid "Lock chat"
-msgstr "Bloquear chat"
-
-#: src/ui/chats.rs:2192 src/ui/conversation.rs:633 src/ui/conversation.rs:657
-msgid "Info"
-msgstr "Info."
-
-#: src/ui/chats.rs:2204
+#: src/ui/chats.rs:1762 src/ui/chats.rs:2251
 msgid "Delete chat"
 msgstr "Eliminar chat"
 
-#: src/ui/chats.rs:2232
+#: src/ui/chats.rs:1772 src/ui/chats.rs:2339 src/ui/conversation.rs:10954
+#: src/ui/call.rs:529 src/ui/info.rs:864
+msgid "Mute"
+msgstr "Silenciar"
+
+#: src/ui/chats.rs:1775 src/ui/labels.rs:178 src/ui/labels.rs:223
+msgid "Labels"
+msgstr "Etiquetas"
+
+#: src/ui/chats.rs:2125 src/ui/conversation.rs:676 src/ui/info.rs:875
+msgid "Unpin"
+msgstr "Desfijar"
+
+#: src/ui/chats.rs:2154 src/ui/conversation.rs:683 src/ui/info.rs:886
+msgid "Archive"
+msgstr "Archivar"
+
+#: src/ui/chats.rs:2180 src/ui/conversation.rs:10952 src/ui/call.rs:522
+#: src/ui/info.rs:858
+msgid "Unmute"
+msgstr "Activar sonido"
+
+#: src/ui/chats.rs:2191
+msgid "Unlock chat"
+msgstr "Desbloquear chat"
+
+#: src/ui/chats.rs:2193 src/ui/dialogs.rs:458
+msgid "Lock chat"
+msgstr "Bloquear chat"
+
+#: src/ui/chats.rs:2217 src/ui/conversation.rs:687 src/ui/conversation.rs:9865
+#: src/ui/info.rs:850
+msgid "Copy number"
+msgstr "Copiar número"
+
+#: src/ui/chats.rs:2226 src/ui/conversation.rs:674
+msgid "Info"
+msgstr "Info."
+
+#: src/ui/chats.rs:2278
 msgid "Default"
 msgstr "Predeterminado"
 
-#: src/ui/chats.rs:2239 src/ui/settings.rs:1972
-msgid "Pidgin alert"
-msgstr "Alerta de Pidgin"
-
-#: src/ui/chats.rs:2243
+#: src/ui/chats.rs:2279
 msgid "System sound"
 msgstr "Sonido del sistema"
 
-#: src/ui/chats.rs:2247
+#: src/ui/chats.rs:2280
 msgid "No sound"
 msgstr "Sin sonido"
 
-#: src/ui/chats.rs:2252 src/ui/settings.rs:1979
+#: src/ui/chats.rs:2290 src/ui/settings.rs:1995
 msgid "Custom"
 msgstr "Personalizado"
 
-#: src/ui/chats.rs:2257 src/ui/settings.rs:2012
+#: src/ui/chats.rs:2295 src/ui/settings.rs:2028
 msgid "Choose a file…"
 msgstr "Elegir un archivo…"
 
-#: src/ui/chats.rs:2296
+#: src/ui/chats.rs:2302
+msgid "Notification sound"
+msgstr "Sonido de notificación"
+
+#: src/ui/chats.rs:2329
+#, fuzzy
+msgid "8 hours"
+msgstr "24 horas"
+
+#: src/ui/chats.rs:2333
+msgid "1 week"
+msgstr ""
+
+#: src/ui/chats.rs:2336
+msgid "Always"
+msgstr ""
+
+#: src/ui/chats.rs:2354
 #, rust-format
 msgid "Default ({})"
 msgstr "Predeterminada ({})"
 
-#: src/ui/conversation.rs:255
+#: src/ui/chats.rs:2368
+msgid "Voice message speed"
+msgstr "Velocidad de los mensajes de voz"
+
+#: src/ui/conversation.rs:267
 #, rust-format
 msgid "Pinned message {index} of {count}: {text}"
 msgstr "Mensaje fijado {index} de {count}: {text}"
 
-#: src/ui/conversation.rs:299
+#: src/ui/conversation.rs:311
 msgid "Your chats appear on the left as they load."
 msgstr "Tus chats aparecen a la izquierda a medida que cargan."
 
-#: src/ui/conversation.rs:301
+#: src/ui/conversation.rs:313
 msgid "Select a chat on the left."
 msgstr "Selecciona un chat a la izquierda."
 
-#: src/ui/conversation.rs:311
+#: src/ui/conversation.rs:323
 msgid "Ctrl+K to search · ? for keyboard shortcuts"
 msgstr "Ctrl+K para buscar · ? para atajos de teclado"
 
-#: src/ui/conversation.rs:609
+#: src/ui/conversation.rs:653
 msgid "Select messages"
 msgstr "Seleccionar mensajes"
 
-#: src/ui/conversation.rs:624
+#: src/ui/conversation.rs:668
 msgid "More"
 msgstr "Más"
 
-#: src/ui/conversation.rs:637 src/ui/conversation.rs:701 src/ui/dialogs.rs:1052
-msgid "Clear chat"
-msgstr "Vaciar chat"
+#: src/ui/conversation.rs:685
+msgid "Export chat…"
+msgstr ""
 
-#: src/ui/conversation.rs:640 src/ui/conversation.rs:737
+#: src/ui/conversation.rs:688
 msgid "Close chat"
 msgstr "Cerrar chat"
 
-#: src/ui/conversation.rs:749 src/ui/call.rs:129 src/ui/call.rs:577
-msgid "Hang up"
-msgstr "Colgar"
-
-#: src/ui/conversation.rs:809 src/ui/pane.rs:224
+#: src/ui/conversation.rs:689 src/ui/conversation.rs:911 src/ui/pane.rs:224
 msgid "Search messages"
 msgstr "Buscar mensajes"
 
-#: src/ui/conversation.rs:905
-#, rust-format
-msgid "{names} and {last} are typing…"
-msgstr "{names} y {last} están escribiendo…"
+#: src/ui/conversation.rs:850 src/ui/call.rs:129 src/ui/call.rs:577
+msgid "Hang up"
+msgstr "Colgar"
 
-#: src/ui/conversation.rs:919 src/app.rs:2568
+#: src/ui/conversation.rs:1024
+#, rust-format
+msgid "{names} and {last} are recording audio…"
+msgstr ""
+
+#: src/ui/conversation.rs:1050 src/app.rs:3072
 msgid "Group"
 msgstr "Grupo"
 
-#: src/ui/conversation.rs:929 src/ui/info.rs:493
+#: src/ui/conversation.rs:1060 src/ui/info.rs:547
 msgid "online"
 msgstr "en línea"
 
-#: src/ui/conversation.rs:1409
+#: src/ui/conversation.rs:1554
+#, fuzzy
+msgid "You blocked this contact"
+msgstr "Saliste de este canal"
+
+#: src/ui/conversation.rs:1566
 msgid "You left this channel"
 msgstr "Saliste de este canal"
 
-#: src/ui/conversation.rs:1413
+#: src/ui/conversation.rs:1570
 msgid "Channels are read-only in ZapFast"
 msgstr "Los canales son de solo lectura en ZapFast"
 
-#: src/ui/conversation.rs:1425
-msgid "Locked chats are read-only in ZapFast"
-msgstr "Los chats bloqueados son de solo lectura en ZapFast"
-
-#: src/ui/conversation.rs:1442
+#: src/ui/conversation.rs:1593
 msgid "You left this group"
 msgstr "Saliste de este grupo"
 
-#: src/ui/conversation.rs:1450
+#: src/ui/conversation.rs:1601
 msgid "Only"
 msgstr "Solo los"
 
-#: src/ui/conversation.rs:1451
+#: src/ui/conversation.rs:1602
 msgid "admins"
 msgstr "administradores"
 
-#: src/ui/conversation.rs:1454
+#: src/ui/conversation.rs:1605
 msgid "can send messages"
 msgstr "pueden enviar mensajes"
 
-#: src/ui/conversation.rs:1493
+#: src/ui/conversation.rs:1644
 msgid "Original group message unavailable"
 msgstr "El mensaje original del grupo no está disponible"
 
-#: src/ui/conversation.rs:1501 src/ui/conversation.rs:2243
+#: src/ui/conversation.rs:1652 src/ui/conversation.rs:2554
 msgid "Cancel reply (Esc)"
 msgstr "Cancelar respuesta (Esc)"
 
-#: src/ui/conversation.rs:1616
+#: src/ui/conversation.rs:1772
 msgid "Attach"
 msgstr "Adjuntar"
 
-#: src/ui/conversation.rs:1632
+#: src/ui/conversation.rs:1788
 msgid "Emoji, GIFs, and stickers"
 msgstr "Emoji, GIF y stickers"
 
-#: src/ui/conversation.rs:1712 src/ui/quick_reply.rs:121
+#: src/ui/conversation.rs:1871 src/ui/quick_reply.rs:121
 msgid "Type a message"
 msgstr "Escribe un mensaje"
 
-#: src/ui/conversation.rs:1715
+#: src/ui/conversation.rs:1874
 msgid "Add a caption"
 msgstr "Añade un título"
 
-#: src/ui/conversation.rs:1782 src/ui/conversation.rs:8097
-#: src/ui/dialogs.rs:1970 src/ui/info.rs:622
-msgid "Message"
-msgstr "Mensaje"
+#: src/ui/conversation.rs:1975
+msgid "Bold"
+msgstr ""
 
-#: src/ui/conversation.rs:1864
+#: src/ui/conversation.rs:1976
+msgid "Italic"
+msgstr ""
+
+#: src/ui/conversation.rs:1977
+msgid "Strikethrough"
+msgstr ""
+
+#: src/ui/conversation.rs:1978
+msgid "Monospace"
+msgstr ""
+
+#: src/ui/conversation.rs:2098
 msgid "Record a voice message"
 msgstr "Grabar un mensaje de voz"
 
-#: src/ui/conversation.rs:1877 src/ui/conversation.rs:9861
-#: src/ui/dialogs.rs:1341 src/ui/locations.rs:87
+#: src/ui/conversation.rs:2111 src/ui/conversation.rs:11735
+#: src/ui/dialogs.rs:1418 src/ui/locations.rs:87
 msgid "Send"
 msgstr "Enviar"
 
-#: src/ui/conversation.rs:1917
+#: src/ui/conversation.rs:2152
 msgid ""
 "Enter sends · Shift+Enter for a new line · *bold* _italic_ ~strike~ · Ctrl+V "
 "pastes a picture"
@@ -787,457 +818,525 @@ msgstr ""
 "Enter envía · Shift+Enter para nueva línea · *negrita* _cursiva_ ~tachado~ · "
 "Ctrl+V pega una imagen"
 
-#: src/ui/conversation.rs:1919
+#: src/ui/conversation.rs:2154
 msgid "Ctrl+Enter sends · *bold* _italic_ ~strike~ · Ctrl+V pastes a picture"
 msgstr ""
 "Ctrl+Enter envía · *negrita* _cursiva_ ~tachado~ · Ctrl+V pega una imagen"
 
-#: src/ui/conversation.rs:1930
+#: src/ui/conversation.rs:2165
 msgid "Hide shortcut hints (bring them back from Keyboard shortcuts)"
 msgstr "Ocultar sugerencias de atajos (se recuperan en Atajos de teclado)"
 
-#: src/ui/conversation.rs:1945
+#: src/ui/conversation.rs:2180
 #, rust-format
 msgid "All shortcuts ({})"
 msgstr "Todos los atajos ({})"
 
-#: src/ui/conversation.rs:2073
+#: src/ui/conversation.rs:2313
 msgid "Send files"
 msgstr "Enviar archivos"
 
-#: src/ui/conversation.rs:2079
+#: src/ui/conversation.rs:2319
 msgid "Send as document"
 msgstr "Enviar como documento"
 
-#: src/ui/conversation.rs:2083 src/ui/locations.rs:16
+#: src/ui/conversation.rs:2323 src/ui/locations.rs:16
 msgid "Send location"
 msgstr "Enviar ubicación"
 
-#: src/ui/conversation.rs:2088
+#: src/ui/conversation.rs:2328 src/ui/polls.rs:16
 msgid "Create poll"
 msgstr "Crear encuesta"
 
-#: src/ui/conversation.rs:2150
+#: src/ui/conversation.rs:2390
 #, rust-format
 msgid "Voice message ({duration}) not sent"
 msgstr "Mensaje de voz ({duration}) no enviado"
 
-#: src/ui/conversation.rs:2152
+#: src/ui/conversation.rs:2392
 msgid "Discard voice message"
 msgstr "Descartar mensaje de voz"
 
-#: src/ui/conversation.rs:2188
+#: src/ui/conversation.rs:2424
+#, fuzzy, rust-format
+msgid "Cancel sending {name}"
+msgstr "Info. del mensaje"
+
+#: src/ui/conversation.rs:2432
+#, fuzzy, rust-format
+msgid "Sending {name}"
+msgstr "Info. del mensaje"
+
+#: src/ui/conversation.rs:2438
+#, rust-format
+msgid "{time} left"
+msgstr ""
+
+#: src/ui/conversation.rs:2499
 msgid "Editing message"
 msgstr "Editando mensaje"
 
-#: src/ui/conversation.rs:2199
+#: src/ui/conversation.rs:2510
 msgid "Stop editing (Esc)"
 msgstr "Dejar de editar (Esc)"
 
-#: src/ui/conversation.rs:2214 src/ui/conversation.rs:3123
-#: src/ui/conversation.rs:4952 src/ui/conversation.rs:5642 src/ui/call.rs:1017
-#: src/app/calls.rs:135 src/app.rs:2541 src/app.rs:2556 src/app.rs:2601
-#: src/app.rs:2620 src/app.rs:2754 src/app.rs:2841 src/ui/accounts.rs:34
+#: src/ui/conversation.rs:2525 src/ui/conversation.rs:3847
+#: src/ui/conversation.rs:3984 src/ui/conversation.rs:4041
+#: src/ui/conversation.rs:4898 src/ui/conversation.rs:6964 src/ui/call.rs:1017
+#: src/app/calls.rs:135 src/app.rs:3045 src/app.rs:3060 src/app.rs:3105
+#: src/app.rs:3124 src/app.rs:3267 src/app.rs:3354 src/ui/accounts.rs:36
 #: src/ui/quick_reply.rs:166
 msgid "You"
 msgstr "Tú"
 
-#: src/ui/conversation.rs:2229
+#: src/ui/conversation.rs:2540
 #, rust-format
 msgid "Replying to {who}"
 msgstr "Respondiendo a {who}"
 
-#: src/ui/conversation.rs:2418
+#: src/ui/conversation.rs:2580
+#, fuzzy
+msgid "Loading preview…"
+msgstr "Cargando…"
+
+#: src/ui/conversation.rs:2591
+msgid "Remove link preview"
+msgstr ""
+
+#: src/ui/conversation.rs:2908
 msgid "You pinned a message"
 msgstr "Has fijado un mensaje"
 
-#: src/ui/conversation.rs:2421
+#: src/ui/conversation.rs:2911
 msgid "A message was pinned"
 msgstr "Se ha fijado un mensaje"
 
-#: src/ui/conversation.rs:2423
+#: src/ui/conversation.rs:2913
 #, rust-format
 msgid "{} pinned a message"
 msgstr "{} ha fijado un mensaje"
 
-#: src/ui/conversation.rs:2940 src/notify.rs:19
+#: src/ui/conversation.rs:3659 src/notify.rs:19
 #, rust-format
 msgid "{} unread message"
 msgid_plural "{} unread messages"
 msgstr[0] "{} mensaje no leído"
 msgstr[1] "{} mensajes no leídos"
 
-#: src/ui/conversation.rs:3138
+#: src/ui/conversation.rs:3863
 #, rust-format
 msgid "Select message from {sender}, {time}: {summary}"
 msgstr "Seleccionar mensaje de {sender} ({time}): {summary}"
 
-#: src/ui/conversation.rs:3516
+#: src/ui/conversation.rs:4454
 msgid "Newest message"
 msgstr "Mensaje más reciente"
 
-#: src/ui/conversation.rs:3575
+#: src/ui/conversation.rs:4513
 msgid "Loading older messages from your phone…"
 msgstr "Cargando mensajes anteriores desde tu teléfono…"
 
-#: src/ui/conversation.rs:3589
+#: src/ui/conversation.rs:4527
 msgid "Loading messages from your phone…"
 msgstr "Cargando mensajes desde tu teléfono…"
 
-#: src/ui/conversation.rs:3596
+#: src/ui/conversation.rs:4534
 msgid "No messages here yet"
 msgstr "Todavía no hay mensajes aquí"
 
-#: src/ui/conversation.rs:3735
-msgid "React to your message"
-msgstr "Reaccionar a tu mensaje"
-
-#: src/ui/conversation.rs:3737
-#, rust-format
-msgid "React to {sender}'s message"
-msgstr "Reaccionar al mensaje de {sender}"
-
-#: src/ui/conversation.rs:3825 src/ui/image_preview.rs:363
+#: src/ui/conversation.rs:4799 src/ui/image_preview.rs:399
 msgid "React"
 msgstr "Reaccionar"
 
-#: src/ui/conversation.rs:3838 src/ui/conversation.rs:3858
-#: src/ui/conversation.rs:5741 src/ui/conversation.rs:6052
-#: src/ui/image_preview.rs:350 src/app/quick_reply.rs:123
+#: src/ui/conversation.rs:4826 src/ui/conversation.rs:7098
+#: src/ui/conversation.rs:7427 src/ui/image_preview.rs:386
+#: src/app/quick_reply.rs:123
 msgid "Reply"
 msgstr "Responder"
 
-#: src/ui/conversation.rs:4283
+#: src/ui/conversation.rs:4850 src/ui/conversation.rs:7104
+#: src/ui/conversation.rs:7483 src/ui/dialogs.rs:791 src/ui/dialogs.rs:810
+#: src/ui/image_preview.rs:419
+msgid "Forward"
+msgstr "Reenviar"
+
+#: src/ui/conversation.rs:5322
 msgid "Group calls happen on the phone"
 msgstr "Las llamadas grupales se hacen en el teléfono"
 
-#: src/ui/conversation.rs:4349
+#: src/ui/conversation.rs:5452
 #, rust-format
 msgid "Playback speed {label}"
 msgstr "Velocidad de reproducción {label}"
 
-#: src/ui/conversation.rs:5179
+#: src/ui/conversation.rs:6451
 msgid "Forwarded"
 msgstr "Reenviado"
 
-#: src/ui/conversation.rs:5260 src/ui/conversation.rs:5525
+#: src/ui/conversation.rs:6532 src/ui/conversation.rs:6797 src/a11y.rs:133
 msgid "edited"
 msgstr "editado"
 
-#: src/ui/conversation.rs:5484 src/ui/conversation.rs:5762
-#: src/ui/conversation.rs:6325 src/ui/message_info.rs:17
+#: src/ui/conversation.rs:6756 src/ui/conversation.rs:7119
+#: src/ui/conversation.rs:7720 src/ui/message_info.rs:17
 msgid "Message info"
 msgstr "Info. del mensaje"
 
-#: src/ui/conversation.rs:5742 src/ui/conversation.rs:6071
+#: src/ui/conversation.rs:7034
+#, fuzzy
+msgid "Remove reaction"
+msgstr "Quitar tu reacción"
+
+#: src/ui/conversation.rs:7099 src/ui/conversation.rs:7444
 msgid "Reply privately"
 msgstr "Responder en privado"
 
-#: src/ui/conversation.rs:5743 src/ui/conversation.rs:6083
+#: src/ui/conversation.rs:7100 src/ui/conversation.rs:7456
 msgid "Star"
 msgstr "Destacar"
 
-#: src/ui/conversation.rs:5744 src/ui/conversation.rs:6081
+#: src/ui/conversation.rs:7101 src/ui/conversation.rs:7454
 msgid "Unstar"
 msgstr "Quitar destacado"
 
-#: src/ui/conversation.rs:5745 src/ui/conversation.rs:6099
+#: src/ui/conversation.rs:7102 src/ui/conversation.rs:7470
 msgid "Pin message"
 msgstr "Fijar mensaje"
 
-#: src/ui/conversation.rs:5746 src/ui/conversation.rs:6097
+#: src/ui/conversation.rs:7103 src/ui/conversation.rs:7468
 msgid "Unpin message"
 msgstr "Dejar de fijar"
 
-#: src/ui/conversation.rs:5747 src/ui/conversation.rs:6115
-#: src/ui/dialogs.rs:590 src/ui/dialogs.rs:785 src/ui/image_preview.rs:382
-msgid "Forward"
-msgstr "Reenviar"
-
-#: src/ui/conversation.rs:5748 src/ui/conversation.rs:6131
+#: src/ui/conversation.rs:7105 src/ui/conversation.rs:7495
 msgid "Open in the viewer"
 msgstr "Abrir en la vista previa"
 
-#: src/ui/conversation.rs:5749 src/ui/conversation.rs:6146
+#: src/ui/conversation.rs:7106 src/ui/conversation.rs:7509
 msgid "Select"
 msgstr "Seleccionar"
 
-#: src/ui/conversation.rs:5750 src/ui/conversation.rs:6180
+#: src/ui/conversation.rs:7107 src/ui/conversation.rs:7575
 msgid "Copy text"
 msgstr "Copiar texto"
 
-#: src/ui/conversation.rs:5751 src/ui/conversation.rs:6198
+#: src/ui/conversation.rs:7108 src/ui/conversation.rs:7591
 msgid "Edit"
 msgstr "Editar"
 
-#: src/ui/conversation.rs:5752 src/ui/conversation.rs:5938
-#: src/ui/conversation.rs:6214 src/ui/conversation.rs:9952
+#: src/ui/conversation.rs:7109 src/ui/conversation.rs:7299
+#: src/ui/conversation.rs:7607 src/ui/conversation.rs:7950
+#: src/ui/conversation.rs:11829
 msgid "Delete for everyone"
 msgstr "Eliminar para todos"
 
-#: src/ui/conversation.rs:5753 src/ui/conversation.rs:5943
-#: src/ui/conversation.rs:6227 src/ui/conversation.rs:9953
+#: src/ui/conversation.rs:7110 src/ui/conversation.rs:7304
+#: src/ui/conversation.rs:7616 src/ui/conversation.rs:11830
 msgid "Delete for me"
 msgstr "Eliminar para mí"
 
-#: src/ui/conversation.rs:5755 src/ui/conversation.rs:6250
+#: src/ui/conversation.rs:7112 src/ui/conversation.rs:7645
 msgid "Open in system player"
 msgstr "Abrir en el reproductor del sistema"
 
-#: src/ui/conversation.rs:5756 src/ui/conversation.rs:6252
-#: src/ui/picker.rs:1588
+#: src/ui/conversation.rs:7113 src/ui/conversation.rs:7647
+#: src/ui/picker.rs:1671
 msgid "Open file"
 msgstr "Abrir archivo"
 
-#: src/ui/conversation.rs:5757 src/ui/conversation.rs:6262
-#: src/ui/image_preview.rs:266 src/ui/image_preview.rs:591
+#: src/ui/conversation.rs:7114 src/ui/conversation.rs:7657
+#: src/ui/image_preview.rs:302 src/ui/image_preview.rs:628
 msgid "Copy image"
 msgstr "Copiar imagen"
 
-#: src/ui/conversation.rs:5758 src/ui/conversation.rs:6271
-#: src/ui/image_preview.rs:407 src/ui/image_preview.rs:592
+#: src/ui/conversation.rs:7115 src/ui/conversation.rs:7666
+#: src/ui/image_preview.rs:444 src/ui/image_preview.rs:629
 msgid "Save as…"
 msgstr "Guardar como…"
 
-#: src/ui/conversation.rs:5759 src/ui/conversation.rs:6283
+#: src/ui/conversation.rs:7116 src/ui/conversation.rs:7678
 msgid "Show in folder"
 msgstr "Mostrar en la carpeta"
 
-#: src/ui/conversation.rs:5760 src/ui/conversation.rs:6296
-#: src/ui/conversation.rs:7394
+#: src/ui/conversation.rs:7117 src/ui/conversation.rs:7691
+#: src/ui/conversation.rs:9072
 msgid "Downloading…"
 msgstr "Descargando…"
 
-#: src/ui/conversation.rs:5761 src/ui/conversation.rs:6298
-#: src/ui/conversation.rs:9554 src/ui/image_preview.rs:423
-#: src/ui/image_preview.rs:778 src/ui/image_preview.rs:786
-#: src/ui/image_preview.rs:868
+#: src/ui/conversation.rs:7118 src/ui/conversation.rs:7693
+#: src/ui/conversation.rs:11405 src/ui/image_preview.rs:460
+#: src/ui/image_preview.rs:815 src/ui/image_preview.rs:823
+#: src/ui/image_preview.rs:905
 msgid "Download"
 msgstr "Descargar"
 
-#: src/ui/conversation.rs:5763 src/ui/conversation.rs:6337
+#: src/ui/conversation.rs:7120 src/ui/conversation.rs:7732
 msgid "Reload earlier messages"
 msgstr "Volver a cargar mensajes anteriores"
 
-#: src/ui/conversation.rs:5764 src/ui/conversation.rs:6350
+#: src/ui/conversation.rs:7121 src/ui/conversation.rs:7745
 msgid "Copy message ID"
 msgstr "Copiar ID del mensaje"
 
-#: src/ui/conversation.rs:5999
+#: src/ui/conversation.rs:7364
 msgid "Remove your reaction"
 msgstr "Quitar tu reacción"
 
-#: src/ui/conversation.rs:6034
+#: src/ui/conversation.rs:7381
 msgid "React with any emoji"
 msgstr "Reaccionar con cualquier emoji"
 
-#: src/ui/conversation.rs:6576
+#: src/ui/conversation.rs:7540 src/ui/conversation.rs:7946
+#, rust-format
+msgid "{option}, unavailable: {reason}"
+msgstr ""
+
+#: src/ui/conversation.rs:7788
+#, rust-format
+msgid "Card {number}: {button}"
+msgstr ""
+
+#: src/ui/conversation.rs:7830
+#, fuzzy
+msgid "Go to replied message"
+msgstr "No hay mensajes destacados"
+
+#: src/ui/conversation.rs:7841
+#, rust-format
+msgid "Info about {name}"
+msgstr ""
+
+#: src/ui/conversation.rs:7919
+#, fuzzy
+msgid "Only messages you sent"
+msgstr "No se encontraron mensajes"
+
+#: src/ui/conversation.rs:7921
+msgid "The time limit has passed"
+msgstr ""
+
+#: src/ui/conversation.rs:8246
 msgid "Interactive message"
 msgstr "Mensaje interactivo"
 
-#: src/ui/conversation.rs:6781
+#: src/ui/conversation.rs:8451
 #, rust-format
 msgid "Updated {time}"
 msgstr "Actualizada a las {time}"
 
-#: src/ui/conversation.rs:6796 src/ui/conversation.rs:7002
+#: src/ui/conversation.rs:8466 src/ui/conversation.rs:8675
 msgid "Open WhatsApp on your phone to follow it."
 msgstr "Abre WhatsApp en tu teléfono para seguirla."
 
-#: src/ui/conversation.rs:6840
+#: src/ui/conversation.rs:8510
 msgid "Chat"
 msgstr "Chatear"
 
-#: src/ui/conversation.rs:6855
+#: src/ui/conversation.rs:8525
 msgid "Add"
 msgstr "Agregar"
 
-#: src/ui/conversation.rs:6903
+#: src/ui/conversation.rs:8573
 #, rust-format
 msgid "{} sticker"
 msgid_plural "{} stickers"
 msgstr[0] "{} sticker"
 msgstr[1] "{} stickers"
 
-#: src/ui/conversation.rs:6916
+#: src/ui/conversation.rs:8586
 msgid "View stickers"
 msgstr "Ver stickers"
 
-#: src/ui/conversation.rs:7020
+#: src/ui/conversation.rs:8693
 msgid "View once photo. For your privacy, it opens only on your phone."
 msgstr ""
 "Foto de visualización única. Por tu privacidad, solo se abre en tu teléfono."
 
-#: src/ui/conversation.rs:7024
+#: src/ui/conversation.rs:8697
 msgid "View once video. For your privacy, it opens only on your phone."
 msgstr ""
 "Video de visualización única. Por tu privacidad, solo se abre en tu teléfono."
 
-#: src/ui/conversation.rs:7028
+#: src/ui/conversation.rs:8701
 msgid "View once voice message. For your privacy, it opens only on your phone."
 msgstr ""
 "Mensaje de voz de reproducción única. Por tu privacidad, solo se abre en tu "
 "teléfono."
 
-#: src/ui/conversation.rs:7032
+#: src/ui/conversation.rs:8705
 msgid "View once audio. For your privacy, it opens only on your phone."
 msgstr ""
 "Audio de reproducción única. Por tu privacidad, solo se abre en tu teléfono."
 
-#: src/ui/conversation.rs:7036
+#: src/ui/conversation.rs:8709
 msgid "View once message. For your privacy, it opens only on your phone."
 msgstr ""
 "Mensaje de visualización única. Por privacidad, solo se abre en tu teléfono."
 
-#: src/ui/conversation.rs:7038
+#: src/ui/conversation.rs:8711
 msgid "This message can only be seen on your phone."
 msgstr "Este mensaje solo se puede ver en tu teléfono."
 
-#: src/ui/conversation.rs:7062
+#: src/ui/conversation.rs:8735
 #, rust-format
 msgid "Unsupported: {what}"
 msgstr "No compatible: {what}"
 
-#: src/ui/conversation.rs:7251
+#: src/ui/conversation.rs:8929
 msgid "Previous card"
 msgstr "Tarjeta anterior"
 
-#: src/ui/conversation.rs:7253
+#: src/ui/conversation.rs:8931
 msgid "Next card"
 msgstr "Tarjeta siguiente"
 
-#: src/ui/conversation.rs:7376
+#: src/ui/conversation.rs:9054
 msgid "Save all…"
 msgstr "Guardar todo…"
 
-#: src/ui/conversation.rs:7396
+#: src/ui/conversation.rs:9074
 msgid "Download all"
 msgstr "Descargar todo"
 
-#: src/ui/conversation.rs:7529 src/ui/conversation.rs:7684
+#: src/ui/conversation.rs:9213 src/ui/conversation.rs:9368
 #, rust-format
 msgid "{error} · Click to retry"
 msgstr "{error} · Haz clic para reintentar"
 
-#: src/ui/conversation.rs:7643 src/ui/conversation.rs:8556
+#: src/ui/conversation.rs:9327 src/ui/conversation.rs:10365
 msgid "Could not display this picture. Click to open it."
 msgstr "No se pudo mostrar esta imagen. Haz clic para abrirla."
 
-#: src/ui/conversation.rs:7661 src/ui/conversation.rs:8604
+#: src/ui/conversation.rs:9345 src/ui/conversation.rs:10419
 msgid "Download failed. Click to retry."
 msgstr "Falló la descarga. Haz clic para reintentar."
 
-#: src/ui/conversation.rs:7873 src/ui/dialogs.rs:187
+#: src/ui/conversation.rs:9491 src/ui/dialogs.rs:225
 msgid "Sending reply…"
 msgstr "Enviando respuesta…"
 
-#: src/ui/conversation.rs:7875 src/ui/dialogs.rs:189
+#: src/ui/conversation.rs:9492 src/ui/dialogs.rs:227
 msgid "Connect to WhatsApp to reply"
 msgstr "Conéctate a WhatsApp para responder"
 
-#: src/ui/conversation.rs:7877
+#: src/ui/conversation.rs:9493
 msgid "This conversation is read-only"
 msgstr "Esta conversación es de solo lectura"
 
-#: src/ui/conversation.rs:7879
+#: src/ui/conversation.rs:9494
 msgid "Reply options are for the recipient"
 msgstr "Las opciones de respuesta son para quien lo recibe"
 
-#: src/ui/conversation.rs:7883
+#: src/ui/conversation.rs:9495
 msgid "Open this option in WhatsApp Web or on your phone"
 msgstr "Abre esta opción en WhatsApp Web o en tu teléfono"
 
-#: src/ui/conversation.rs:7901
+#: src/ui/conversation.rs:9674
 #, rust-format
-msgid "Send reply: {}"
-msgstr "Enviar respuesta: {}"
+msgid "Send reply: {label}"
+msgstr ""
 
-#: src/ui/conversation.rs:7911 src/ui/login.rs:314
+#: src/ui/conversation.rs:9678 src/ui/login.rs:307
 msgid "Copy code"
 msgstr "Copiar código"
 
-#: src/ui/conversation.rs:7934
+#: src/ui/conversation.rs:9693
 msgid "More content in WhatsApp Web or on your phone"
 msgstr "Más contenido en WhatsApp Web o en tu teléfono"
 
-#: src/ui/conversation.rs:8334 src/ui/locations.rs:52
+#: src/ui/conversation.rs:9864 src/ui/dialogs.rs:2057 src/ui/info.rs:816
+msgid "Message"
+msgstr "Mensaje"
+
+#: src/ui/conversation.rs:10120 src/ui/locations.rs:52
 msgid "Open in a map"
 msgstr "Abrir en un mapa"
 
-#: src/ui/conversation.rs:9045 src/ui/conversation.rs:9570
+#: src/ui/conversation.rs:10892 src/ui/conversation.rs:11421
 msgid "Pause"
 msgstr "Pausa"
 
-#: src/ui/conversation.rs:9047 src/ui/conversation.rs:9572
-#: src/ui/settings.rs:1995
+#: src/ui/conversation.rs:10894 src/ui/conversation.rs:11423
+#: src/ui/settings.rs:2011
 msgid "Play"
 msgstr "Reproducir"
 
-#: src/ui/conversation.rs:9074
+#: src/ui/conversation.rs:10923
 msgid "Back to the message (Esc)"
 msgstr "Volver al mensaje (Esc)"
 
-#: src/ui/conversation.rs:9076
+#: src/ui/conversation.rs:10925
 msgid "Fill the window"
 msgstr "Llenar la ventana"
 
-#: src/ui/conversation.rs:9108 src/ui/call.rs:529 src/ui/info.rs:670
-msgid "Mute"
-msgstr "Silenciar"
-
-#: src/ui/conversation.rs:9413 src/ui/conversation.rs:9689
+#: src/ui/conversation.rs:11265 src/ui/conversation.rs:11540
 #, rust-format
 msgid "{error}. Click to retry."
 msgstr "{error}. Haz clic para reintentar."
 
-#: src/ui/conversation.rs:9747
+#: src/ui/conversation.rs:11621
 msgid "Preparing playback speed"
 msgstr "Preparando la velocidad de reproducción"
 
-#: src/ui/conversation.rs:9751
+#: src/ui/conversation.rs:11625
 msgid "Playback speed. Right-click for every speed."
 msgstr "Velocidad de reproducción. Clic derecho para ver todas."
 
-#: src/ui/conversation.rs:9814
+#: src/ui/conversation.rs:11688
 msgid "Discard"
 msgstr "Descartar"
 
-#: src/ui/conversation.rs:9901
+#: src/ui/conversation.rs:11776
 msgid "Cancel selection"
 msgstr "Cancelar la selección"
 
-#: src/ui/conversation.rs:9922
+#: src/ui/conversation.rs:11785 src/ui/new_group.rs:146
+#, rust-format
+msgid "{count} selected"
+msgid_plural "{count} selected"
+msgstr[0] "{count} seleccionado"
+msgstr[1] "{count} seleccionados"
+
+#: src/ui/conversation.rs:11799
 msgid "Forward…"
 msgstr "Reenviar…"
 
-#: src/ui/conversation.rs:9938
+#: src/ui/conversation.rs:11815
 msgid "Delete…"
 msgstr "Eliminar…"
 
-#: src/ui/dialogs.rs:141
+#: src/ui/conversation.rs:13701
+msgid "View once"
+msgstr "Ver una vez"
+
+#: src/ui/conversation.rs:13730
+msgid "The recipient can open this photo only once, on their phone."
+msgstr ""
+"La persona destinataria solo podrá abrir esta foto una vez en su teléfono."
+
+#: src/ui/dialogs.rs:179
 msgid "Choose an option"
 msgstr "Elige una opción"
 
-#: src/ui/dialogs.rs:160 src/ui/dialogs.rs:816 src/ui/dialogs.rs:1159
-#: src/ui/dialogs.rs:1211 src/ui/locations.rs:27 src/ui/message_info.rs:28
-#: src/ui/labels.rs:234 src/ui/info.rs:276 src/ui/mod.rs:905
-#: src/ui/new_group.rs:57
+#: src/ui/dialogs.rs:198 src/ui/dialogs.rs:899 src/ui/dialogs.rs:1236
+#: src/ui/dialogs.rs:1288 src/ui/locations.rs:27 src/ui/message_info.rs:28
+#: src/ui/labels.rs:234 src/ui/info.rs:309 src/ui/mod.rs:947
+#: src/ui/new_group.rs:57 src/ui/polls.rs:27 src/ui/polls.rs:473
 msgid "Close"
 msgstr "Cerrar"
 
-#: src/ui/dialogs.rs:171
+#: src/ui/dialogs.rs:209
 msgid "This list is no longer available."
 msgstr "Esta lista ya no está disponible."
 
-#: src/ui/dialogs.rs:185
+#: src/ui/dialogs.rs:223
 msgid "This list can no longer receive replies."
 msgstr "Esta lista ya no admite respuestas."
 
-#: src/ui/dialogs.rs:315
+#: src/ui/dialogs.rs:350
 msgid "Set up locked chats"
 msgstr "Configurar chats bloqueados"
 
-#: src/ui/dialogs.rs:325
+#: src/ui/dialogs.rs:358
 msgid ""
 "Choose a local code to open the Locked tab. It is separate from your phone's "
 "code. This hides chats in ZapFast, it does not add another encryption layer."
@@ -1246,7 +1345,7 @@ msgstr ""
 "código de tu teléfono. Esto oculta chats en ZapFast, no agrega otra capa de "
 "cifrado."
 
-#: src/ui/dialogs.rs:330
+#: src/ui/dialogs.rs:363
 msgid ""
 "Enter your local ZapFast code. Leaving the Locked tab or closing the window "
 "locks it again."
@@ -1254,136 +1353,127 @@ msgstr ""
 "Ingresa tu código local de ZapFast. Al salir de la pestaña Bloqueados o "
 "cerrar la ventana se vuelve a bloquear."
 
-#: src/ui/dialogs.rs:347
+#: src/ui/dialogs.rs:374
 msgid "Local code"
 msgstr "Código local"
 
-#: src/ui/dialogs.rs:358
+#: src/ui/dialogs.rs:386
 msgid "Confirm code"
 msgstr "Confirmar código"
 
-#: src/ui/dialogs.rs:365
+#: src/ui/dialogs.rs:398
 msgid "That code did not match. Try again."
 msgstr "Ese código no coincide. Inténtalo de nuevo."
 
-#: src/ui/dialogs.rs:379
+#: src/ui/dialogs.rs:407
 msgid "Set code and open"
 msgstr "Guardar código y abrir"
 
-#: src/ui/dialogs.rs:381
+#: src/ui/dialogs.rs:409
 msgid "Open locked chats"
 msgstr "Abrir chats bloqueados"
 
-#: src/ui/dialogs.rs:391 src/ui/dialogs.rs:443 src/ui/dialogs.rs:1140
-#: src/ui/dialogs.rs:1356 src/ui/dialogs.rs:1559 src/ui/dialogs.rs:1642
-#: src/ui/dialogs.rs:1708 src/ui/dialogs.rs:1800 src/ui/dialogs.rs:1978
-#: src/ui/locations.rs:82 src/ui/settings.rs:1065 src/ui/settings.rs:1765
-#: src/ui/lock.rs:142 src/ui/accounts.rs:269
+#: src/ui/dialogs.rs:420 src/ui/dialogs.rs:472 src/ui/dialogs.rs:1217
+#: src/ui/dialogs.rs:1433 src/ui/dialogs.rs:1636 src/ui/dialogs.rs:1725
+#: src/ui/dialogs.rs:1791 src/ui/dialogs.rs:1882 src/ui/dialogs.rs:2068
+#: src/ui/locations.rs:82 src/ui/settings.rs:1080 src/ui/settings.rs:1781
+#: src/ui/lock.rs:142 src/ui/accounts.rs:380 src/ui/info.rs:2176
+#: src/ui/polls.rs:159
 msgid "Cancel"
 msgstr "Cancelar"
 
-#: src/ui/dialogs.rs:414
+#: src/ui/dialogs.rs:443
 msgid "Lock this chat?"
 msgstr "¿Bloquear este chat?"
 
-#: src/ui/dialogs.rs:420
+#: src/ui/dialogs.rs:449
 msgid ""
 "This moves the chat to the Locked tab, hiding it from the normal chat list, "
 "search, unread badges, and notifications. The lock status also syncs to your "
-"phone. Open Locked with a separate local ZapFast code to read it. Sending "
-"from locked chats is not supported yet."
+"phone. Open Locked with a separate local ZapFast code to read it."
 msgstr ""
-"Esto mueve el chat a la pestaña Bloqueados y lo oculta de la lista normal, "
-"la búsqueda, los contadores de no leídos y las notificaciones. El bloqueo "
-"también se sincroniza con tu teléfono. Para leerlo, abre Bloqueados con un "
-"código local de ZapFast aparte. Todavía no se puede enviar desde chats "
-"bloqueados."
 
-#: src/ui/dialogs.rs:467 src/ui/new_group.rs:91
+#: src/ui/dialogs.rs:491 src/ui/new_group.rs:91
 msgid "Search contacts"
 msgstr "Buscar contactos"
 
-#: src/ui/dialogs.rs:482 src/ui/new_group.rs:292
+#: src/ui/dialogs.rs:512 src/ui/new_group.rs:292
 msgid "New group"
 msgstr "Nuevo grupo"
 
-#: src/ui/dialogs.rs:486
+#: src/ui/dialogs.rs:516
 msgid "Add contact"
 msgstr "Agregar contacto"
 
-#: src/ui/dialogs.rs:497 src/ui/calls.rs:548 src/ui/new_group.rs:125
+#: src/ui/dialogs.rs:527 src/ui/calls.rs:566 src/ui/new_group.rs:125
 msgid "No matching contacts"
 msgstr "No hay contactos que coincidan"
 
-#: src/ui/dialogs.rs:547
+#: src/ui/dialogs.rs:587
 msgid "Forward message"
 msgstr "Reenviar mensaje"
 
-#: src/ui/dialogs.rs:551
+#: src/ui/dialogs.rs:591
 #, rust-format
 msgid "Forward {count} message"
 msgid_plural "Forward {count} messages"
 msgstr[0] "Reenviar {count} mensaje"
 msgstr[1] "Reenviar {count} mensajes"
 
-#: src/ui/dialogs.rs:561
+#: src/ui/dialogs.rs:616
 msgid "Forward to these chats?"
 msgstr "¿Reenviar a estos chats?"
 
-#: src/ui/dialogs.rs:580 src/ui/info.rs:274 src/ui/info.rs:1072
-#: src/ui/info.rs:1712 src/ui/new_group.rs:35 src/ui/new_group.rs:463
-msgid "Back"
-msgstr "Atrás"
-
-#: src/ui/dialogs.rs:606 src/i18n_extra.rs:43
+#: src/ui/dialogs.rs:647 src/i18n_extra.rs:43
 msgid "Search chats"
 msgstr "Buscar chats"
 
-#: src/ui/dialogs.rs:722
-msgid "No writable chats found"
-msgstr "No hay chats donde puedas escribir"
+#: src/ui/dialogs.rs:781 src/ui/info.rs:307 src/ui/info.rs:1266
+#: src/ui/info.rs:1906 src/ui/new_group.rs:35 src/ui/new_group.rs:463
+msgid "Back"
+msgstr "Atrás"
 
-#: src/ui/dialogs.rs:735
-msgid "Messages forwarded many times can be sent to one chat at a time"
-msgstr ""
-"Los mensajes reenviados muchas veces solo pueden enviarse a un chat a la vez"
+#: src/ui/dialogs.rs:805
+msgid "Review recipients"
+msgstr "Revisar destinatarios"
 
-#: src/ui/dialogs.rs:743
-#, rust-format
-msgid "You can forward to up to {count} chat"
-msgid_plural "You can forward to up to {count} chats"
-msgstr[0] "Puedes reenviar a un máximo de {count} chat"
-msgstr[1] "Puedes reenviar a un máximo de {count} chats"
-
-#: src/ui/dialogs.rs:769
+#: src/ui/dialogs.rs:828
 #, rust-format
 msgid "{count} recipient selected"
 msgid_plural "{count} recipients selected"
 msgstr[0] "{count} destinatario seleccionado"
 msgstr[1] "{count} destinatarios seleccionados"
 
-#: src/ui/dialogs.rs:780
-msgid "Review recipients"
-msgstr "Revisar destinatarios"
+#: src/ui/dialogs.rs:852
+msgid "Messages forwarded many times can be sent to one chat at a time"
+msgstr ""
+"Los mensajes reenviados muchas veces solo pueden enviarse a un chat a la vez"
 
-#: src/ui/dialogs.rs:881 src/ui/settings.rs:891 src/ui/settings.rs:1843
+#: src/ui/dialogs.rs:860
+#, rust-format
+msgid "You can forward to up to {count} chat"
+msgid_plural "You can forward to up to {count} chats"
+msgstr[0] "Puedes reenviar a un máximo de {count} chat"
+msgstr[1] "Puedes reenviar a un máximo de {count} chats"
+
+#: src/ui/dialogs.rs:969 src/ui/settings.rs:906 src/ui/settings.rs:1859
 msgid "Keyboard shortcuts"
 msgstr "Atajos de teclado"
 
-#: src/ui/dialogs.rs:933
+#: src/ui/dialogs.rs:1021
 msgid "Show shortcut hints under the message box"
 msgstr "Mostrar sugerencias de atajos bajo el cuadro de mensaje"
 
-#: src/ui/dialogs.rs:943 src/ui/settings.rs:887 src/ui/settings.rs:1854
+#: src/ui/dialogs.rs:1031 src/ui/settings.rs:902 src/ui/settings.rs:1870
 msgid "About"
 msgstr "Acerca de"
 
-#: src/ui/dialogs.rs:951
-#, rust-format
-msgid "Version {}"
-msgstr "Versión {}"
+#: src/ui/dialogs.rs:1037
+#, fuzzy, rust-format
+msgid "Version {version}"
+msgstr "Actualizar a {version}"
 
-#: src/ui/dialogs.rs:963
+#: src/ui/dialogs.rs:1047
 msgid ""
 "A native WhatsApp client written in Rust with egui. It connects through "
 "whatsapp-rust. Messages are end-to-end encrypted on this device."
@@ -1392,7 +1482,7 @@ msgstr ""
 "whatsapp-rust. Los mensajes están cifrados de extremo a extremo en este "
 "dispositivo."
 
-#: src/ui/dialogs.rs:972
+#: src/ui/dialogs.rs:1056
 msgid ""
 "This is an unofficial client. Using it may be against WhatsApp's terms of "
 "service and could get an account suspended."
@@ -1400,22 +1490,22 @@ msgstr ""
 "Este es un cliente no oficial. Usarlo puede ir contra las condiciones del "
 "servicio de WhatsApp y podría hacer que suspendan la cuenta."
 
-#: src/ui/dialogs.rs:981 src/ui/settings.rs:892 src/ui/settings.rs:1865
+#: src/ui/dialogs.rs:1065 src/ui/settings.rs:907 src/ui/settings.rs:1881
 msgid "Source code"
 msgstr "Código fuente"
 
-#: src/ui/dialogs.rs:1008
+#: src/ui/dialogs.rs:1092
 #, rust-format
 msgid "{count} selected message"
 msgid_plural "{count} selected messages"
 msgstr[0] "{count} mensaje seleccionado"
 msgstr[1] "{count} mensajes seleccionados"
 
-#: src/ui/dialogs.rs:1018 src/ui/dialogs.rs:1039
+#: src/ui/dialogs.rs:1102 src/ui/dialogs.rs:1123
 msgid "this chat"
 msgstr "este chat"
 
-#: src/ui/dialogs.rs:1023
+#: src/ui/dialogs.rs:1107
 #, rust-format
 msgid ""
 "This deletes your chat with {name}, including all messages, on this computer "
@@ -1424,15 +1514,15 @@ msgstr ""
 "Esto elimina tu chat con {name}, con todos sus mensajes, en este computador "
 "y en tu teléfono. No se puede deshacer."
 
-#: src/ui/dialogs.rs:1029
+#: src/ui/dialogs.rs:1113
 msgid "Delete chat?"
 msgstr "¿Eliminar el chat?"
 
-#: src/ui/dialogs.rs:1031 src/ui/dialogs.rs:1450
+#: src/ui/dialogs.rs:1115 src/ui/dialogs.rs:1527
 msgid "Delete"
 msgstr "Eliminar"
 
-#: src/ui/dialogs.rs:1044
+#: src/ui/dialogs.rs:1128
 #, rust-format
 msgid ""
 "This clears every message in your chat with {name}, including downloaded "
@@ -1443,74 +1533,74 @@ msgstr ""
 "descargados, en este computador y en tu teléfono. El chat se mantiene. No se "
 "puede deshacer."
 
-#: src/ui/dialogs.rs:1050
+#: src/ui/dialogs.rs:1134
 msgid "Clear chat?"
 msgstr "¿Vaciar chat?"
 
-#: src/ui/dialogs.rs:1066 src/ui/dialogs.rs:1081
+#: src/ui/dialogs.rs:1150 src/ui/dialogs.rs:1162
 msgid "Group invite"
 msgstr "Invitación a un grupo"
 
-#: src/ui/dialogs.rs:1072
+#: src/ui/dialogs.rs:1154
 msgid "Looking up the group…"
 msgstr "Buscando el grupo…"
 
-#: src/ui/dialogs.rs:1090 src/ui/info.rs:485
+#: src/ui/dialogs.rs:1171 src/ui/info.rs:539
 #, rust-format
 msgid "{} member"
 msgid_plural "{} members"
 msgstr[0] "{} miembro"
 msgstr[1] "{} miembros"
 
-#: src/ui/dialogs.rs:1108
+#: src/ui/dialogs.rs:1189
 msgid "An admin must approve your request before you join."
 msgstr "Un administrador tiene que aprobar tu solicitud antes de que entres."
 
-#: src/ui/dialogs.rs:1118
+#: src/ui/dialogs.rs:1199
 msgid "Open chat"
 msgstr "Abrir el chat"
 
-#: src/ui/dialogs.rs:1119
+#: src/ui/dialogs.rs:1200
 msgid "Request to join"
 msgstr "Solicitar unirse"
 
-#: src/ui/dialogs.rs:1120
+#: src/ui/dialogs.rs:1201
 msgid "Join group"
 msgstr "Unirse al grupo"
 
-#: src/ui/dialogs.rs:1127
+#: src/ui/dialogs.rs:1204
 msgid "Joining…"
 msgstr "Uniéndote…"
 
-#: src/ui/dialogs.rs:1180
+#: src/ui/dialogs.rs:1257
 msgid "Downloading the pack…"
 msgstr "Descargando el paquete…"
 
-#: src/ui/dialogs.rs:1204
+#: src/ui/dialogs.rs:1281
 msgid "Add to my stickers"
 msgstr "Añadir a mis stickers"
 
-#: src/ui/dialogs.rs:1228
+#: src/ui/dialogs.rs:1305
 msgid "Make a sticker"
 msgstr "Crear un sticker"
 
-#: src/ui/dialogs.rs:1292
+#: src/ui/dialogs.rs:1369
 msgid "Size"
 msgstr "Tamaño"
 
-#: src/ui/dialogs.rs:1307
+#: src/ui/dialogs.rs:1384
 msgid "Keep the transparent background"
 msgstr "Mantener el fondo transparente"
 
-#: src/ui/dialogs.rs:1324
+#: src/ui/dialogs.rs:1401
 msgid "Emojis that describe it, like 😂 or ❤️"
 msgstr "Emojis que lo describan, como 😂 o ❤️"
 
-#: src/ui/dialogs.rs:1370
+#: src/ui/dialogs.rs:1447
 msgid "Start over?"
 msgstr "¿Empezar de cero?"
 
-#: src/ui/dialogs.rs:1374
+#: src/ui/dialogs.rs:1451
 msgid ""
 "ZapFast keeps your unreadable archive as a separate file, creates a new one, "
 "and asks you to link again. Linking again brings back recent history from "
@@ -1522,7 +1612,7 @@ msgstr ""
 "borra la entrada antigua de ZapFast en Dispositivos vinculados de tu "
 "teléfono."
 
-#: src/ui/dialogs.rs:1378
+#: src/ui/dialogs.rs:1455
 msgid ""
 "If you can restore the original keyring instead, choose Cancel and Try "
 "again: nothing is lost that way."
@@ -1530,11 +1620,11 @@ msgstr ""
 "Si en cambio puedes recuperar el llavero original, elige Cancelar y luego "
 "Reintentar: así no se pierde nada."
 
-#: src/ui/dialogs.rs:1381
+#: src/ui/dialogs.rs:1458
 msgid "Start over"
 msgstr "Empezar de cero"
 
-#: src/ui/dialogs.rs:1389
+#: src/ui/dialogs.rs:1466
 msgid ""
 "This removes the message from your phone and linked devices. Other people "
 "keep their copy. Connect to WhatsApp to delete it. This cannot be undone."
@@ -1543,7 +1633,7 @@ msgstr ""
 "demás conservan su copia. Conéctate a WhatsApp para borrarlo. No se puede "
 "deshacer."
 
-#: src/ui/dialogs.rs:1390
+#: src/ui/dialogs.rs:1467
 msgid ""
 "Everyone in this chat will see \"This message was deleted\" instead. It "
 "cannot be undone."
@@ -1551,7 +1641,7 @@ msgstr ""
 "Todos en este chat verán «Se eliminó este mensaje» en su lugar. No se puede "
 "deshacer."
 
-#: src/ui/dialogs.rs:1391
+#: src/ui/dialogs.rs:1468
 msgid ""
 "This removes these messages from your phone and linked devices. Other people "
 "keep their copy. Connect to WhatsApp to delete them. This cannot be undone."
@@ -1560,7 +1650,7 @@ msgstr ""
 "demás personas conservan su copia. Conéctate a WhatsApp para eliminarlos. "
 "Esta acción no se puede deshacer."
 
-#: src/ui/dialogs.rs:1392
+#: src/ui/dialogs.rs:1469
 #, rust-format
 msgid ""
 "Everyone in this chat will see \"This message was deleted\" in place of the "
@@ -1575,15 +1665,15 @@ msgstr[1] ""
 "Todos en este chat verán \"Este mensaje fue eliminado\" en lugar de los "
 "mensajes seleccionados. No se puede deshacer."
 
-#: src/ui/dialogs.rs:1420
+#: src/ui/dialogs.rs:1497
 msgid "Delete for everyone?"
 msgstr "¿Eliminar para todos?"
 
-#: src/ui/dialogs.rs:1422
+#: src/ui/dialogs.rs:1499
 msgid "Delete for me?"
 msgstr "¿Eliminar para mí?"
 
-#: src/ui/dialogs.rs:1464
+#: src/ui/dialogs.rs:1541
 #, rust-format
 msgid ""
 "This deletes \"{name}\" and its stickers from this computer. To use it "
@@ -1592,19 +1682,19 @@ msgstr ""
 "Esto elimina «{name}» y sus stickers de este computador. Para volver a "
 "usarlo, impórtalo de nuevo."
 
-#: src/ui/dialogs.rs:1470
+#: src/ui/dialogs.rs:1547
 msgid "Remove sticker pack?"
 msgstr "¿Quitar el paquete de stickers?"
 
-#: src/ui/dialogs.rs:1472 src/ui/dialogs.rs:1530 src/ui/dialogs.rs:1630
+#: src/ui/dialogs.rs:1549 src/ui/dialogs.rs:1607 src/ui/dialogs.rs:1713
 msgid "Remove"
 msgstr "Quitar"
 
-#: src/ui/dialogs.rs:1482 src/ui/lock.rs:123
+#: src/ui/dialogs.rs:1559 src/ui/lock.rs:123
 msgid "Unlink this computer?"
 msgstr "¿Desvincular este computador?"
 
-#: src/ui/dialogs.rs:1485
+#: src/ui/dialogs.rs:1562
 msgid ""
 "This removes the device from WhatsApp and deletes the chats stored here. You "
 "can link again with a new code."
@@ -1612,15 +1702,15 @@ msgstr ""
 "Esto quita el dispositivo de WhatsApp y borra los chats guardados aquí. "
 "Puedes volver a vincularla con un código nuevo."
 
-#: src/ui/dialogs.rs:1487 src/ui/lock.rs:139
+#: src/ui/dialogs.rs:1564 src/ui/lock.rs:139
 msgid "Unlink"
 msgstr "Desvincular"
 
-#: src/ui/dialogs.rs:1503
+#: src/ui/dialogs.rs:1580
 msgid "Clear the media cache?"
 msgstr "¿Vaciar la caché multimedia?"
 
-#: src/ui/dialogs.rs:1507
+#: src/ui/dialogs.rs:1584
 #, rust-format
 msgid ""
 "This deletes the photos, videos, stickers and files {account} downloaded to "
@@ -1631,20 +1721,20 @@ msgstr ""
 "{account} descargó en este computador. Los mensajes se conservan y los "
 "adjuntos se vuelven a descargar al abrirlos, mientras WhatsApp los tenga."
 
-#: src/ui/dialogs.rs:1512
+#: src/ui/dialogs.rs:1589
 msgid "Files in a download folder you chose are kept."
 msgstr ""
 "Se conservan los archivos de una carpeta de descargas que hayas elegido."
 
-#: src/ui/dialogs.rs:1515 src/ui/settings.rs:519 src/ui/widgets.rs:878
+#: src/ui/dialogs.rs:1592 src/ui/settings.rs:517 src/ui/widgets.rs:1112
 msgid "Clear"
 msgstr "Borrar"
 
-#: src/ui/dialogs.rs:1525
+#: src/ui/dialogs.rs:1602
 msgid "Remove this account?"
 msgstr "¿Quitar esta cuenta?"
 
-#: src/ui/dialogs.rs:1528
+#: src/ui/dialogs.rs:1605
 msgid ""
 "This unlinks the number on this computer and deletes its local chats. Other "
 "accounts stay."
@@ -1652,11 +1742,11 @@ msgstr ""
 "Esto desvincula el número en este equipo y borra los chats locales. Las "
 "demás cuentas se quedan."
 
-#: src/ui/dialogs.rs:1581
+#: src/ui/dialogs.rs:1664
 msgid "Reset the invite link?"
 msgstr "¿Restablecer el enlace de invitación?"
 
-#: src/ui/dialogs.rs:1587
+#: src/ui/dialogs.rs:1670
 msgid ""
 "The current link will stop working, and nobody can join with it any more. A "
 "new link replaces it."
@@ -1664,15 +1754,15 @@ msgstr ""
 "El enlace actual dejará de funcionar y ya nadie podrá unirse con él. Lo "
 "reemplaza un enlace nuevo."
 
-#: src/ui/dialogs.rs:1596 src/ui/info.rs:1630
+#: src/ui/dialogs.rs:1679 src/ui/info.rs:1824
 msgid "Reset link"
 msgstr "Restablecer enlace"
 
-#: src/ui/dialogs.rs:1613
+#: src/ui/dialogs.rs:1696
 msgid "Remove from the group?"
 msgstr "¿Eliminar del grupo?"
 
-#: src/ui/dialogs.rs:1619
+#: src/ui/dialogs.rs:1702
 #, rust-format
 msgid ""
 "{name} will no longer receive messages from {group}. You can add them again "
@@ -1681,34 +1771,34 @@ msgstr ""
 "{name} ya no recibirá mensajes de {group}. Puedes volver a agregar a esta "
 "persona más tarde."
 
-#: src/ui/dialogs.rs:1662
+#: src/ui/dialogs.rs:1745
 msgid "Leave this channel?"
 msgstr "¿Salir de este canal?"
 
-#: src/ui/dialogs.rs:1664
+#: src/ui/dialogs.rs:1747
 msgid "Leave this group?"
 msgstr "¿Salir de este grupo?"
 
-#: src/ui/dialogs.rs:1671
+#: src/ui/dialogs.rs:1754
 msgid ""
 "You will not receive new messages. The local history stays on this computer."
 msgstr ""
 "No vas a recibir mensajes nuevos. El historial local queda en este "
 "computador."
 
-#: src/ui/dialogs.rs:1691
+#: src/ui/dialogs.rs:1774
 msgid "Leave channel and archive"
 msgstr "Salir del canal y archivar"
 
-#: src/ui/dialogs.rs:1693
+#: src/ui/dialogs.rs:1776
 msgid "Leave group and archive"
 msgstr "Salir del grupo y archivar"
 
-#: src/ui/dialogs.rs:1729
+#: src/ui/dialogs.rs:1807
 msgid "Link with a phone number"
 msgstr "Vincular con un número de teléfono"
 
-#: src/ui/dialogs.rs:1735
+#: src/ui/dialogs.rs:1813
 msgid ""
 "Enter the WhatsApp phone number with its country code. Do not include a plus "
 "sign or leading zero. You will get a code to enter on the phone."
@@ -1716,15 +1806,19 @@ msgstr ""
 "Ingresa el número de WhatsApp con su código de país, sin el signo más ni el "
 "cero inicial. Recibirás un código para ingresar en el teléfono."
 
-#: src/ui/dialogs.rs:1787
+#: src/ui/dialogs.rs:1862 src/i18n_extra.rs:130
+msgid "Enter the whole number, starting with the country code"
+msgstr "Ingresa el número completo, empezando por el código de país"
+
+#: src/ui/dialogs.rs:1869
 msgid "Get a code"
 msgstr "Obtener un código"
 
-#: src/ui/dialogs.rs:1814
+#: src/ui/dialogs.rs:1896
 msgid "New contact"
 msgstr "Nuevo contacto"
 
-#: src/ui/dialogs.rs:1819
+#: src/ui/dialogs.rs:1901
 msgid ""
 "Enter a phone number with its country code. Add a name to save the contact, "
 "or leave it blank to message the number without saving it. WhatsApp uses the "
@@ -1734,23 +1828,31 @@ msgstr ""
 "guardar el contacto, o déjalo en blanco para escribirle al número sin "
 "guardarlo. WhatsApp usa el nombre como nombre visible."
 
-#: src/ui/dialogs.rs:1900 src/ui/info.rs:433
+#: src/ui/dialogs.rs:1960 src/ui/info.rs:487
 msgid "First name"
 msgstr "Nombre"
 
-#: src/ui/dialogs.rs:1912 src/ui/info.rs:439
+#: src/ui/dialogs.rs:1961 src/ui/info.rs:493
 msgid "Surname"
 msgstr "Apellido"
 
-#: src/ui/dialogs.rs:1936
+#: src/ui/dialogs.rs:2020
 msgid "Also save to your phone's contacts"
 msgstr "Guardar también en los contactos de tu teléfono"
 
-#: src/ui/dialogs.rs:1946 src/ui/dialogs.rs:1955
+#: src/ui/dialogs.rs:2030 src/ui/dialogs.rs:2039
 msgid "Checking the number…"
 msgstr "Verificando el número…"
 
-#: src/ui/dialogs.rs:1962
+#: src/ui/dialogs.rs:2043 src/i18n_extra.rs:135
+msgid ""
+"Enter a phone number with its country code, using only digits, spaces, "
+"hyphens and brackets"
+msgstr ""
+"Ingresa un número de teléfono con su código de país, solo con dígitos, "
+"espacios, guiones y paréntesis"
+
+#: src/ui/dialogs.rs:2049
 msgid "Save contact"
 msgstr "Guardar contacto"
 
@@ -1769,40 +1871,40 @@ msgstr ""
 msgid "That is not a location."
 msgstr "Eso no es una ubicación."
 
-#: src/ui/settings.rs:265
+#: src/ui/settings.rs:263
 msgid "Back (Esc)"
 msgstr "Volver (Esc)"
 
-#: src/ui/settings.rs:273 src/i18n_extra.rs:96
+#: src/ui/settings.rs:271 src/i18n_extra.rs:96
 msgid "Settings"
 msgstr "Ajustes"
 
-#: src/ui/settings.rs:290
+#: src/ui/settings.rs:288
 #, rust-format
 msgid "No settings match “{query}”."
 msgstr "Ningún ajuste coincide con «{query}»."
 
-#: src/ui/settings.rs:326
+#: src/ui/settings.rs:324
 msgid "Search settings"
 msgstr "Buscar en los ajustes"
 
-#: src/ui/settings.rs:344
+#: src/ui/settings.rs:342
 msgid "Appearance"
 msgstr "Apariencia"
 
-#: src/ui/settings.rs:351
+#: src/ui/settings.rs:349
 msgid "Follow system uses your Omarchy colours."
 msgstr "Usar el del sistema toma tus colores de Omarchy."
 
-#: src/ui/settings.rs:355
+#: src/ui/settings.rs:353 src/ui/settings.rs:1158
 msgid "Theme"
 msgstr "Tema"
 
-#: src/ui/settings.rs:357
+#: src/ui/settings.rs:355
 msgid "Font"
 msgstr "Fuente"
 
-#: src/ui/settings.rs:360
+#: src/ui/settings.rs:358
 msgid ""
 "System is your desktop's interface font. Inter looks the same on every "
 "computer."
@@ -1810,75 +1912,75 @@ msgstr ""
 "«Sistema» es la fuente de la interfaz de tu escritorio. Inter se ve igual en "
 "todos los computadores."
 
-#: src/ui/settings.rs:365
+#: src/ui/settings.rs:363
 msgid "Wallpaper"
 msgstr "Fondo de pantalla"
 
-#: src/ui/settings.rs:369 src/app.rs:3118 src/ui/image_preview.rs:212
+#: src/ui/settings.rs:367 src/app.rs:3655 src/ui/image_preview.rs:248
 msgid "Image"
 msgstr "Imagen"
 
-#: src/ui/settings.rs:380
+#: src/ui/settings.rs:378
 msgid "Desktop background in chats"
 msgstr "Fondo del escritorio en el chat"
 
-#: src/ui/settings.rs:383
+#: src/ui/settings.rs:381
 msgid "Uses the Omarchy background while the theme follows the system."
 msgstr "Usa el fondo de Omarchy cuando el tema sigue al sistema."
 
-#: src/ui/settings.rs:389
+#: src/ui/settings.rs:387
 msgid "Zoom"
 msgstr "Zoom"
 
-#: src/ui/settings.rs:392
+#: src/ui/settings.rs:390
 msgid "Ctrl+Plus and Ctrl+Minus work anywhere, and Ctrl+0 resets it."
 msgstr ""
 "Ctrl+Más y Ctrl+Menos funcionan en cualquier lugar, y Ctrl+0 lo restablece."
 
-#: src/ui/settings.rs:401
+#: src/ui/settings.rs:399
 msgid "Larger"
 msgstr "Más grande"
 
-#: src/ui/settings.rs:419
+#: src/ui/settings.rs:417
 msgid "Smaller"
 msgstr "Más pequeño"
 
-#: src/ui/settings.rs:427
+#: src/ui/settings.rs:425
 msgid "Language"
 msgstr "Idioma"
 
-#: src/ui/settings.rs:431 src/ui/settings.rs:1885
+#: src/ui/settings.rs:429 src/ui/settings.rs:1901
 msgid "Custom title bar"
 msgstr "Barra de título personalizada"
 
-#: src/ui/settings.rs:434
+#: src/ui/settings.rs:432
 msgid ""
 "Draw ZapFast's own title bar and window buttons instead of the desktop's."
 msgstr ""
 "Dibuja la barra de título y los botones de ventana propios de ZapFast en "
 "lugar de los del escritorio."
 
-#: src/ui/settings.rs:442
+#: src/ui/settings.rs:440
 msgid "Enter sends"
 msgstr "Enter envía"
 
-#: src/ui/settings.rs:443
+#: src/ui/settings.rs:441
 msgid "When off, Ctrl+Enter sends."
 msgstr "Si está desactivado, se envía con Ctrl+Intro."
 
-#: src/ui/settings.rs:447
+#: src/ui/settings.rs:445
 msgid "Download files automatically"
 msgstr "Descargar archivos automáticamente"
 
-#: src/ui/settings.rs:450
+#: src/ui/settings.rs:448
 msgid "Files up to 64 MiB download as they come into view."
 msgstr "Los archivos de hasta 64 MiB se descargan al aparecer en pantalla."
 
-#: src/ui/settings.rs:455
+#: src/ui/settings.rs:453
 msgid "Fetch older history"
 msgstr "Cargar historial antiguo"
 
-#: src/ui/settings.rs:458
+#: src/ui/settings.rs:456
 msgid ""
 "Asks your phone in the background for older messages in the open, pinned and "
 "ten most recent chats."
@@ -1886,63 +1988,63 @@ msgstr ""
 "Pide a tu teléfono en segundo plano mensajes anteriores del chat abierto, "
 "los fijados y los diez chats más recientes."
 
-#: src/ui/settings.rs:465
+#: src/ui/settings.rs:463
 msgid "Pause other media while recording or playing"
 msgstr "Pausar otros medios al grabar o reproducir"
 
-#: src/ui/settings.rs:466
+#: src/ui/settings.rs:464
 msgid "Music and videos in other apps resume afterwards."
 msgstr "La música y los vídeos de otras apps se reanudan después."
 
-#: src/ui/settings.rs:471 src/ui/settings.rs:480
+#: src/ui/settings.rs:469 src/ui/settings.rs:478
 msgid "Keep chats archived"
 msgstr "Mantener chats archivados"
 
-#: src/ui/settings.rs:474
+#: src/ui/settings.rs:472
 msgid "When off, a new message brings an archived chat back to the list."
 msgstr ""
 "Si está desactivado, un mensaje nuevo devuelve el chat archivado a la lista."
 
-#: src/ui/settings.rs:495
+#: src/ui/settings.rs:493
 msgid "Locked chats code"
 msgstr "Código de chats bloqueados"
 
-#: src/ui/settings.rs:498
+#: src/ui/settings.rs:496
 msgid ""
 "Opens the Locked tab on this computer. It hides chats, it does not encrypt "
 "them."
 msgstr ""
 "Abre la pestaña Bloqueados en este computador. Oculta chats, no los cifra."
 
-#: src/ui/settings.rs:510
+#: src/ui/settings.rs:508
 msgid "Secret code"
 msgstr "Código secreto"
 
-#: src/ui/settings.rs:529 src/ui/settings.rs:2123
+#: src/ui/settings.rs:527 src/ui/settings.rs:2139
 msgid "Notifications"
 msgstr "Notificaciones"
 
-#: src/ui/settings.rs:531
+#: src/ui/settings.rs:529
 msgid "Desktop notifications"
 msgstr "Notificaciones de escritorio"
 
-#: src/ui/settings.rs:534
+#: src/ui/settings.rs:532
 msgid "For chats you are not looking at. Muted chats stay quiet."
 msgstr "Para los chats que no estás mirando. Los chats silenciados no avisan."
 
-#: src/ui/settings.rs:541
+#: src/ui/settings.rs:539
 msgid "Show message content in notifications"
 msgstr "Mostrar el contenido de los mensajes en las notificaciones"
 
-#: src/ui/settings.rs:542
+#: src/ui/settings.rs:540
 msgid "When off, they say only “New message”."
 msgstr "Si está desactivado, solo dicen «Nuevo mensaje»."
 
-#: src/ui/settings.rs:546
+#: src/ui/settings.rs:544
 msgid "Reply from the notification"
 msgstr "Responder desde la notificación"
 
-#: src/ui/settings.rs:549
+#: src/ui/settings.rs:547
 msgid ""
 "Clicking a message’s notification opens a small window to answer it. Ctrl+O "
 "there opens the chat."
@@ -1950,11 +2052,11 @@ msgstr ""
 "Al hacer clic en la notificación de un mensaje se abre una ventana pequeña "
 "para responderlo. Ahí, Ctrl+O abre el chat."
 
-#: src/ui/settings.rs:555
+#: src/ui/settings.rs:553
 msgid "Limit repeat notifications"
 msgstr "Limitar notificaciones repetidas"
 
-#: src/ui/settings.rs:558
+#: src/ui/settings.rs:556
 msgid ""
 "After one notification, a chat stays quiet for 10 minutes. Opening the chat "
 "resets this. In groups, mentions and replies to you still notify."
@@ -1963,86 +2065,96 @@ msgstr ""
 "el chat lo reinicia. En los grupos, las menciones y respuestas a ti siguen "
 "notificando."
 
-#: src/ui/settings.rs:584 src/ui/settings.rs:2130
+#: src/ui/settings.rs:582 src/ui/settings.rs:2146
 msgid "Play sounds for group messages"
 msgstr "Reproducir sonidos para mensajes de grupo"
 
-#: src/ui/settings.rs:587
+#: src/ui/settings.rs:585
 msgid "When off, only mentions and replies to you make a sound."
 msgstr "Si está desactivado, solo suenan las menciones y las respuestas a ti."
 
-#: src/ui/settings.rs:595
+#: src/ui/settings.rs:593
 msgid "Privacy"
 msgstr "Privacidad"
 
-#: src/ui/settings.rs:597
+#: src/ui/settings.rs:595
 msgid "Off for your account, so only groups get them."
 msgstr "Desactivadas en tu cuenta, así que solo las reciben los grupos."
 
-#: src/ui/settings.rs:599
+#: src/ui/settings.rs:597
 msgid "Let people see when you read their messages."
 msgstr "Permite que otros vean cuándo lees sus mensajes."
 
-#: src/ui/settings.rs:602
+#: src/ui/settings.rs:600
 msgid "Send read receipts"
 msgstr "Enviar confirmaciones de lectura"
 
-#: src/ui/settings.rs:607
+#: src/ui/settings.rs:605
 msgid "Show when you are typing"
 msgstr "Mostrar cuando estás escribiendo"
 
-#: src/ui/settings.rs:618
+#: src/ui/settings.rs:611
+#, fuzzy
+msgid "Blocked contacts"
+msgstr "Todos los contactos"
+
+#: src/ui/settings.rs:617
+#, fuzzy
+msgid "Manage"
+msgstr "Gestionar etiquetas"
+
+#: src/ui/settings.rs:633
 msgid ""
 "Could not load your account privacy. Trying again when ZapFast reconnects."
 msgstr ""
 "No se pudo cargar la privacidad de tu cuenta. Se reintentará cuando ZapFast "
 "se vuelva a conectar."
 
-#: src/ui/settings.rs:623
+#: src/ui/settings.rs:638
 msgid "Connect to WhatsApp to change your account privacy."
 msgstr "Conéctate a WhatsApp para cambiar la privacidad de tu cuenta."
 
-#: src/ui/settings.rs:628
+#: src/ui/settings.rs:643
 msgid "Loading your account privacy…"
 msgstr "Cargando la privacidad de tu cuenta…"
 
-#: src/ui/settings.rs:653
+#: src/ui/settings.rs:668
 msgid "Change who is excluded on your phone."
 msgstr "Cambia a quién se excluye desde tu teléfono."
 
-#: src/ui/settings.rs:671
+#: src/ui/settings.rs:686
 msgid "System"
 msgstr "Sistema"
 
-#: src/ui/settings.rs:673
+#: src/ui/settings.rs:688
 msgid "Keep running when the window closes"
 msgstr "Seguir en ejecución al cerrar la ventana"
 
-#: src/ui/settings.rs:674
+#: src/ui/settings.rs:689
 msgid "Quit from the tray or with Ctrl+Q."
 msgstr "Sal desde la bandeja del sistema o con Ctrl+Q."
 
-#: src/ui/settings.rs:679 src/ui/settings.rs:687
+#: src/ui/settings.rs:694 src/ui/settings.rs:702
 msgid "Start at login"
 msgstr "Abrir al iniciar sesión"
 
-#: src/ui/settings.rs:680
+#: src/ui/settings.rs:695
 msgid "Starts in the tray, without a window."
 msgstr "Se inicia en la bandeja del sistema, sin ventana."
 
-#: src/ui/settings.rs:703
+#: src/ui/settings.rs:718
 msgid "Check for updates"
 msgstr "Buscar actualizaciones"
 
-#: src/ui/settings.rs:706
+#: src/ui/settings.rs:721
 msgid "Asks GitHub once a day, sending only the ZapFast version."
 msgstr "Consulta GitHub una vez al día y solo envía la versión de ZapFast."
 
-#: src/ui/settings.rs:711
+#: src/ui/settings.rs:726
 msgid "Download updates automatically"
 msgstr "Descargar actualizaciones automáticamente"
 
-#: src/ui/settings.rs:714
+#: src/ui/settings.rs:729
 msgid ""
 "You still choose when to restart. Package managers and Flatpak update "
 "ZapFast themselves."
@@ -2050,127 +2162,128 @@ msgstr ""
 "Tú decides cuándo reiniciar. Los gestores de paquetes y Flatpak actualizan "
 "ZapFast por su cuenta."
 
-#: src/ui/settings.rs:727
+#: src/ui/settings.rs:742
 #, rust-format
 msgid "Using {proxy} from the environment."
 msgstr "Se usa {proxy} del entorno."
 
-#: src/ui/settings.rs:735
+#: src/ui/settings.rs:750
 msgid "For WhatsApp, media, and updates. Empty uses ALL_PROXY or HTTPS_PROXY."
 msgstr ""
 "Para WhatsApp, multimedia y actualizaciones. Vacío usa ALL_PROXY o "
 "HTTPS_PROXY."
 
-#: src/ui/settings.rs:738
+#: src/ui/settings.rs:753
 msgid "Proxy"
 msgstr "Proxy"
 
-#: src/ui/settings.rs:758
+#: src/ui/settings.rs:773
 msgid "GIPHY API key"
 msgstr "Clave de API de GIPHY"
 
-#: src/ui/settings.rs:762
+#: src/ui/settings.rs:777
 msgid "For GIF search. Replaces the key this build includes."
 msgstr "Para buscar GIF. Sustituye la clave incluida en esta versión."
 
-#: src/ui/settings.rs:767
+#: src/ui/settings.rs:782
 msgid "For GIF search. Get a free key at developers.giphy.com."
 msgstr "Para buscar GIF. Consigue una clave gratuita en developers.giphy.com."
 
-#: src/ui/settings.rs:783 src/ui/settings.rs:2177 src/ui/settings.rs:2183
+#: src/ui/settings.rs:798 src/ui/settings.rs:2193 src/ui/settings.rs:2199
 msgid "Account"
 msgstr "Cuenta"
 
-#: src/ui/settings.rs:786 src/ui/settings.rs:1664
+#: src/ui/settings.rs:801 src/ui/settings.rs:1680
 msgid "Your name"
 msgstr "Tu nombre"
 
-#: src/ui/settings.rs:788 src/ui/settings.rs:1672
+#: src/ui/settings.rs:803 src/ui/settings.rs:1688
 msgctxt "profile"
 msgid "About"
 msgstr "Info."
 
-#: src/ui/settings.rs:791 src/ui/settings.rs:1641
+#: src/ui/settings.rs:806 src/ui/settings.rs:1657
 msgid "Change profile picture"
 msgstr "Cambiar foto de perfil"
 
-#: src/ui/settings.rs:792 src/ui/settings.rs:1724 src/ui/settings.rs:2179
+#: src/ui/settings.rs:807 src/ui/settings.rs:1740 src/ui/settings.rs:2195
 msgid "Unlink this computer"
 msgstr "Desvincular este computador"
 
-#: src/ui/settings.rs:793 src/ui/settings.rs:1735 src/ui/accounts.rs:126
+#: src/ui/settings.rs:808 src/ui/settings.rs:1751 src/ui/accounts.rs:172
 msgid "Add account"
 msgstr "Añadir cuenta"
 
-#: src/ui/settings.rs:794 src/ui/settings.rs:1711 src/ui/accounts.rs:273
+#: src/ui/settings.rs:809 src/ui/settings.rs:1727 src/ui/accounts.rs:384
 msgid "Remove this account"
 msgstr "Quitar esta cuenta"
 
-#: src/ui/settings.rs:799
+#: src/ui/settings.rs:814
 msgid "Files"
 msgstr "Archivos"
 
-#: src/ui/settings.rs:802
+#: src/ui/settings.rs:817
 msgid "Open folder"
 msgstr "Abrir carpeta"
 
-#: src/ui/settings.rs:804
+#: src/ui/settings.rs:819
 msgid "Message archive"
 msgstr "Archivo de mensajes"
 
-#: src/ui/settings.rs:822
+#: src/ui/settings.rs:837
 msgid "Downloads"
 msgstr "Descargas"
 
-#: src/ui/settings.rs:835
+#: src/ui/settings.rs:850
 msgid "Change…"
 msgstr "Cambiar…"
 
-#: src/ui/settings.rs:847
+#: src/ui/settings.rs:862
 msgid "Use default"
 msgstr "Usar la predeterminada"
 
-#: src/ui/settings.rs:858 src/ui/settings.rs:1477
+#: src/ui/settings.rs:873 src/ui/settings.rs:1493
 msgid "Storage used"
 msgstr "Almacenamiento usado"
 
-#: src/ui/settings.rs:859
+#: src/ui/settings.rs:874
 msgid "Media cache"
 msgstr "Caché multimedia"
 
-#: src/ui/settings.rs:860 src/ui/settings.rs:1531
+#: src/ui/settings.rs:875 src/ui/settings.rs:1547
 msgid "Images"
 msgstr "Imágenes"
 
-#: src/ui/settings.rs:861 src/ui/settings.rs:1537
+#: src/ui/settings.rs:876 src/ui/settings.rs:1553
 msgid "Videos and GIFs"
 msgstr "Vídeos y GIF"
 
-#: src/ui/settings.rs:862 src/ui/settings.rs:1543 src/i18n_extra.rs:41
+#: src/ui/settings.rs:877 src/ui/settings.rs:1559 src/ui/picker.rs:142
+#: src/i18n_extra.rs:41
 msgid "Stickers"
 msgstr "Stickers"
 
-#: src/ui/settings.rs:863 src/ui/settings.rs:1549
+#: src/ui/settings.rs:878 src/ui/settings.rs:1565
 msgid "Other"
 msgstr "Otros"
 
-#: src/ui/settings.rs:864 src/ui/settings.rs:1483
+#: src/ui/settings.rs:879 src/ui/settings.rs:1499
 msgid "Clear…"
 msgstr "Vaciar…"
 
-#: src/ui/settings.rs:870
+#: src/ui/settings.rs:885
 msgid "Log"
 msgstr "Registro"
 
-#: src/ui/settings.rs:877 src/notify.rs:492
+#: src/ui/settings.rs:892 src/notify.rs:502
 msgid "Open"
 msgstr "Abrir"
 
-#: src/ui/settings.rs:917 src/ui/settings.rs:944
+#: src/ui/settings.rs:932 src/ui/settings.rs:959
 msgid "App lock"
 msgstr "Bloqueo de la app"
 
-#: src/ui/settings.rs:920
+#: src/ui/settings.rs:935
 msgid ""
 "Asks for a password at start and after a while unused. It keeps people using "
 "this computer out of your chats and encrypts nothing more. A forgotten "
@@ -2180,23 +2293,23 @@ msgstr ""
 "chats a quien use este computador, pero no cifra nada más. Si olvidas la "
 "contraseña, tendrás que desvincular."
 
-#: src/ui/settings.rs:927
+#: src/ui/settings.rs:942
 msgid "Turn off…"
 msgstr "Desactivar…"
 
-#: src/ui/settings.rs:928
+#: src/ui/settings.rs:943
 msgid "Change password…"
 msgstr "Cambiar contraseña…"
 
-#: src/ui/settings.rs:931
+#: src/ui/settings.rs:946
 msgid "Set password…"
 msgstr "Poner contraseña…"
 
-#: src/ui/settings.rs:945 src/ui/settings.rs:952
+#: src/ui/settings.rs:960 src/ui/settings.rs:967
 msgid "Lock after"
 msgstr "Bloquear después de"
 
-#: src/ui/settings.rs:955
+#: src/ui/settings.rs:970
 msgid ""
 "Time without using ZapFast, also counted while it is in the tray. "
 "Ctrl+Shift+L locks it at once."
@@ -2204,102 +2317,102 @@ msgstr ""
 "Tiempo sin usar ZapFast, contando también cuando está en la bandeja. "
 "Ctrl+Shift+L lo bloquea al instante."
 
-#: src/ui/settings.rs:997
+#: src/ui/settings.rs:1012
 msgid "Set an app lock password"
 msgstr "Poner una contraseña de bloqueo"
 
-#: src/ui/settings.rs:998
+#: src/ui/settings.rs:1013
 msgid "Change the app lock password"
 msgstr "Cambiar la contraseña de bloqueo"
 
-#: src/ui/settings.rs:999
+#: src/ui/settings.rs:1014
 msgid "Turn off the app lock"
 msgstr "Desactivar el bloqueo de la app"
 
-#: src/ui/settings.rs:1009
+#: src/ui/settings.rs:1024
 msgid "Current password"
 msgstr "Contraseña actual"
 
-#: src/ui/settings.rs:1016
+#: src/ui/settings.rs:1031
 #, rust-format
 msgid "New password, at least {count} characters"
 msgstr "Contraseña nueva, de al menos {count} caracteres"
 
-#: src/ui/settings.rs:1021
+#: src/ui/settings.rs:1036
 msgid "Type the new password again"
 msgstr "Escribe otra vez la contraseña nueva"
 
-#: src/ui/settings.rs:1045
+#: src/ui/settings.rs:1060
 #, rust-format
 msgid "The password needs at least {count} characters."
 msgstr "La contraseña necesita al menos {count} caracteres."
 
-#: src/ui/settings.rs:1047
+#: src/ui/settings.rs:1062
 msgid "The two new passwords are different."
 msgstr "Las dos contraseñas nuevas no coinciden."
 
-#: src/ui/settings.rs:1048 src/ui/lock.rs:85
+#: src/ui/settings.rs:1063 src/ui/lock.rs:85
 msgid "Wrong password. Try again."
 msgstr "Contraseña incorrecta. Inténtalo de nuevo."
 
-#: src/ui/settings.rs:1055
+#: src/ui/settings.rs:1070
 msgid "Turn on"
 msgstr "Activar"
 
-#: src/ui/settings.rs:1056
+#: src/ui/settings.rs:1071
 msgid "Change password"
 msgstr "Cambiar contraseña"
 
-#: src/ui/settings.rs:1057
+#: src/ui/settings.rs:1072
 msgid "Turn off"
 msgstr "Desactivar"
 
-#: src/ui/settings.rs:1149
+#: src/ui/settings.rs:1167
 msgid "Open themes folder"
 msgstr "Abrir la carpeta de temas"
 
-#: src/ui/settings.rs:1160
+#: src/ui/settings.rs:1178
 msgid "How to make a theme"
 msgstr "Cómo crear un tema"
 
-#: src/ui/settings.rs:1201 src/ui/settings.rs:1210
+#: src/ui/settings.rs:1219 src/ui/settings.rs:1228
 msgid "Auto"
 msgstr "Automático"
 
-#: src/ui/settings.rs:1267
+#: src/ui/settings.rs:1283
 msgid "Back to settings"
 msgstr "Volver a Ajustes"
 
-#: src/ui/settings.rs:1275
+#: src/ui/settings.rs:1291
 msgid "Set chat wallpaper"
 msgstr "Elegir el fondo del chat"
 
-#: src/ui/settings.rs:1302
+#: src/ui/settings.rs:1318
 msgid "Add doodles"
 msgstr "Añadir dibujos"
 
-#: src/ui/settings.rs:1306
+#: src/ui/settings.rs:1322
 msgid "Show the default doodles over the selected colour."
 msgstr "Mostrar los dibujos predeterminados sobre el color seleccionado."
 
-#: src/ui/settings.rs:1363
+#: src/ui/settings.rs:1379
 msgid "Wallpaper preview"
 msgstr "Vista previa del fondo"
 
-#: src/ui/settings.rs:1390
+#: src/ui/settings.rs:1406
 msgid "Choose image…"
 msgstr "Elegir imagen…"
 
-#: src/ui/settings.rs:1391
+#: src/ui/settings.rs:1407
 msgid "Remove image"
 msgstr "Quitar imagen"
 
-#: src/ui/settings.rs:1419
+#: src/ui/settings.rs:1435
 msgctxt "wallpaper colour"
 msgid "Theme"
 msgstr "Tema"
 
-#: src/ui/settings.rs:1512
+#: src/ui/settings.rs:1528
 #, rust-format
 msgid ""
 "Photos, videos, stickers and files {account} downloaded to this computer. "
@@ -2310,45 +2423,49 @@ msgstr ""
 "computador. Al vaciarlos se conservan tus mensajes; los adjuntos se vuelven "
 "a descargar al abrirlos."
 
-#: src/ui/settings.rs:1680
+#: src/ui/settings.rs:1696
 msgid "Linked device"
 msgstr "Dispositivo vinculado"
 
-#: src/ui/settings.rs:1691
+#: src/ui/settings.rs:1707
 msgid "Edit your name and About"
 msgstr "Editar tu nombre e info."
 
-#: src/ui/settings.rs:1755
+#: src/ui/settings.rs:1771
 msgid "Save"
 msgstr "Guardar"
 
-#: src/ui/settings.rs:1822
+#: src/ui/settings.rs:1838
 msgid "A native WhatsApp client built with Rust, egui, and whatsapp-rust."
 msgstr "Un cliente nativo de WhatsApp hecho con Rust, egui y whatsapp-rust."
 
-#: src/ui/settings.rs:1833
+#: src/ui/settings.rs:1849
 #, rust-format
 msgid "Update to {version}"
 msgstr "Actualizar a {version}"
 
-#: src/ui/settings.rs:1951
+#: src/ui/settings.rs:1967
 msgid "Mention sound"
 msgstr "Sonido de mención"
 
-#: src/ui/settings.rs:1952
+#: src/ui/settings.rs:1968
 msgid "When a group mentions you or replies to you."
 msgstr "Cuando alguien te menciona o te responde en un grupo."
 
-#: src/ui/settings.rs:1955
+#: src/ui/settings.rs:1971
 msgid "Message sound"
 msgstr "Sonido de mensajes"
 
-#: src/ui/settings.rs:1973 src/ui/call.rs:597
+#: src/ui/settings.rs:1988
+msgid "Pidgin alert"
+msgstr "Alerta de Pidgin"
+
+#: src/ui/settings.rs:1989 src/ui/call.rs:597
 msgid "System default"
 msgstr "El del sistema"
 
 #. Translators: no notification sound.
-#: src/ui/settings.rs:1975
+#: src/ui/settings.rs:1991
 msgctxt "sound"
 msgid "None"
 msgstr "Ninguno"
@@ -2397,31 +2514,31 @@ msgstr "Llamada finalizada"
 msgid "Missed call"
 msgstr "Llamada perdida"
 
-#: src/ui/call.rs:402 src/ui/calls.rs:115
+#: src/ui/call.rs:402 src/ui/calls.rs:121
 msgid "Declined"
 msgstr "Rechazada"
 
-#: src/ui/call.rs:403 src/ui/calls.rs:117
+#: src/ui/call.rs:403 src/ui/calls.rs:123
 msgid "Busy"
 msgstr "Ocupado"
 
-#: src/ui/call.rs:404 src/ui/call.rs:409 src/ui/calls.rs:118
+#: src/ui/call.rs:404 src/ui/call.rs:409 src/ui/calls.rs:124
 msgid "Could not connect"
 msgstr "No se pudo conectar"
 
-#: src/ui/call.rs:405 src/ui/calls.rs:119
+#: src/ui/call.rs:405 src/ui/calls.rs:125
 msgid "No answer"
 msgstr "Sin respuesta"
 
-#: src/ui/call.rs:407 src/ui/calls.rs:120 src/app.rs:4274
+#: src/ui/call.rs:407 src/ui/calls.rs:126 src/app.rs:5110
 msgid "Connection lost"
 msgstr "Se perdió la conexión"
 
-#: src/ui/call.rs:411 src/ui/calls.rs:114
+#: src/ui/call.rs:411 src/ui/calls.rs:120
 msgid "Answered on another device"
 msgstr "Respondida en otro dispositivo"
 
-#: src/ui/call.rs:414 src/ui/calls.rs:116
+#: src/ui/call.rs:414 src/ui/calls.rs:122
 msgid "Declined on another device"
 msgstr "Rechazada en otro dispositivo"
 
@@ -2525,99 +2642,110 @@ msgstr "Aceptar"
 msgid "Invited"
 msgstr "Invitado"
 
-#: src/ui/calls.rs:96
+#: src/ui/calls.rs:102
 msgid "Missed group voice call"
 msgstr "Llamada grupal de voz perdida"
 
-#: src/ui/calls.rs:97
+#: src/ui/calls.rs:103
 msgid "Missed group video call"
 msgstr "Videollamada grupal perdida"
 
-#: src/ui/calls.rs:100
+#: src/ui/calls.rs:106
 msgid "Group voice call"
 msgstr "Llamada grupal de voz"
 
-#: src/ui/calls.rs:101
+#: src/ui/calls.rs:107
 msgid "Group video call"
 msgstr "Videollamada grupal"
 
-#: src/ui/calls.rs:169 src/app/calls.rs:112
+#: src/ui/calls.rs:175 src/app/calls.rs:112
 msgid "Call link"
 msgstr "Enlace de llamada"
 
-#: src/ui/calls.rs:199
+#: src/ui/calls.rs:205
 msgid "No calls yet"
 msgstr "Aún no hay llamadas"
 
-#: src/ui/calls.rs:202
+#: src/ui/calls.rs:208
 msgid ""
 "Calls from your phone's call log and the ones you make here appear here."
 msgstr ""
 "Aquí aparecen las llamadas del registro de tu teléfono y las que hagas desde "
 "aquí."
 
-#: src/ui/calls.rs:207 src/ui/message_info.rs:93 src/ui/quick_reply.rs:95
+#: src/ui/calls.rs:213 src/ui/message_info.rs:93 src/ui/quick_reply.rs:95
 msgid "Loading…"
 msgstr "Cargando…"
 
-#: src/ui/calls.rs:208
+#: src/ui/calls.rs:214
 msgid "Reading this account's calls."
 msgstr "Leyendo las llamadas de esta cuenta."
 
-#: src/ui/calls.rs:232
+#: src/ui/calls.rs:238
 msgid "No missed calls"
 msgstr "No hay llamadas perdidas"
 
-#: src/ui/calls.rs:233
+#: src/ui/calls.rs:239
 msgid "Choose All to see every call."
 msgstr "Elige Todos para ver todas las llamadas."
 
-#: src/ui/calls.rs:255
+#: src/ui/calls.rs:261
 msgid "No matching calls"
 msgstr "No hay llamadas que coincidan"
 
-#: src/ui/calls.rs:536
+#: src/ui/calls.rs:496
+#, rust-format
+msgid "{} participant"
+msgid_plural "{} participants"
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/ui/calls.rs:554
 msgid "Frequently contacted"
 msgstr "Contactos frecuentes"
 
-#: src/ui/calls.rs:554
+#: src/ui/calls.rs:572
 msgid "All contacts"
 msgstr "Todos los contactos"
 
-#: src/ui/calls.rs:618
+#: src/ui/calls.rs:636
 #, rust-format
 msgid "Video call {name}"
 msgstr "Videollamada a {name}"
 
-#: src/ui/calls.rs:632
+#: src/ui/calls.rs:650
 #, rust-format
 msgid "Voice call {name}"
 msgstr "Llamada de voz a {name}"
 
-#: src/ui/calls.rs:662
+#: src/ui/calls.rs:680
 msgid "Start call"
 msgstr "Iniciar llamada"
 
-#: src/ui/calls.rs:683
+#: src/ui/calls.rs:701
 msgid ""
 "Call one person by voice or video, or choose a call in the list to see it."
 msgstr ""
 "Llama a una persona por voz o video, o elige una llamada de la lista para "
 "verla."
 
-#: src/app/calls.rs:116
+#: src/app/calls.rs:116 src/app.rs:11099
 msgid "Locked chat"
 msgstr "Chat bloqueado"
 
-#: src/app/calls.rs:398 src/app/calls.rs:679
+#: src/app/calls.rs:377
+msgid "Unblock this contact to call them."
+msgstr ""
+
+#: src/app/calls.rs:405 src/app/calls.rs:686
 msgid "Hang up the current call first"
 msgstr "Primero cuelga la llamada en curso"
 
-#: src/app/calls.rs:503 src/app/calls.rs:572
+#: src/app/calls.rs:510 src/app/calls.rs:579
 msgid "Incoming call"
 msgstr "Llamada entrante"
 
-#: src/app/calls.rs:613
+#: src/app/calls.rs:620
 #, rust-format
 msgid ""
 "{caller} is calling {group}. ZapFast can't join group calls yet: answer on "
@@ -2626,7 +2754,7 @@ msgstr ""
 "{caller} está llamando a {group}. ZapFast aún no puede unirse a llamadas "
 "grupales: responde en tu teléfono."
 
-#: src/app/calls.rs:621
+#: src/app/calls.rs:628
 #, rust-format
 msgid ""
 "{caller} is calling you and others. ZapFast can't join group calls yet: "
@@ -2636,12 +2764,12 @@ msgstr ""
 "unirse a llamadas grupales: responde en tu teléfono."
 
 #. Translators: {name} is replaced by the author's name, shown as a link.
-#: src/ui/widgets.rs:944
+#: src/ui/widgets.rs:1178
 #, rust-format
 msgid "Built with love by {name}"
 msgstr "Hecho con amor por {name}"
 
-#: src/ui/widgets.rs:1834
+#: src/ui/widgets.rs:2068
 #, rust-format
 msgid "{label}, {count} unread"
 msgstr "{label}, {count} sin leer"
@@ -2705,100 +2833,107 @@ msgstr[1] "{} pendientes"
 msgid "No one yet"
 msgstr "Nadie todavía"
 
-#: src/app.rs:899
+#: src/app.rs:1048
 msgid "Could not check the number. Please try again."
 msgstr "No se pudo comprobar el número. Inténtalo de nuevo."
 
-#: src/app.rs:903
+#: src/app.rs:1052
 msgid "This number is not on WhatsApp"
 msgstr "Este número no está en WhatsApp"
 
-#: src/app.rs:906
+#: src/app.rs:1055
 msgid "Not connected to WhatsApp"
 msgstr "Sin conexión a WhatsApp"
 
-#: src/app.rs:909 src/app.rs:7934
+#: src/app.rs:1058 src/app.rs:9287
 msgid "Enter a valid international phone number"
 msgstr "Introduce un número de teléfono internacional válido"
 
-#: src/app.rs:1115
+#: src/app.rs:1342
 msgid "Show or hide ZapFast"
 msgstr "Mostrar u ocultar ZapFast"
 
-#: src/app.rs:1117
+#: src/app.rs:1344
 msgid "Lock ZapFast"
 msgstr "Bloquear ZapFast"
 
-#: src/app.rs:1120 src/i18n_extra.rs:105
+#: src/app.rs:1347 src/i18n_extra.rs:105
 msgid "Quit"
 msgstr "Salir"
 
-#: src/app.rs:1754 src/app.rs:1765
+#: src/app.rs:2086 src/app.rs:2097
 #, rust-format
 msgid "Could not add an account: {error}"
 msgstr "No se pudo añadir la cuenta: {error}"
 
-#: src/app.rs:1853
+#: src/app.rs:2185
 msgid "Could not delete the removed account's files"
 msgstr "No se pudieron borrar los archivos de la cuenta quitada"
 
-#: src/app.rs:2511
+#: src/app.rs:3015
 #, rust-format
 msgid "A label named “{name}” already exists."
 msgstr "Ya existe una etiqueta llamada «{name}»."
 
-#: src/app.rs:2600
+#: src/app.rs:3104
 #, rust-format
 msgid "{name} (You)"
 msgstr "{name} (Tú)"
 
-#: src/app.rs:3185
+#: src/app.rs:3724
 msgid "Media cache cleared"
 msgstr "Caché multimedia vaciada"
 
-#: src/app.rs:3265
+#: src/app.rs:3859
 msgid "Star removed"
 msgstr "Destacado quitado"
 
-#: src/app.rs:3301
+#: src/app.rs:3895
 msgid "Pinned for 7 days"
 msgstr "Fijado durante 7 días"
 
-#: src/app.rs:3303
+#: src/app.rs:3897
 msgid "Pin removed"
 msgstr "Mensaje sin fijar"
 
-#: src/app.rs:3808
+#: src/app.rs:4178
+#, rust-format
+msgid ""
+"Saved {path}. Messages: {messages}; attachments: {files}; unavailable: "
+"{missing}."
+msgstr ""
+
+#: src/app.rs:4542
 msgid "History loaded"
 msgstr "Historial cargado"
 
-#: src/app.rs:3813
+#: src/app.rs:4547
 msgid "Loading chat history"
 msgstr "Cargando el historial del chat"
 
-#: src/app.rs:3907
+#: src/app.rs:4641
 msgid "Could not use this image"
 msgstr "No se pudo usar esta imagen"
 
-#: src/app.rs:3945
+#: src/app.rs:4679
 msgid "Request sent. An admin must approve it before you join."
 msgstr ""
 "Solicitud enviada. Un administrador tiene que aprobarla antes de que entres."
 
-#: src/app.rs:3966
+#: src/app.rs:4700
 msgid "Could not use this picture."
 msgstr "No se puede usar esta imagen."
 
-#: src/app.rs:4137 src/ui/mod.rs:557
+#: src/app.rs:4896
 #, rust-format
 msgid "ZapFast {} is available"
 msgstr "ZapFast {} está disponible"
 
-#: src/app.rs:4183 src/app.rs:7823
+#: src/app.rs:4949 src/app.rs:9156
 msgid "This chat already has three pinned messages"
 msgstr "Este chat ya tiene tres mensajes fijados"
 
-#: src/app.rs:4188
+#: src/app.rs:4954
 msgid ""
 "WhatsApp hasn't turned on group calls from a computer for your account yet. "
 "Ask someone in the group to call it, and answer here."
@@ -2806,29 +2941,77 @@ msgstr ""
 "WhatsApp aún no ha activado las llamadas grupales desde un computador para "
 "tu cuenta. Pide a alguien del grupo que llame y contesta aquí."
 
-#: src/app.rs:4193 src/app.rs:6870
+#: src/app.rs:4959 src/app.rs:8146
 msgid "ZapFast can't join group calls yet: open the link on your phone."
 msgstr ""
 "ZapFast aún no puede unirse a llamadas grupales: abre el enlace en tu "
 "teléfono."
 
-#: src/app.rs:4284
+#: src/app.rs:4965
+#, fuzzy
+msgid "Connect to WhatsApp to change disappearing messages."
+msgstr "Conéctate a WhatsApp para cambiar la privacidad de tu cuenta."
+
+#: src/app.rs:4971
+#, fuzzy
+msgid "Could not change disappearing messages."
+msgstr "Mensajes temporales"
+
+#: src/app.rs:4976
+#, fuzzy
+msgid "Only admins can change disappearing messages."
+msgstr "Mensajes temporales"
+
+#: src/app.rs:5013
+#, fuzzy
+msgid "Connect to WhatsApp to archive this chat"
+msgstr "Conéctate a WhatsApp para crear un grupo."
+
+#: src/app.rs:5017
+#, fuzzy
+msgid "Connect to WhatsApp to unarchive this chat"
+msgstr "Conéctate a WhatsApp para crear un grupo."
+
+#: src/app.rs:5020
+#, fuzzy
+msgid "Could not read this chat. Try again"
+msgstr "No se pudo crear el grupo. Inténtalo de nuevo."
+
+#: src/app.rs:5024
+#, fuzzy
+msgid "Could not confirm archiving on WhatsApp. Try again"
+msgstr "No se pudo crear el grupo. Inténtalo de nuevo."
+
+#: src/app.rs:5028
+#, fuzzy
+msgid "Could not confirm unarchiving on WhatsApp. Try again"
+msgstr "No se pudo crear el grupo. Inténtalo de nuevo."
+
+#: src/app.rs:5032
+msgid "WhatsApp updated this chat, but ZapFast could not save the change"
+msgstr ""
+
+#: src/app.rs:5120
 msgid "Connecting"
 msgstr "Conectando"
 
-#: src/app.rs:4302
+#: src/app.rs:5138
 msgid "Back online"
 msgstr "Conectado de nuevo"
 
-#: src/app.rs:4372
+#: src/app.rs:5217
 msgid "This device was unlinked from your phone"
 msgstr "Este dispositivo se desvinculó de tu teléfono"
 
-#: src/app.rs:4920 src/app/quick_reply.rs:197
+#: src/app.rs:5791 src/app.rs:7459
+msgid "Unblock this contact to send messages."
+msgstr ""
+
+#: src/app.rs:5795 src/app/quick_reply.rs:197
 msgid "Not sent: ZapFast is not connected to WhatsApp."
 msgstr "No enviado: ZapFast no está conectado a WhatsApp."
 
-#: src/app.rs:4924
+#: src/app.rs:5799
 msgid ""
 "Not sent: the message you’re replying to isn’t available on this computer. "
 "Cancel the reply to send without a quote."
@@ -2836,136 +3019,160 @@ msgstr ""
 "No enviado: el mensaje al que respondes no está disponible en este equipo. "
 "Cancela la respuesta para enviarlo sin cita."
 
-#: src/app.rs:5693 src/app.rs:5798
+#: src/app.rs:5803 src/app.rs:6850
+msgid "Not sent: view-once mode is available for one photo at a time."
+msgstr ""
+"No se envió: la opción de ver una vez está disponible para una foto a la vez."
+
+#: src/app.rs:6796 src/app.rs:6953
 msgid "Open a chat first"
 msgstr "Primero abre un chat"
 
-#: src/app.rs:5807
+#: src/app.rs:6962
 #, rust-format
 msgid "Sending {} file…"
 msgid_plural "Sending {} files…"
 msgstr[0] "Enviando {} archivo…"
 msgstr[1] "Enviando {} archivos…"
 
-#: src/app.rs:6589
+#: src/app.rs:7808
 msgid "History is already being requested for this chat"
 msgstr "Ya se está pidiendo el historial de este chat"
 
-#: src/app.rs:6601
+#: src/app.rs:7820
 msgid "Requesting earlier messages from your phone"
 msgstr "Pidiéndole mensajes anteriores a tu teléfono"
 
-#: src/app.rs:6825
+#: src/app.rs:8084
 #, rust-format
 msgid "Could not open the attachment: {error}"
 msgstr "No se pudo abrir el adjunto: {error}"
 
-#: src/app.rs:6833
+#: src/app.rs:8092
 msgid "For safety, open this file yourself from its folder"
 msgstr "Por seguridad, abre este archivo tú mismo desde su carpeta"
 
-#: src/app.rs:6852
+#: src/app.rs:8128
 #, rust-format
 msgid "Could not open the folder: {error}"
 msgstr "No se pudo abrir la carpeta: {error}"
 
-#: src/app.rs:6859
+#: src/app.rs:8135
 msgid "The folder is unavailable"
 msgstr "La carpeta no está disponible"
 
-#: src/app.rs:6885
+#: src/app.rs:8161
 msgid "This link type cannot be opened from ZapFast"
 msgstr "Este tipo de enlace no se puede abrir desde ZapFast"
 
-#: src/app.rs:6891
+#: src/app.rs:8167
 msgid "Copied"
 msgstr "Copiado"
 
-#: src/app.rs:7037
+#: src/app.rs:8324
 msgid "A selected chat is no longer writable"
 msgstr "Ya no se pueden enviar mensajes a uno de los chats seleccionados"
 
-#: src/app.rs:7573
+#: src/app.rs:8896
 msgid "Added to favorites"
 msgstr "Añadido a favoritos"
 
-#: src/app.rs:7650
+#: src/app.rs:8973
 msgid "Sending the sticker pack…"
 msgstr "Enviando el paquete de stickers…"
 
-#: src/app.rs:7691
+#: src/app.rs:9026
 msgid "Sending GIF…"
 msgstr "Enviando GIF…"
 
-#: src/app.rs:7788
+#: src/app.rs:9121
 #, rust-format
 msgid "You can only pin {} chat"
 msgid_plural "You can only pin {} chats"
 msgstr[0] "Solo puedes fijar {} chat"
 msgstr[1] "Solo puedes fijar {} chats"
 
-#: src/app.rs:8054 src/ui/labels.rs:257
+#: src/app.rs:9407 src/ui/labels.rs:257
 #, rust-format
 msgid "You have {limit} labels, the most ZapFast keeps."
 msgstr "Tienes {limit} etiquetas, el máximo que guarda ZapFast."
 
-#: src/app.rs:8457
+#: src/app.rs:9574
+#, fuzzy
+msgid "No chat open"
+msgstr "Código de chats bloqueados"
+
+#: src/app.rs:9602
+#, fuzzy
+msgid "Loading the replied message"
+msgstr "Volver a cargar mensajes anteriores"
+
+#: src/app.rs:9913
 msgid "Invite link copied"
 msgstr "Enlace de invitación copiado"
 
-#: src/app.rs:8578
+#: src/app.rs:10038
 msgid "Enter the phone number with its country code, using digits only"
 msgstr "Ingresa el número de teléfono con su código de país, solo con dígitos"
 
 #. Translators: an announcement from an account that is not on screen:
 #. the account's name, then what it announced.
-#: src/app.rs:8731
+#: src/app.rs:10200
 #, rust-format
 msgid "{}: {}"
 msgstr "{}: {}"
 
-#: src/app.rs:8841
+#: src/app.rs:10310
 msgid "The old link no longer works. Here is a new one."
 msgstr "El enlace anterior ya no funciona. Aquí tienes uno nuevo."
 
-#: src/app.rs:8883
+#: src/app.rs:10352
 #, rust-format
 msgid "{count} person added to the group"
 msgid_plural "{count} people added to the group"
 msgstr[0] "Se agregó {count} persona al grupo"
 msgstr[1] "Se agregaron {count} personas al grupo"
 
-#: src/app.rs:9137
+#: src/app.rs:10412
+msgid "This file is no longer on this computer. Download it again."
+msgstr ""
+
+#: src/app.rs:10636
 msgid "Allow ZapFast in System Settings, under Login Items."
 msgstr "Permite ZapFast en Configuración del Sistema, en Ítems de inicio."
 
-#: src/app.rs:9146
+#: src/app.rs:10645
 #, rust-format
 msgid "Could not change the login item: {error}"
 msgstr "No se pudo cambiar el inicio automático: {error}"
 
-#: src/app.rs:9297
+#: src/app.rs:10798
 msgid "App lock password saved"
 msgstr "Contraseña de bloqueo guardada"
 
-#: src/app.rs:9305
+#: src/app.rs:10806
 msgid "App lock turned off"
 msgstr "Bloqueo de la app desactivado"
 
-#: src/app.rs:9439
+#: src/app.rs:10940
 msgid "This video opens in your system player"
 msgstr "Este vídeo se abre en el reproductor del sistema"
 
-#: src/app.rs:9744
+#: src/app.rs:11292 src/app.rs:11352
+#, fuzzy
+msgid "Replied message not found"
+msgstr "No se encontraron mensajes"
+
+#: src/app.rs:11481
 #, rust-format
 msgid "Could not record: {error}"
 msgstr "No se pudo grabar: {error}"
 
-#: src/app.rs:10111
+#: src/app.rs:11986
 msgid "Copied image"
 msgstr "Imagen copiada"
 
-#: src/app.rs:10114 src/app.rs:10119
+#: src/app.rs:11989 src/app.rs:11994
 msgid "Failed to copy image"
 msgstr "Error al copiar la imagen"
 
@@ -3075,47 +3282,72 @@ msgstr "Renombrar o cambiar el color"
 msgid "Delete this label. Its chats keep their messages."
 msgstr "Eliminar esta etiqueta. Sus chats conservan sus mensajes."
 
-#: src/ui/picker.rs:453
+#: src/ui/picker.rs:140 src/i18n_extra.rs:40
+msgid "Emoji"
+msgstr "Emoji"
+
+#: src/ui/picker.rs:488
 msgid "React to message"
 msgstr "Reaccionar al mensaje"
 
-#: src/ui/picker.rs:464
+#: src/ui/picker.rs:499
 msgid "Close reactions"
 msgstr "Cerrar reacciones"
 
-#: src/ui/picker.rs:648
+#: src/ui/picker.rs:678
 msgid "Search emoji"
 msgstr "Buscar emoji"
 
-#: src/ui/picker.rs:1262 src/i18n_extra.rs:29
+#: src/ui/picker.rs:1115
+msgid "Search GIFs via GIPHY"
+msgstr ""
+
+#: src/ui/picker.rs:1132
+#, fuzzy
+msgid "Searching…"
+msgstr "Guardando…"
+
+#: src/ui/picker.rs:1219 src/ui/mod.rs:679
+msgid "Retry"
+msgstr "Reintentar"
+
+#: src/ui/picker.rs:1221
+msgid "Load more"
+msgstr ""
+
+#: src/ui/picker.rs:1232
+msgid "Search for a GIF or browse trending results."
+msgstr ""
+
+#: src/ui/picker.rs:1345 src/i18n_extra.rs:29
 msgid "Recent"
 msgstr "Recientes"
 
-#: src/ui/picker.rs:1264
+#: src/ui/picker.rs:1347
 msgid "Received"
 msgstr "Recibidos"
 
-#: src/ui/picker.rs:1265
+#: src/ui/picker.rs:1348
 msgid "Add stickers"
 msgstr "Añadir stickers"
 
-#: src/ui/picker.rs:1300
+#: src/ui/picker.rs:1383
 msgid "Search by emoji, word, or pack"
 msgstr "Buscar por emoji, palabra o paquete"
 
-#: src/ui/picker.rs:1339
+#: src/ui/picker.rs:1422
 msgid "No stickers match your search."
 msgstr "Ningún sticker coincide con tu búsqueda."
 
-#: src/ui/picker.rs:1353
+#: src/ui/picker.rs:1436
 msgid "Loading your stickers…"
 msgstr "Cargando tus stickers…"
 
-#: src/ui/picker.rs:1355
+#: src/ui/picker.rs:1438
 msgid "Stickers you send appear here."
 msgstr "Aquí aparecen los stickers que envías."
 
-#: src/ui/picker.rs:1364
+#: src/ui/picker.rs:1447
 msgid ""
 "Right-click any sticker to add it to your favorites. They stay in sync with "
 "your phone."
@@ -3123,40 +3355,40 @@ msgstr ""
 "Haz clic derecho en cualquier sticker para añadirlo a tus favoritos. Se "
 "mantienen sincronizados con tu teléfono."
 
-#: src/ui/picker.rs:1370
+#: src/ui/picker.rs:1453
 msgid "Stickers people send you appear here."
 msgstr "Aquí aparecen los stickers que recibes."
 
-#: src/ui/picker.rs:1385
+#: src/ui/picker.rs:1468
 msgid "Remove this pack"
 msgstr "Quitar este paquete"
 
-#: src/ui/picker.rs:1399
+#: src/ui/picker.rs:1482
 msgid "Send this pack to the chat"
 msgstr "Enviar este paquete al chat"
 
-#: src/ui/picker.rs:1413
+#: src/ui/picker.rs:1496
 msgid "Nothing here yet. Right-click any sticker to add it to this pack."
 msgstr ""
 "Aún no hay nada. Haz clic derecho en cualquier sticker para añadirlo a este "
 "paquete."
 
-#: src/ui/picker.rs:1490
+#: src/ui/picker.rs:1573
 msgid "Import a pack"
 msgstr "Importar un paquete"
 
-#: src/ui/picker.rs:1498
+#: src/ui/picker.rs:1581
 msgid ""
 "Paste a signal.art link from signalstickers.org, or open a .wastickers file."
 msgstr ""
 "Pega un enlace de signal.art desde signalstickers.org o abre un "
 "archivo .wastickers."
 
-#: src/ui/picker.rs:1508
+#: src/ui/picker.rs:1591
 msgid "Make your own"
 msgstr "Crea los tuyos"
 
-#: src/ui/picker.rs:1516
+#: src/ui/picker.rs:1599
 msgid ""
 "Start a pack, then right-click any sticker to add it. Or turn a picture into "
 "a sticker."
@@ -3164,35 +3396,35 @@ msgstr ""
 "Crea un paquete y luego haz clic derecho en cualquier sticker para añadirlo. "
 "O convierte una imagen en sticker."
 
-#: src/ui/picker.rs:1528
+#: src/ui/picker.rs:1611
 msgid "Make a sticker from a picture…"
 msgstr "Crear un sticker a partir de una imagen…"
 
-#: src/ui/picker.rs:1543
+#: src/ui/picker.rs:1626
 msgid "Create pack"
 msgstr "Crear paquete"
 
-#: src/ui/picker.rs:1554
+#: src/ui/picker.rs:1637
 msgid "New pack…"
 msgstr "Nuevo paquete…"
 
-#: src/ui/picker.rs:1587
+#: src/ui/picker.rs:1670
 msgid "Find packs"
 msgstr "Buscar paquetes"
 
-#: src/ui/picker.rs:1603
+#: src/ui/picker.rs:1686
 msgid "Paste a signal.art link"
 msgstr "Pega un enlace de signal.art"
 
-#: src/ui/picker.rs:1631
+#: src/ui/picker.rs:1714
 msgid "Browse signalstickers.org"
 msgstr "Explorar signalstickers.org"
 
-#: src/ui/picker.rs:1647
+#: src/ui/picker.rs:1730
 msgid "Importing the pack…"
 msgstr "Importando el paquete…"
 
-#: src/ui/picker.rs:1696
+#: src/ui/picker.rs:1779
 msgid "Remove from recents"
 msgstr "Quitar de recientes"
 
@@ -3239,10 +3471,6 @@ msgstr "Símbolos"
 #: src/i18n_extra.rs:39
 msgid "Flags"
 msgstr "Banderas"
-
-#: src/i18n_extra.rs:40
-msgid "Emoji"
-msgstr "Emoji"
 
 #: src/i18n_extra.rs:45
 msgid "Search the open chat or the settings"
@@ -3384,18 +3612,6 @@ msgstr ""
 "Este mensaje no se pudo enviar y ZapFast no lo va a reintentar. Envíalo de "
 "nuevo tú mismo."
 
-#: src/i18n_extra.rs:130
-msgid "Enter the whole number, starting with the country code"
-msgstr "Ingresa el número completo, empezando por el código de país"
-
-#: src/i18n_extra.rs:135
-msgid ""
-"Enter a phone number with its country code, using only digits, spaces, "
-"hyphens and brackets"
-msgstr ""
-"Ingresa un número de teléfono con su código de país, solo con dígitos, "
-"espacios, guiones y paréntesis"
-
 #: src/i18n_extra.rs:140
 msgid "No longer available on WhatsApp's servers"
 msgstr "Ya no está disponible en los servidores de WhatsApp"
@@ -3517,91 +3733,91 @@ msgctxt "privacy"
 msgid "Silence unknown callers"
 msgstr "Silenciar llamadas desconocidas"
 
-#: src/ui/image_editor.rs:106
+#: src/ui/image_editor.rs:125
 msgid "Cancel (Esc)"
 msgstr "Cancelar (Esc)"
 
-#: src/ui/image_editor.rs:119
+#: src/ui/image_editor.rs:138
 msgid "Keep this crop"
 msgstr "Conservar este recorte"
 
-#: src/ui/image_editor.rs:140
+#: src/ui/image_editor.rs:160
 msgid "Reset"
 msgstr "Restablecer"
 
-#: src/ui/image_editor.rs:144
+#: src/ui/image_editor.rs:164
 msgid "Turn right"
 msgstr "Girar a la derecha"
 
-#: src/ui/image_editor.rs:157
+#: src/ui/image_editor.rs:177
 msgid "Turn left"
 msgstr "Girar a la izquierda"
 
-#: src/ui/image_preview.rs:245
+#: src/ui/image_preview.rs:281
 msgid "Close preview (Esc)"
 msgstr "Cerrar vista previa (Esc)"
 
-#: src/ui/image_preview.rs:258 src/ui/image_preview.rs:594
+#: src/ui/image_preview.rs:294 src/ui/image_preview.rs:631
 msgid "Open in another app"
 msgstr "Abrir en otra aplicación"
 
-#: src/ui/image_preview.rs:300
+#: src/ui/image_preview.rs:336
 msgid "Zoom in"
 msgstr "Acercar"
 
-#: src/ui/image_preview.rs:310
+#: src/ui/image_preview.rs:346
 msgid "Fit"
 msgstr "Ajustar"
 
-#: src/ui/image_preview.rs:311
+#: src/ui/image_preview.rs:347
 msgid "Show at original size"
 msgstr "Ver en tamaño original"
 
-#: src/ui/image_preview.rs:317
+#: src/ui/image_preview.rs:353
 msgid "Fit to the window (0)"
 msgstr "Ajustar a la ventana (0)"
 
-#: src/ui/image_preview.rs:333
+#: src/ui/image_preview.rs:369
 msgid "Zoom out"
 msgstr "Alejar"
 
-#: src/ui/image_preview.rs:444
+#: src/ui/image_preview.rs:481
 msgid "Show in the chat"
 msgstr "Ver en el chat"
 
-#: src/ui/image_preview.rs:499
+#: src/ui/image_preview.rs:536
 msgid "Show the photo"
 msgstr "Mostrar la foto"
 
-#: src/ui/image_preview.rs:503
+#: src/ui/image_preview.rs:540
 msgid "Play motion photo"
 msgstr "Reproducir foto en movimiento"
 
-#: src/ui/image_preview.rs:701
+#: src/ui/image_preview.rs:738
 msgid "This image could not be displayed in ZapFast."
 msgstr "ZapFast no pudo mostrar esta imagen."
 
-#: src/ui/image_preview.rs:704
+#: src/ui/image_preview.rs:741
 msgid "Open externally"
 msgstr "Abrir en otra app"
 
-#: src/ui/image_preview.rs:866
+#: src/ui/image_preview.rs:903
 msgid "Play or pause the video"
 msgstr "Reproducir o pausar el vídeo"
 
-#: src/ui/image_preview.rs:1186
+#: src/ui/image_preview.rs:1411
 msgid "Previous"
 msgstr "Anterior"
 
-#: src/ui/image_preview.rs:1187 src/ui/new_group.rs:158
+#: src/ui/image_preview.rs:1412 src/ui/new_group.rs:158
 msgid "Next"
 msgstr "Siguiente"
 
-#: src/ui/image_preview.rs:1191
+#: src/ui/image_preview.rs:1416
 msgid "Previous (Left arrow)"
 msgstr "Anterior (flecha izquierda)"
 
-#: src/ui/image_preview.rs:1192
+#: src/ui/image_preview.rs:1417
 msgid "Next (Right arrow)"
 msgstr "Siguiente (flecha derecha)"
 
@@ -3671,244 +3887,284 @@ msgstr "Chats individuales"
 msgid "Direct messages and groups"
 msgstr "Chats individuales y grupos"
 
-#: src/account.rs:304
+#: src/account.rs:342
 #, rust-format
 msgid "Account {id}"
 msgstr "Cuenta {id}"
 
-#: src/ui/accounts.rs:36
+#: src/ui/accounts.rs:38
 msgid "Switch account"
 msgstr "Cambiar de cuenta"
 
-#: src/ui/accounts.rs:87
+#: src/ui/accounts.rs:120
 msgid "Not linked"
 msgstr "Sin vincular"
 
-#: src/ui/accounts.rs:235
+#: src/ui/accounts.rs:210 src/ui/accounts.rs:328
+#, fuzzy
+msgid "Mute notifications"
+msgstr "Notificaciones"
+
+#: src/ui/accounts.rs:326
+#, fuzzy
+msgid "Unmute notifications"
+msgstr "Limitar notificaciones repetidas"
+
+#: src/ui/accounts.rs:342
 #, rust-format
 msgid "{count} unread chats"
 msgstr "{count} chats sin leer"
 
-#: src/ui/accounts.rs:271
+#: src/ui/accounts.rs:348
+#, fuzzy
+msgid "notifications muted"
+msgstr "Notificaciones"
+
+#: src/ui/accounts.rs:382
 msgid "Use another account"
 msgstr "Usar otra cuenta"
 
-#: src/ui/info.rs:45
+#: src/ui/info.rs:47
 msgid "Media, links and docs"
 msgstr "Archivos multimedia, enlaces y documentos"
 
-#: src/ui/info.rs:266
+#: src/ui/info.rs:299
 msgid "Group info"
 msgstr "Información del grupo"
 
-#: src/ui/info.rs:268
+#: src/ui/info.rs:301
 msgid "Channel info"
 msgstr "Información del canal"
 
-#: src/ui/info.rs:270
+#: src/ui/info.rs:303
 msgid "Contact info"
 msgstr "Información del contacto"
 
-#: src/ui/info.rs:338
+#: src/ui/info.rs:361
+#, fuzzy
+msgid "View photo"
+msgstr "Foto de visualización única"
+
+#: src/ui/info.rs:392
 msgid "Edit group name"
 msgstr "Editar el nombre del grupo"
 
-#: src/ui/info.rs:452 src/ui/info.rs:1986
+#: src/ui/info.rs:506 src/ui/info.rs:2249
 msgid "Save name (Enter)"
 msgstr "Guardar nombre (Enter)"
 
-#: src/ui/info.rs:477 src/ui/info.rs:1768
+#: src/ui/info.rs:531 src/ui/info.rs:689 src/ui/info.rs:1962
 msgid "Saving…"
 msgstr "Guardando…"
 
-#: src/ui/info.rs:507
+#: src/ui/info.rs:561
 msgid "Muted"
 msgstr "Silenciado"
 
-#: src/ui/info.rs:509
+#: src/ui/info.rs:563
 #, rust-format
 msgid "Muted until {}"
 msgstr "Silenciado hasta {}"
 
-#: src/ui/info.rs:556
+#: src/ui/info.rs:725
+#, fuzzy
+msgid "Add group description"
+msgstr "Añadir foto del grupo"
+
+#: src/ui/info.rs:735
 msgid "Description"
 msgstr "Descripción"
 
-#: src/ui/info.rs:579 src/ui/info.rs:1713
+#: src/ui/info.rs:746
+#, fuzzy
+msgid "Edit group description"
+msgstr "Editar el nombre del grupo"
+
+#: src/ui/info.rs:773 src/ui/info.rs:1907
 msgid "Group permissions"
 msgstr "Permisos del grupo"
 
-#: src/ui/info.rs:643
+#: src/ui/info.rs:837
 msgid "Rename"
 msgstr "Cambiar nombre"
 
-#: src/ui/info.rs:645
+#: src/ui/info.rs:839
 msgid "Add to contacts"
 msgstr "Agregar a contactos"
 
-#: src/ui/info.rs:683
+#: src/ui/info.rs:877
 msgid "Pin"
 msgstr "Fijar"
 
-#: src/ui/info.rs:757
+#: src/ui/info.rs:951
 #, rust-format
 msgid "Members ({})"
 msgstr "Participantes ({})"
 
-#: src/ui/info.rs:763 src/ui/new_group.rs:76
+#: src/ui/info.rs:957 src/ui/new_group.rs:76
 msgid "Add members"
 msgstr "Agregar miembros"
 
-#: src/ui/info.rs:817
+#: src/ui/info.rs:1011
 #, rust-format
 msgid "Options for {name}"
 msgstr "Opciones para {name}"
 
-#: src/ui/info.rs:869
+#: src/ui/info.rs:1063
 msgid "Group admin"
 msgstr "Admin. del grupo"
 
-#: src/ui/info.rs:997
+#: src/ui/info.rs:1191
 #, rust-format
 msgid "{}+"
 msgstr "{}+"
 
-#: src/ui/info.rs:1050
+#: src/ui/info.rs:1244
 msgid "Could not list the media."
 msgstr "No se pudieron mostrar los archivos multimedia."
 
-#: src/ui/info.rs:1058 src/ui/info.rs:1605 src/ui/login.rs:130
+#: src/ui/info.rs:1252 src/ui/info.rs:1799 src/ui/login.rs:136
 msgid "Try again"
 msgstr "Reintentar"
 
-#: src/ui/info.rs:1170
+#: src/ui/info.rs:1364
 msgid "No media"
 msgstr "No hay archivos multimedia"
 
-#: src/ui/info.rs:1173
+#: src/ui/info.rs:1367
 msgid "Photos and videos shared in this chat will show here."
 msgstr "Las fotos y los videos compartidos en este chat aparecerán aquí."
 
-#: src/ui/info.rs:1347
+#: src/ui/info.rs:1541
 msgid "No documents"
 msgstr "No hay documentos"
 
-#: src/ui/info.rs:1348
+#: src/ui/info.rs:1542
 msgid "Files shared in this chat will show here."
 msgstr "Los archivos compartidos en este chat aparecerán aquí."
 
-#: src/ui/info.rs:1371
+#: src/ui/info.rs:1565
 #, rust-format
 msgid "{} page"
 msgid_plural "{} pages"
 msgstr[0] "{} página"
 msgstr[1] "{} páginas"
 
-#: src/ui/info.rs:1393
+#: src/ui/info.rs:1587
 msgid "No links"
 msgstr "No hay enlaces"
 
-#: src/ui/info.rs:1394
+#: src/ui/info.rs:1588
 msgid "Links shared in this chat will show here."
 msgstr "Los enlaces compartidos en este chat aparecerán aquí."
 
-#: src/ui/info.rs:1467
+#: src/ui/info.rs:1661
 msgid "Only the newest items are listed."
 msgstr "Solo se muestran los elementos más recientes."
 
-#: src/ui/info.rs:1483
+#: src/ui/info.rs:1677
 msgctxt "info tab"
 msgid "Media"
 msgstr "Multimedia"
 
-#: src/ui/info.rs:1484
+#: src/ui/info.rs:1678
 msgctxt "info tab"
 msgid "Docs"
 msgstr "Documentos"
 
-#: src/ui/info.rs:1485
+#: src/ui/info.rs:1679
 msgctxt "info tab"
 msgid "Links"
 msgstr "Enlaces"
 
-#: src/ui/info.rs:1568
+#: src/ui/info.rs:1762
 msgid "Invite via link"
 msgstr "Invitar mediante enlace"
 
-#: src/ui/info.rs:1578
+#: src/ui/info.rs:1772
 msgid "Getting the link…"
 msgstr "Obteniendo el enlace…"
 
-#: src/ui/info.rs:1615
+#: src/ui/info.rs:1809
 msgid "Copy link"
 msgstr "Copiar enlace"
 
-#: src/ui/info.rs:1679
+#: src/ui/info.rs:1873
 msgid "Make group admin"
 msgstr "Designar como admin. del grupo"
 
-#: src/ui/info.rs:1683
+#: src/ui/info.rs:1877
 msgid "Dismiss as admin"
 msgstr "Descartar como admin."
 
-#: src/ui/info.rs:1687
+#: src/ui/info.rs:1881
 msgid "Remove from group"
 msgstr "Eliminar del grupo"
 
-#: src/ui/info.rs:1752
+#: src/ui/info.rs:1946
 msgid "Admins can:"
 msgstr "Los administradores pueden:"
 
-#: src/ui/info.rs:1754
+#: src/ui/info.rs:1948
 msgid "Members can:"
 msgstr "Los miembros pueden:"
 
-#: src/ui/info.rs:1897
+#: src/ui/info.rs:2091
 msgid "Change group photo"
 msgstr "Cambiar la foto del grupo"
 
-#: src/ui/info.rs:1904 src/ui/new_group.rs:311
+#: src/ui/info.rs:2098 src/ui/new_group.rs:311
 msgid "Change photo"
 msgstr "Cambiar foto"
 
-#: src/ui/info.rs:1905 src/ui/new_group.rs:312
+#: src/ui/info.rs:2099 src/ui/new_group.rs:312
 msgid "Remove photo"
 msgstr "Quitar foto"
 
-#: src/ui/info.rs:1943
+#: src/ui/info.rs:2125
+#, fuzzy
+msgid "Group description"
+msgstr "Descripción"
+
+#: src/ui/info.rs:2164
+#, fuzzy
+msgid "Save description"
+msgstr "Descripción"
+
+#: src/ui/info.rs:2206
 msgid "Group name"
 msgstr "Nombre del grupo"
 
-#: src/ui/info.rs:1998
+#: src/ui/info.rs:2261
 msgid "Cancel (Escape)"
 msgstr "Cancelar (Escape)"
 
-#: src/ui/login.rs:12
+#: src/ui/login.rs:16
 msgid "A native WhatsApp client."
 msgstr "Un cliente nativo de WhatsApp."
 
-#: src/ui/login.rs:86 src/ui/mod.rs:567
+#: src/ui/login.rs:92 src/ui/mod.rs:612
 msgid "Connecting to WhatsApp…"
 msgstr "Conectando con WhatsApp…"
 
-#: src/ui/login.rs:93
+#: src/ui/login.rs:99
 msgid "Linked. Waiting for your chats…"
 msgstr "Vinculado. Esperando tus chats…"
 
-#: src/ui/login.rs:102
+#: src/ui/login.rs:108
 msgid "This computer was unlinked from your phone. Requesting a new code."
 msgstr ""
 "Este computador se desvinculó de tu teléfono. Pidiendo un código nuevo."
 
-#: src/ui/login.rs:111
+#: src/ui/login.rs:117
 msgid "Requesting a new code…"
 msgstr "Pidiendo un código nuevo…"
 
-#: src/ui/login.rs:141
+#: src/ui/login.rs:147
 msgid "Start over…"
 msgstr "Empezar de nuevo…"
 
-#: src/ui/login.rs:164
+#: src/ui/login.rs:165
 #, rust-format
 msgid "Requesting a code for +{phone}…"
 msgstr "Pidiendo un código para +{phone}…"
@@ -3923,31 +4179,36 @@ msgstr ""
 "Cliente no oficial. Usarlo puede ir contra las condiciones del servicio de "
 "WhatsApp."
 
-#: src/ui/login.rs:210
+#: src/ui/login.rs:211
 msgid "Link this computer"
 msgstr "Vincular este computador"
 
-#: src/ui/login.rs:225 src/ui/login.rs:288
+#: src/ui/login.rs:225 src/ui/login.rs:281
 msgid "Open WhatsApp on your phone"
 msgstr "Abre WhatsApp en tu teléfono"
 
-#: src/ui/login.rs:226 src/ui/login.rs:289
+#: src/ui/login.rs:226 src/ui/login.rs:282
 msgid "Tap Menu or Settings, then Linked devices"
 msgstr "Toca Menú o Configuración y luego Dispositivos vinculados"
 
-#: src/ui/login.rs:229
+#: src/ui/login.rs:227
 msgid "Tap Link a device and point the phone at this code"
 msgstr "Toca Vincular un dispositivo y apunta el teléfono a este código"
 
-#: src/ui/login.rs:247
+#: src/ui/login.rs:244
 msgid "Link with phone number instead"
 msgstr "Vincular con el número de teléfono"
 
-#: src/ui/login.rs:261
+#: src/ui/login.rs:259
 msgid "Enter this code on your phone"
 msgstr "Ingresa este código en tu teléfono"
 
-#: src/ui/login.rs:292
+#: src/ui/login.rs:264
+#, rust-format
+msgid "for +{phone}"
+msgstr ""
+
+#: src/ui/login.rs:285
 msgid "Tap Link a device, then Link with phone number instead"
 msgstr ""
 "Toca Vincular un dispositivo y luego Vincular con el número de teléfono"
@@ -3959,6 +4220,10 @@ msgstr "Mostrar la lista de chats (Ctrl+B)"
 #: src/ui/rail.rs:309
 msgid "Starred messages"
 msgstr "Mensajes destacados"
+
+#: src/ui/rail.rs:317
+msgid "Archived"
+msgstr "Archivados"
 
 #: src/ui/rail.rs:323
 msgid "Locked"
@@ -3972,67 +4237,61 @@ msgstr "Cerrar ajustes (Ctrl+,)"
 msgid "Settings (Ctrl+,)"
 msgstr "Ajustes (Ctrl+,)"
 
-#: src/ui/mod.rs:519
+#: src/ui/mod.rs:568
 #, rust-format
 msgid "Drop to send to {name}"
 msgstr "Suelta para enviar a {name}"
 
-#: src/ui/mod.rs:544
+#: src/ui/mod.rs:589
 #, rust-format
 msgid "Loading chat history… {percent}%"
 msgstr "Cargando el historial del chat… {percent}%"
 
-#: src/ui/mod.rs:547
+#: src/ui/mod.rs:592
 msgid "Loading chat history…"
 msgstr "Cargando el historial del chat…"
 
-#: src/ui/mod.rs:576
+#: src/ui/mod.rs:602
+#, rust-format
+msgid "ZapFast {version} is available"
+msgstr ""
+
+#: src/ui/mod.rs:619
 #, rust-format
 msgid "Offline ({reason}). Reconnecting…"
 msgstr "Sin conexión ({reason}). Reconectando…"
 
-#: src/ui/mod.rs:592
+#: src/ui/mod.rs:634
 msgid "Not linked to a phone"
 msgstr "No vinculado a un teléfono"
 
-#: src/ui/mod.rs:626
+#: src/ui/mod.rs:668
 msgid "Update"
 msgstr "Actualizar"
 
-#: src/ui/mod.rs:637
-msgid "Retry"
-msgstr "Reintentar"
-
-#: src/ui/mod.rs:752
+#: src/ui/mod.rs:794
 msgid "Dismiss"
 msgstr "Descartar"
 
-#: src/ui/mod.rs:767
+#: src/ui/mod.rs:809
 msgid "Copy this message"
 msgstr "Copiar este mensaje"
 
-#: src/ui/mod.rs:902
+#: src/ui/mod.rs:944
 msgid "Minimize"
 msgstr "Minimizar"
 
-#: src/ui/mod.rs:903
+#: src/ui/mod.rs:945
 msgid "Maximize"
 msgstr "Maximizar"
 
-#: src/ui/mod.rs:904
+#: src/ui/mod.rs:946
 msgid "Restore"
 msgstr "Restaurar"
 
 #: src/ui/new_group.rs:78
 msgid "Add group members"
 msgstr "Añadir miembros al grupo"
-
-#: src/ui/new_group.rs:146
-#, rust-format
-msgid "{count} selected"
-msgid_plural "{count} selected"
-msgstr[0] "{count} seleccionado"
-msgstr[1] "{count} seleccionados"
 
 #: src/ui/new_group.rs:156
 msgctxt "add group members"
@@ -4183,320 +4442,6 @@ msgstr "Abrir chat (Ctrl+O)"
 msgid "Reply to this message"
 msgstr "Responder a este mensaje"
 
-#: src/util.rs:325
-#, fuzzy, rust-format
-msgid "{name} turned off disappearing messages"
-msgstr "Mensajes temporales"
-
-#: src/util.rs:329
-#, rust-format
-msgid "{name} changed the disappearing messages setting to {duration}"
-msgstr ""
-
-#: src/ui/chats.rs:1620 src/ui/conversation.rs:1008
-#, rust-format
-msgid "{name} is recording audio…"
-msgstr ""
-
-#: src/ui/chats.rs:1625 src/ui/conversation.rs:1028
-#, fuzzy
-msgid "recording audio…"
-msgstr "Enviando el paquete de stickers…"
-
-#: src/ui/chats.rs:2313
-#, fuzzy
-msgid "8 hours"
-msgstr "24 horas"
-
-#: src/ui/chats.rs:2317
-msgid "1 week"
-msgstr ""
-
-#: src/ui/chats.rs:2320
-msgid "Always"
-msgstr ""
-
-#: src/ui/conversation.rs:682
-msgid "Export chat…"
-msgstr ""
-
-#: src/ui/conversation.rs:1012
-#, rust-format
-msgid "{names} and {last} are recording audio…"
-msgstr ""
-
-#: src/ui/conversation.rs:1514
-#, fuzzy
-msgid "You blocked this contact"
-msgstr "Saliste de este canal"
-
-#: src/ui/conversation.rs:1935
-msgid "Bold"
-msgstr ""
-
-#: src/ui/conversation.rs:1936
-msgid "Italic"
-msgstr ""
-
-#: src/ui/conversation.rs:1937
-msgid "Strikethrough"
-msgstr ""
-
-#: src/ui/conversation.rs:1938
-msgid "Monospace"
-msgstr ""
-
-#: src/ui/conversation.rs:2384
-#, fuzzy, rust-format
-msgid "Cancel sending {name}"
-msgstr "Info. del mensaje"
-
-#: src/ui/conversation.rs:2392
-#, fuzzy, rust-format
-msgid "Sending {name}"
-msgstr "Info. del mensaje"
-
-#: src/ui/conversation.rs:2398
-#, rust-format
-msgid "{time} left"
-msgstr ""
-
-#: src/ui/conversation.rs:2534
-#, fuzzy
-msgid "Loading preview…"
-msgstr "Cargando…"
-
-#: src/ui/conversation.rs:2545
-msgid "Remove link preview"
-msgstr ""
-
-#: src/ui/conversation.rs:6954
-#, fuzzy
-msgid "Remove reaction"
-msgstr "Quitar tu reacción"
-
-#: src/ui/conversation.rs:7460 src/ui/conversation.rs:7866
-#, rust-format
-msgid "{option}, unavailable: {reason}"
-msgstr ""
-
-#: src/ui/conversation.rs:7708
-#, rust-format
-msgid "Card {number}: {button}"
-msgstr ""
-
-#: src/ui/conversation.rs:7750
-#, fuzzy
-msgid "Go to replied message"
-msgstr "No hay mensajes destacados"
-
-#: src/ui/conversation.rs:7761
-#, rust-format
-msgid "Info about {name}"
-msgstr ""
-
-#: src/ui/conversation.rs:7839
-#, fuzzy
-msgid "Only messages you sent"
-msgstr "No se encontraron mensajes"
-
-#: src/ui/conversation.rs:7841
-msgid "The time limit has passed"
-msgstr ""
-
-#: src/ui/conversation.rs:9586
-#, rust-format
-msgid "Send reply: {label}"
-msgstr ""
-
-#: src/ui/conversation.rs:13594
-msgid "View once"
-msgstr "Ver una vez"
-
-#: src/ui/conversation.rs:13623
-msgid "The recipient can open this photo only once, on their phone."
-msgstr ""
-"La persona destinataria solo podrá abrir esta foto una vez en su teléfono."
-
-#: src/ui/dialogs.rs:449
-msgid ""
-"This moves the chat to the Locked tab, hiding it from the normal chat list, "
-"search, unread badges, and notifications. The lock status also syncs to your "
-"phone. Open Locked with a separate local ZapFast code to read it."
-msgstr ""
-
-#: src/ui/dialogs.rs:1032
-#, fuzzy, rust-format
-msgid "Version {version}"
-msgstr "Actualizar a {version}"
-
-#: src/ui/settings.rs:593
-#, fuzzy
-msgid "Blocked contacts"
-msgstr "Todos los contactos"
-
-#: src/ui/settings.rs:599
-#, fuzzy
-msgid "Manage"
-msgstr "Gestionar etiquetas"
-
-#: src/ui/calls.rs:496
-#, rust-format
-msgid "{} participant"
-msgid_plural "{} participants"
-msgstr[0] ""
-msgstr[1] ""
-
-#: src/app/calls.rs:377
-msgid "Unblock this contact to call them."
-msgstr ""
-
-#: src/app.rs:4130
-#, rust-format
-msgid ""
-"Saved {path}. Messages: {messages}; attachments: {files}; unavailable: "
-"{missing}."
-msgstr ""
-
-#: src/app.rs:4913
-#, fuzzy
-msgid "Connect to WhatsApp to change disappearing messages."
-msgstr "Conéctate a WhatsApp para cambiar la privacidad de tu cuenta."
-
-#: src/app.rs:4919
-#, fuzzy
-msgid "Could not change disappearing messages."
-msgstr "Mensajes temporales"
-
-#: src/app.rs:4924
-#, fuzzy
-msgid "Only admins can change disappearing messages."
-msgstr "Mensajes temporales"
-
-#: src/app.rs:4961
-#, fuzzy
-msgid "Connect to WhatsApp to archive this chat"
-msgstr "Conéctate a WhatsApp para crear un grupo."
-
-#: src/app.rs:4965
-#, fuzzy
-msgid "Connect to WhatsApp to unarchive this chat"
-msgstr "Conéctate a WhatsApp para crear un grupo."
-
-#: src/app.rs:4968
-#, fuzzy
-msgid "Could not read this chat. Try again"
-msgstr "No se pudo crear el grupo. Inténtalo de nuevo."
-
-#: src/app.rs:4972
-#, fuzzy
-msgid "Could not confirm archiving on WhatsApp. Try again"
-msgstr "No se pudo crear el grupo. Inténtalo de nuevo."
-
-#: src/app.rs:4976
-#, fuzzy
-msgid "Could not confirm unarchiving on WhatsApp. Try again"
-msgstr "No se pudo crear el grupo. Inténtalo de nuevo."
-
-#: src/app.rs:4980
-msgid "WhatsApp updated this chat, but ZapFast could not save the change"
-msgstr ""
-
-#: src/app.rs:5736 src/app.rs:7363
-msgid "Unblock this contact to send messages."
-msgstr ""
-
-#: src/app.rs:5748 src/app.rs:6795
-msgid "Not sent: view-once mode is available for one photo at a time."
-msgstr ""
-"No se envió: la opción de ver una vez está disponible para una foto a la vez."
-
-#: src/app.rs:9446
-#, fuzzy
-msgid "No chat open"
-msgstr "Código de chats bloqueados"
-
-#: src/app.rs:9474
-#, fuzzy
-msgid "Loading the replied message"
-msgstr "Volver a cargar mensajes anteriores"
-
-#: src/app.rs:10276
-msgid "This file is no longer on this computer. Download it again."
-msgstr ""
-
-#: src/app.rs:11146 src/app.rs:11206
-#, fuzzy
-msgid "Replied message not found"
-msgstr "No se encontraron mensajes"
-
-#: src/ui/picker.rs:1053
-msgid "Search GIFs via GIPHY"
-msgstr ""
-
-#: src/ui/picker.rs:1070
-#, fuzzy
-msgid "Searching…"
-msgstr "Guardando…"
-
-#: src/ui/picker.rs:1159
-msgid "Load more"
-msgstr ""
-
-#: src/ui/picker.rs:1170
-msgid "Search for a GIF or browse trending results."
-msgstr ""
-
-#: src/ui/accounts.rs:203 src/ui/accounts.rs:321
-#, fuzzy
-msgid "Mute notifications"
-msgstr "Notificaciones"
-
-#: src/ui/accounts.rs:319
-#, fuzzy
-msgid "Unmute notifications"
-msgstr "Limitar notificaciones repetidas"
-
-#: src/ui/accounts.rs:341
-#, fuzzy
-msgid "notifications muted"
-msgstr "Notificaciones"
-
-#: src/ui/info.rs:335
-#, fuzzy
-msgid "View photo"
-msgstr "Foto de visualización única"
-
-#: src/ui/info.rs:680
-#, fuzzy
-msgid "Add group description"
-msgstr "Añadir foto del grupo"
-
-#: src/ui/info.rs:701
-#, fuzzy
-msgid "Edit group description"
-msgstr "Editar el nombre del grupo"
-
-#: src/ui/info.rs:2071
-#, fuzzy
-msgid "Group description"
-msgstr "Descripción"
-
-#: src/ui/info.rs:2110
-#, fuzzy
-msgid "Save description"
-msgstr "Descripción"
-
-#: src/ui/login.rs:264
-#, rust-format
-msgid "for +{phone}"
-msgstr ""
-
-#: src/ui/mod.rs:579
-#, rust-format
-msgid "ZapFast {version} is available"
-msgstr ""
-
 #: src/ui/polls.rs:39
 #, fuzzy
 msgid "Question"
@@ -4530,84 +4475,84 @@ msgstr "Sin respuesta"
 msgid "Allow multiple answers"
 msgstr ""
 
-#: src/ui/polls.rs:165
+#: src/ui/polls.rs:170
 #, fuzzy
 msgid "Sending…"
 msgstr "Guardando…"
 
-#: src/ui/polls.rs:167
+#: src/ui/polls.rs:172
 #, fuzzy
 msgid "Send poll"
 msgstr "Enviar archivos"
 
-#: src/ui/polls.rs:217
+#: src/ui/polls.rs:222
 #, fuzzy
 msgid "Select one answer"
 msgstr "Seleccionar mensajes"
 
-#: src/ui/polls.rs:219
+#: src/ui/polls.rs:224
 #, fuzzy
 msgid "Select answers"
 msgstr "Seleccionar mensajes"
 
-#: src/ui/polls.rs:321
+#: src/ui/polls.rs:326
 #, fuzzy
 msgid "Sending vote…"
 msgstr "Enviando el paquete de stickers…"
 
-#: src/ui/polls.rs:325
+#: src/ui/polls.rs:330
 msgid "Waiting for your phone · earlier votes may be missing"
 msgstr ""
 
-#: src/ui/polls.rs:328
+#: src/ui/polls.rs:333
 msgid "Loading earlier votes from your phone…"
 msgstr ""
 
-#: src/ui/polls.rs:330
+#: src/ui/polls.rs:335
 msgid "Earlier votes have not been loaded yet"
 msgstr ""
 
-#: src/ui/polls.rs:332
+#: src/ui/polls.rs:337
 #, rust-format
 msgid "{} voter"
 msgid_plural "{} voters"
 msgstr[0] ""
 msgstr[1] ""
 
-#: src/ui/polls.rs:351
+#: src/ui/polls.rs:356
 msgid "Voting key unavailable · use your phone"
 msgstr ""
 
-#: src/ui/polls.rs:358
+#: src/ui/polls.rs:363
 #, fuzzy
 msgid "Reconnect to vote"
 msgstr "Se perdió la conexión"
 
-#: src/ui/polls.rs:401 src/ui/polls.rs:430
+#: src/ui/polls.rs:406 src/ui/polls.rs:435
 msgid "Show votes"
 msgstr ""
 
-#: src/ui/polls.rs:457
+#: src/ui/polls.rs:462
 msgid "Poll results"
 msgstr ""
 
-#: src/ui/polls.rs:484
+#: src/ui/polls.rs:489
 #, fuzzy
 msgid "This poll is no longer available."
 msgstr "Este mensaje ya no está disponible."
 
-#: src/ui/polls.rs:505
+#: src/ui/polls.rs:510
 msgid "Earlier votes may still be missing. Results update as they arrive."
 msgstr ""
 
-#: src/ui/polls.rs:537
+#: src/ui/polls.rs:542
 #, rust-format
 msgid "{} vote"
 msgid_plural "{} votes"
 msgstr[0] ""
 msgstr[1] ""
 
-#: src/ui/polls.rs:581
+#: src/ui/polls.rs:586
 msgid "Participant details are not available yet"
 msgstr ""
 
@@ -4772,6 +4717,56 @@ msgstr "Reproducido"
 #, fuzzy
 msgid "not sent"
 msgstr "Intro envía"
+
+#, rust-format
+#~ msgid "{one} is typing…"
+#~ msgstr "{one} está escribiendo…"
+
+#~ msgid "Mute for 8 hours"
+#~ msgstr "Silenciar por 8 horas"
+
+#~ msgid "Mute for a week"
+#~ msgstr "Silenciar por una semana"
+
+#~ msgid "Mute indefinitely"
+#~ msgstr "Silenciar siempre"
+
+#, rust-format
+#~ msgid "{names} and {last} are typing…"
+#~ msgstr "{names} y {last} están escribiendo…"
+
+#~ msgid "Locked chats are read-only in ZapFast"
+#~ msgstr "Los chats bloqueados son de solo lectura en ZapFast"
+
+#~ msgid "React to your message"
+#~ msgstr "Reaccionar a tu mensaje"
+
+#, rust-format
+#~ msgid "React to {sender}'s message"
+#~ msgstr "Reaccionar al mensaje de {sender}"
+
+#, rust-format
+#~ msgid "Send reply: {}"
+#~ msgstr "Enviar respuesta: {}"
+
+#~ msgid ""
+#~ "This moves the chat to the Locked tab, hiding it from the normal chat "
+#~ "list, search, unread badges, and notifications. The lock status also "
+#~ "syncs to your phone. Open Locked with a separate local ZapFast code to "
+#~ "read it. Sending from locked chats is not supported yet."
+#~ msgstr ""
+#~ "Esto mueve el chat a la pestaña Bloqueados y lo oculta de la lista "
+#~ "normal, la búsqueda, los contadores de no leídos y las notificaciones. El "
+#~ "bloqueo también se sincroniza con tu teléfono. Para leerlo, abre "
+#~ "Bloqueados con un código local de ZapFast aparte. Todavía no se puede "
+#~ "enviar desde chats bloqueados."
+
+#~ msgid "No writable chats found"
+#~ msgstr "No hay chats donde puedas escribir"
+
+#, rust-format
+#~ msgid "Version {}"
+#~ msgstr "Versión {}"
 
 #~ msgid "Open locked chats with your local code"
 #~ msgstr "Abrir los chats bloqueados con tu código local"
