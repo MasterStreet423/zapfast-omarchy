@@ -12,6 +12,7 @@ use std::cell::Cell;
 use std::cmp::Reverse;
 use std::collections::{BinaryHeap, VecDeque};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::sync::mpsc::{Receiver, SyncSender, TryRecvError};
 use std::time::{Duration, Instant};
 
@@ -564,6 +565,8 @@ struct Session {
     /// Every frame of the current decode has arrived.
     decoded: bool,
     texture: Option<TextureHandle>,
+    /// The last frame can be uploaded again if the window is replaced.
+    last_frame: Option<Arc<ColorImage>>,
     clock: Clock,
     sound: Option<Sound>,
     /// When to open the sound again after its output failed (#507), and how
@@ -648,12 +651,18 @@ impl Session {
     }
 
     fn show(&mut self, ctx: &egui::Context, image: ColorImage) {
+        let image = Arc::new(image);
         match &mut self.texture {
-            Some(texture) => texture.set(image, TextureOptions::LINEAR),
+            Some(texture) => texture.set(Arc::clone(&image), TextureOptions::LINEAR),
             None => {
-                self.texture = Some(ctx.load_texture("video-frame", image, TextureOptions::LINEAR))
+                self.texture = Some(ctx.load_texture(
+                    "video-frame",
+                    Arc::clone(&image),
+                    TextureOptions::LINEAR,
+                ))
             }
         }
+        self.last_frame = Some(image);
     }
 }
 
@@ -675,6 +684,14 @@ pub struct Player {
 }
 
 impl Player {
+    /// Re-upload the current frame when the player moves to a new window.
+    pub fn attach(&mut self, ctx: &egui::Context) {
+        if let Some(session) = &mut self.session {
+            session.texture = session.last_frame.as_ref().map(|image| {
+                ctx.load_texture("video-frame", Arc::clone(image), TextureOptions::LINEAR)
+            });
+        }
+    }
     pub fn new(waker: Waker) -> Self {
         Self {
             waker,
@@ -916,6 +933,7 @@ impl Player {
             queue: VecDeque::new(),
             decoded: false,
             texture: None,
+            last_frame: None,
             clock,
             sound: self
                 .audible
@@ -1062,6 +1080,47 @@ fn spawn_decoder(path: &Path, from: Duration, side: u32, waker: Waker) -> Receiv
     receiver
 }
 
+/// A video's frames in order, decoded a few ahead on their own thread, for
+/// the demo's call tiles. Waits for the decoder when it is behind, so a
+/// frame-by-frame capture always gets the picture its time asks for.
+#[cfg(any(test, feature = "demo"))]
+pub(crate) struct Frames {
+    receiver: Receiver<Delivery>,
+    /// The movie's length, once the file has been read.
+    pub length: Option<Duration>,
+}
+
+#[cfg(any(test, feature = "demo"))]
+impl Frames {
+    /// Starts decoding `path` from its beginning, at most `side` pixels on
+    /// its longest side.
+    pub(crate) fn open(path: &Path, side: u32) -> Self {
+        Self {
+            receiver: spawn_decoder(path, Duration::ZERO, side, Waker::default()),
+            length: None,
+        }
+    }
+}
+
+#[cfg(any(test, feature = "demo"))]
+impl Iterator for Frames {
+    type Item = (Duration, ColorImage);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            match self.receiver.recv().ok()? {
+                Delivery::Length(length) => self.length = Some(length),
+                Delivery::Frame(at, image) => return Some((at, image)),
+                Delivery::End => return None,
+                Delivery::Unsupported(reason) => {
+                    log::warn!("a demo call feed cannot play: {reason}");
+                    return None;
+                }
+            }
+        }
+    }
+}
+
 /// Sample timing of a video track, in the track's own time units.
 #[derive(Debug, Default)]
 struct Timeline {
@@ -1089,20 +1148,6 @@ impl Timeline {
                 time += u64::from(entry.sample_delta);
             }
         }
-        let shift = track
-            .trak
-            .edts
-            .as_ref()
-            .and_then(|edts| edts.elst.as_ref())
-            .and_then(|elst| {
-                // An empty edit, a delay before the track starts, has a
-                // media time of -1.
-                elst.entries
-                    .iter()
-                    .map(|entry| entry.media_time)
-                    .find(|&time| time != u64::from(u32::MAX) && time != u64::MAX)
-            })
-            .unwrap_or(0);
         Self {
             timescale: u64::from(track.timescale().max(1)),
             starts,
@@ -1111,7 +1156,7 @@ impl Timeline {
                 .as_ref()
                 .map(|stss| stss.entries.clone())
                 .unwrap_or_default(),
-            shift,
+            shift: crate::animation::edit_shift(track),
         }
     }
 
@@ -1484,6 +1529,27 @@ mod tests {
                 _ => None,
             })
             .collect()
+    }
+
+    #[test]
+    fn attaching_a_window_reuploads_the_current_video_frame() {
+        let old_ctx = egui::Context::default();
+        let mut player = Player::new(Waker::default());
+        player.silence();
+        player.toggle("clip", Path::new(SAMPLE));
+        let image = ColorImage::example();
+        player
+            .session
+            .as_mut()
+            .unwrap()
+            .show(&old_ctx, image.clone());
+        let new_ctx = egui::Context::default();
+        player.attach(&new_ctx);
+        let session = player.session.as_ref().unwrap();
+        let texture = session.texture.as_ref().expect("frame reuploaded");
+        assert_eq!(texture.size(), image.size);
+        assert_eq!(session.last_frame.as_deref(), Some(&image));
+        assert!(new_ctx.tex_manager().read().meta(texture.id()).is_some());
     }
 
     #[test]

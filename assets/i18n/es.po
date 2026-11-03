@@ -4183,6 +4183,596 @@ msgstr "Abrir chat (Ctrl+O)"
 msgid "Reply to this message"
 msgstr "Responder a este mensaje"
 
+#: src/util.rs:325
+#, fuzzy, rust-format
+msgid "{name} turned off disappearing messages"
+msgstr "Mensajes temporales"
+
+#: src/util.rs:329
+#, rust-format
+msgid "{name} changed the disappearing messages setting to {duration}"
+msgstr ""
+
+#: src/ui/chats.rs:1620 src/ui/conversation.rs:1008
+#, rust-format
+msgid "{name} is recording audio…"
+msgstr ""
+
+#: src/ui/chats.rs:1625 src/ui/conversation.rs:1028
+#, fuzzy
+msgid "recording audio…"
+msgstr "Enviando el paquete de stickers…"
+
+#: src/ui/chats.rs:2313
+#, fuzzy
+msgid "8 hours"
+msgstr "24 horas"
+
+#: src/ui/chats.rs:2317
+msgid "1 week"
+msgstr ""
+
+#: src/ui/chats.rs:2320
+msgid "Always"
+msgstr ""
+
+#: src/ui/conversation.rs:682
+msgid "Export chat…"
+msgstr ""
+
+#: src/ui/conversation.rs:1012
+#, rust-format
+msgid "{names} and {last} are recording audio…"
+msgstr ""
+
+#: src/ui/conversation.rs:1514
+#, fuzzy
+msgid "You blocked this contact"
+msgstr "Saliste de este canal"
+
+#: src/ui/conversation.rs:1935
+msgid "Bold"
+msgstr ""
+
+#: src/ui/conversation.rs:1936
+msgid "Italic"
+msgstr ""
+
+#: src/ui/conversation.rs:1937
+msgid "Strikethrough"
+msgstr ""
+
+#: src/ui/conversation.rs:1938
+msgid "Monospace"
+msgstr ""
+
+#: src/ui/conversation.rs:2384
+#, fuzzy, rust-format
+msgid "Cancel sending {name}"
+msgstr "Info. del mensaje"
+
+#: src/ui/conversation.rs:2392
+#, fuzzy, rust-format
+msgid "Sending {name}"
+msgstr "Info. del mensaje"
+
+#: src/ui/conversation.rs:2398
+#, rust-format
+msgid "{time} left"
+msgstr ""
+
+#: src/ui/conversation.rs:2534
+#, fuzzy
+msgid "Loading preview…"
+msgstr "Cargando…"
+
+#: src/ui/conversation.rs:2545
+msgid "Remove link preview"
+msgstr ""
+
+#: src/ui/conversation.rs:6954
+#, fuzzy
+msgid "Remove reaction"
+msgstr "Quitar tu reacción"
+
+#: src/ui/conversation.rs:7460 src/ui/conversation.rs:7866
+#, rust-format
+msgid "{option}, unavailable: {reason}"
+msgstr ""
+
+#: src/ui/conversation.rs:7708
+#, rust-format
+msgid "Card {number}: {button}"
+msgstr ""
+
+#: src/ui/conversation.rs:7750
+#, fuzzy
+msgid "Go to replied message"
+msgstr "No hay mensajes destacados"
+
+#: src/ui/conversation.rs:7761
+#, rust-format
+msgid "Info about {name}"
+msgstr ""
+
+#: src/ui/conversation.rs:7839
+#, fuzzy
+msgid "Only messages you sent"
+msgstr "No se encontraron mensajes"
+
+#: src/ui/conversation.rs:7841
+msgid "The time limit has passed"
+msgstr ""
+
+#: src/ui/conversation.rs:9586
+#, rust-format
+msgid "Send reply: {label}"
+msgstr ""
+
+#: src/ui/conversation.rs:13594
+msgid "View once"
+msgstr "Ver una vez"
+
+#: src/ui/conversation.rs:13623
+msgid "The recipient can open this photo only once, on their phone."
+msgstr ""
+"La persona destinataria solo podrá abrir esta foto una vez en su teléfono."
+
+#: src/ui/dialogs.rs:449
+msgid ""
+"This moves the chat to the Locked tab, hiding it from the normal chat list, "
+"search, unread badges, and notifications. The lock status also syncs to your "
+"phone. Open Locked with a separate local ZapFast code to read it."
+msgstr ""
+
+#: src/ui/dialogs.rs:1032
+#, fuzzy, rust-format
+msgid "Version {version}"
+msgstr "Actualizar a {version}"
+
+#: src/ui/settings.rs:593
+#, fuzzy
+msgid "Blocked contacts"
+msgstr "Todos los contactos"
+
+#: src/ui/settings.rs:599
+#, fuzzy
+msgid "Manage"
+msgstr "Gestionar etiquetas"
+
+#: src/ui/calls.rs:496
+#, rust-format
+msgid "{} participant"
+msgid_plural "{} participants"
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/app/calls.rs:377
+msgid "Unblock this contact to call them."
+msgstr ""
+
+#: src/app.rs:4130
+#, rust-format
+msgid ""
+"Saved {path}. Messages: {messages}; attachments: {files}; unavailable: "
+"{missing}."
+msgstr ""
+
+#: src/app.rs:4913
+#, fuzzy
+msgid "Connect to WhatsApp to change disappearing messages."
+msgstr "Conéctate a WhatsApp para cambiar la privacidad de tu cuenta."
+
+#: src/app.rs:4919
+#, fuzzy
+msgid "Could not change disappearing messages."
+msgstr "Mensajes temporales"
+
+#: src/app.rs:4924
+#, fuzzy
+msgid "Only admins can change disappearing messages."
+msgstr "Mensajes temporales"
+
+#: src/app.rs:4961
+#, fuzzy
+msgid "Connect to WhatsApp to archive this chat"
+msgstr "Conéctate a WhatsApp para crear un grupo."
+
+#: src/app.rs:4965
+#, fuzzy
+msgid "Connect to WhatsApp to unarchive this chat"
+msgstr "Conéctate a WhatsApp para crear un grupo."
+
+#: src/app.rs:4968
+#, fuzzy
+msgid "Could not read this chat. Try again"
+msgstr "No se pudo crear el grupo. Inténtalo de nuevo."
+
+#: src/app.rs:4972
+#, fuzzy
+msgid "Could not confirm archiving on WhatsApp. Try again"
+msgstr "No se pudo crear el grupo. Inténtalo de nuevo."
+
+#: src/app.rs:4976
+#, fuzzy
+msgid "Could not confirm unarchiving on WhatsApp. Try again"
+msgstr "No se pudo crear el grupo. Inténtalo de nuevo."
+
+#: src/app.rs:4980
+msgid "WhatsApp updated this chat, but ZapFast could not save the change"
+msgstr ""
+
+#: src/app.rs:5736 src/app.rs:7363
+msgid "Unblock this contact to send messages."
+msgstr ""
+
+#: src/app.rs:5748 src/app.rs:6795
+msgid "Not sent: view-once mode is available for one photo at a time."
+msgstr ""
+"No se envió: la opción de ver una vez está disponible para una foto a la vez."
+
+#: src/app.rs:9446
+#, fuzzy
+msgid "No chat open"
+msgstr "Código de chats bloqueados"
+
+#: src/app.rs:9474
+#, fuzzy
+msgid "Loading the replied message"
+msgstr "Volver a cargar mensajes anteriores"
+
+#: src/app.rs:10276
+msgid "This file is no longer on this computer. Download it again."
+msgstr ""
+
+#: src/app.rs:11146 src/app.rs:11206
+#, fuzzy
+msgid "Replied message not found"
+msgstr "No se encontraron mensajes"
+
+#: src/ui/picker.rs:1053
+msgid "Search GIFs via GIPHY"
+msgstr ""
+
+#: src/ui/picker.rs:1070
+#, fuzzy
+msgid "Searching…"
+msgstr "Guardando…"
+
+#: src/ui/picker.rs:1159
+msgid "Load more"
+msgstr ""
+
+#: src/ui/picker.rs:1170
+msgid "Search for a GIF or browse trending results."
+msgstr ""
+
+#: src/ui/accounts.rs:203 src/ui/accounts.rs:321
+#, fuzzy
+msgid "Mute notifications"
+msgstr "Notificaciones"
+
+#: src/ui/accounts.rs:319
+#, fuzzy
+msgid "Unmute notifications"
+msgstr "Limitar notificaciones repetidas"
+
+#: src/ui/accounts.rs:341
+#, fuzzy
+msgid "notifications muted"
+msgstr "Notificaciones"
+
+#: src/ui/info.rs:335
+#, fuzzy
+msgid "View photo"
+msgstr "Foto de visualización única"
+
+#: src/ui/info.rs:680
+#, fuzzy
+msgid "Add group description"
+msgstr "Añadir foto del grupo"
+
+#: src/ui/info.rs:701
+#, fuzzy
+msgid "Edit group description"
+msgstr "Editar el nombre del grupo"
+
+#: src/ui/info.rs:2071
+#, fuzzy
+msgid "Group description"
+msgstr "Descripción"
+
+#: src/ui/info.rs:2110
+#, fuzzy
+msgid "Save description"
+msgstr "Descripción"
+
+#: src/ui/login.rs:264
+#, rust-format
+msgid "for +{phone}"
+msgstr ""
+
+#: src/ui/mod.rs:579
+#, rust-format
+msgid "ZapFast {version} is available"
+msgstr ""
+
+#: src/ui/polls.rs:39
+#, fuzzy
+msgid "Question"
+msgstr "Descripción"
+
+#: src/ui/polls.rs:52
+msgid "Ask a question"
+msgstr ""
+
+#: src/ui/polls.rs:66
+#, fuzzy
+msgid "Answers"
+msgstr "Sin respuesta"
+
+#: src/ui/polls.rs:90
+#, rust-format
+msgid "Answer {index}"
+msgstr ""
+
+#: src/ui/polls.rs:109
+#, fuzzy
+msgid "Remove answer"
+msgstr "Sin respuesta"
+
+#: src/ui/polls.rs:126
+#, fuzzy
+msgid "Add answer"
+msgstr "Sin respuesta"
+
+#: src/ui/polls.rs:138
+msgid "Allow multiple answers"
+msgstr ""
+
+#: src/ui/polls.rs:165
+#, fuzzy
+msgid "Sending…"
+msgstr "Guardando…"
+
+#: src/ui/polls.rs:167
+#, fuzzy
+msgid "Send poll"
+msgstr "Enviar archivos"
+
+#: src/ui/polls.rs:217
+#, fuzzy
+msgid "Select one answer"
+msgstr "Seleccionar mensajes"
+
+#: src/ui/polls.rs:219
+#, fuzzy
+msgid "Select answers"
+msgstr "Seleccionar mensajes"
+
+#: src/ui/polls.rs:321
+#, fuzzy
+msgid "Sending vote…"
+msgstr "Enviando el paquete de stickers…"
+
+#: src/ui/polls.rs:325
+msgid "Waiting for your phone · earlier votes may be missing"
+msgstr ""
+
+#: src/ui/polls.rs:328
+msgid "Loading earlier votes from your phone…"
+msgstr ""
+
+#: src/ui/polls.rs:330
+msgid "Earlier votes have not been loaded yet"
+msgstr ""
+
+#: src/ui/polls.rs:332
+#, rust-format
+msgid "{} voter"
+msgid_plural "{} voters"
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/ui/polls.rs:351
+msgid "Voting key unavailable · use your phone"
+msgstr ""
+
+#: src/ui/polls.rs:358
+#, fuzzy
+msgid "Reconnect to vote"
+msgstr "Se perdió la conexión"
+
+#: src/ui/polls.rs:401 src/ui/polls.rs:430
+msgid "Show votes"
+msgstr ""
+
+#: src/ui/polls.rs:457
+msgid "Poll results"
+msgstr ""
+
+#: src/ui/polls.rs:484
+#, fuzzy
+msgid "This poll is no longer available."
+msgstr "Este mensaje ya no está disponible."
+
+#: src/ui/polls.rs:505
+msgid "Earlier votes may still be missing. Results update as they arrive."
+msgstr ""
+
+#: src/ui/polls.rs:537
+#, rust-format
+msgid "{} vote"
+msgid_plural "{} votes"
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/ui/polls.rs:581
+msgid "Participant details are not available yet"
+msgstr ""
+
+#: src/ui/update.rs:25 src/ui/update.rs:38
+msgid "Update ZapFast"
+msgstr ""
+
+#: src/ui/update.rs:49
+#, fuzzy
+msgid "Close update"
+msgstr "Buscar actualizaciones"
+
+#: src/ui/update.rs:63
+msgid "Release notes"
+msgstr ""
+
+#: src/ui/update.rs:70
+msgid "Checking download…"
+msgstr ""
+
+#: src/ui/update.rs:72
+#, fuzzy
+msgid "Downloading update…"
+msgstr "Descargando…"
+
+#: src/ui/update.rs:85
+#, rust-format
+msgid "{received} of {total} MB"
+msgstr ""
+
+#: src/ui/update.rs:104
+msgid "Ready to install"
+msgstr ""
+
+#: src/ui/update.rs:113
+msgid ""
+"Finish any unsent messages or recordings before restarting. ZapFast will "
+"briefly disconnect, then reconnect automatically."
+msgstr ""
+
+#: src/ui/update.rs:121
+msgid "Restart to update"
+msgstr ""
+
+#: src/ui/update.rs:130
+msgid "Preparing to restart…"
+msgstr ""
+
+#: src/ui/update.rs:147
+msgid "Download from GitHub"
+msgstr ""
+
+#: src/ui/update.rs:152
+#, fuzzy
+msgid "Retry download"
+msgstr "Descargar"
+
+#: src/ui/update.rs:154
+#, fuzzy
+msgid "Download update"
+msgstr "Descargar"
+
+#: src/a11y.rs:97
+#, fuzzy, rust-format
+msgid "Messages in {name}"
+msgstr "Info. del mensaje"
+
+#: src/a11y.rs:99
+#, fuzzy, rust-format
+msgid "Messages with {name}"
+msgstr "Buscar mensajes en {}"
+
+#: src/a11y.rs:122
+#, rust-format
+msgid "replying to {name}: {text}"
+msgstr ""
+
+#: src/a11y.rs:130
+#, fuzzy
+msgid "forwarded"
+msgstr "Reenviar"
+
+#: src/a11y.rs:136
+#, fuzzy
+msgid "starred"
+msgstr "Destacados"
+
+#: src/a11y.rs:139
+msgid "pinned"
+msgstr ""
+
+#: src/a11y.rs:149
+#, rust-format
+msgid "reactions: {reactions}"
+msgstr ""
+
+#: src/a11y.rs:167
+#, fuzzy, rust-format
+msgid "{count} photo"
+msgid_plural "{count} photos"
+msgstr[0] "{count} seleccionado"
+msgstr[1] "{count} seleccionados"
+
+#: src/a11y.rs:173
+#, fuzzy, rust-format
+msgid "{count} video"
+msgid_plural "{count} videos"
+msgstr[0] "Cuenta {id}"
+msgstr[1] "Cuenta {id}"
+
+#: src/a11y.rs:253
+#, rust-format
+msgid "Poll: {question}, {count} option"
+msgid_plural "Poll: {question}, {count} options"
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/a11y.rs:269
+#, fuzzy, rust-format
+msgid "Unsupported message ({what})"
+msgstr "Mensaje no compatible"
+
+#: src/a11y.rs:339
+#, fuzzy
+msgid "downloading"
+msgstr "Descargando…"
+
+#: src/a11y.rs:343
+#, fuzzy
+msgid "download failed"
+msgstr "Descargar"
+
+#: src/a11y.rs:348
+#, fuzzy
+msgid "not downloaded"
+msgstr "Descargar"
+
+#: src/a11y.rs:357
+msgid "sending"
+msgstr ""
+
+#: src/a11y.rs:358
+msgid "sent"
+msgstr ""
+
+#: src/a11y.rs:359
+#, fuzzy
+msgid "delivered"
+msgstr "Entregado"
+
+#: src/a11y.rs:360
+#, fuzzy
+msgid "read"
+msgstr "No leídos"
+
+#: src/a11y.rs:361
+#, fuzzy
+msgid "played"
+msgstr "Reproducido"
+
+#: src/a11y.rs:362
+#, fuzzy
+msgid "not sent"
+msgstr "Intro envía"
+
 #~ msgid "Open locked chats with your local code"
 #~ msgstr "Abrir los chats bloqueados con tu código local"
 

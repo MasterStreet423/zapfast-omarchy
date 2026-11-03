@@ -38,6 +38,40 @@ NixOS configurations can add the repository as a flake input and include
 `inputs.zapfast.packages.${pkgs.system}.default` in
 `environment.systemPackages`.
 
+With [Home Manager](https://github.com/nix-community/home-manager), the
+flake's module installs ZapFast and declares its settings:
+
+```nix
+imports = [ inputs.zapfast.homeManagerModules.default ];
+
+programs.zapfast = {
+  enable = true;
+  settings = {
+    check_for_updates = false;
+    message_sound = "none";
+  };
+};
+```
+
+`settings` takes the keys of `settings.json` (see
+[Settings & Files](/settings-and-files/)). They are merged into the file on
+every activation, so the window size, recent emoji, and lock verifiers the app
+keeps there are left alone. A declared key that is changed in the app is reset
+on the next activation. Per-account preferences such as read receipts and
+notifications live in each account's own file and cannot be declared here.
+Restart ZapFast after activating: it reads the file at
+start, and its next save writes back the values it already had.
+
+Values in `settings` are copied to the Nix store, which every user on the
+computer can read, so keep secrets such as proxy credentials or a GIPHY key
+out of it. Either set them in the app and leave them undeclared, or name a
+file for each key in `secretFiles`, for example one that sops-nix or agenix
+decrypts. The module reads those files when it activates:
+
+```nix
+programs.zapfast.secretFiles.proxy = config.sops.secrets.zapfast-proxy.path;
+```
+
 For other distributions, download a tarball with the binary, desktop file,
 and icon:
 
@@ -52,7 +86,7 @@ the new file when {{ app }} says a release is out.
 - [{{ name }}-{{ v }}-x86_64.AppImage]({{ base }}/{{ name }}-{{ v }}-x86_64.AppImage)
 - [{{ name }}-{{ v }}-aarch64.AppImage]({{ base }}/{{ name }}-{{ v }}-aarch64.AppImage)
 
-{{ app }} needs glibc 2.39 or newer (Ubuntu 24.04, Debian 13, Fedora 40 and
+{{ app }} needs glibc 2.36 or newer (Debian 12, Ubuntu 22.10, Fedora 37 and
 newer), the standard egui libraries, ALSA and libpipewire 0.3.53 or newer:
 `libglvnd`, `libxkbcommon`, `wayland`, `libx11`, `alsa-lib` and `libpipewire` (on
 Debian or Ubuntu: `libasound2t64`, `libpipewire-0.3-0t64`, `libgl1`,
@@ -86,11 +120,17 @@ after installing ZapFast.
 
 ## Windows
 
-The installer adds {{ app }} to the Start menu and needs no administrator
-rights. Choose x86_64 for most PCs or aarch64 for Windows on ARM:
+The installer is a Windows Installer package (`.msi`). It adds {{ app }} to
+the Start menu and needs no administrator rights. Choose x86_64 for most PCs
+or aarch64 for Windows on ARM:
 
-- [{{ name }}-v{{ v }}-x86_64-pc-windows-msvc-setup.exe]({{ base }}/{{ name }}-v{{ v }}-x86_64-pc-windows-msvc-setup.exe)
-- [{{ name }}-v{{ v }}-aarch64-pc-windows-msvc-setup.exe]({{ base }}/{{ name }}-v{{ v }}-aarch64-pc-windows-msvc-setup.exe)
+- [{{ name }}-v{{ v }}-x86_64-pc-windows-msvc.msi]({{ base }}/{{ name }}-v{{ v }}-x86_64-pc-windows-msvc.msi)
+- [{{ name }}-v{{ v }}-aarch64-pc-windows-msvc.msi]({{ base }}/{{ name }}-v{{ v }}-aarch64-pc-windows-msvc.msi)
+
+If you installed {{ app }} with the older setup program (`-setup.exe`), 0.20.0
+and later move to the package through their own updates. On 0.19.0 or earlier,
+run the `.msi` once: it installs into the same folder and replaces the old
+installer's entry in Settings > Apps. Your session, chats and settings stay.
 
 To run {{ app }} without installing it, download a zip, extract it, and run
 `{{ name }}.exe`.

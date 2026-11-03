@@ -12,6 +12,13 @@ use serde::{Deserialize, Serialize};
 /// Chat JID string: `<phone>@s.whatsapp.net`, `<id>@g.us`, or `<id>@lid`.
 pub type ChatId = String;
 
+/// Live activity another participant is performing in a chat.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ChatActivity {
+    Typing,
+    RecordingAudio,
+}
+
 /// Stable folder name for a linked WhatsApp account on this computer.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct AccountId(pub String);
@@ -411,7 +418,7 @@ impl Chat {
 
     /// Newsletter publishing permissions are not supported by this client.
     pub fn can_send(&self) -> bool {
-        !self.locked && !self.read_only && !self.left && self.kind != ChatKind::Broadcast
+        !self.read_only && !self.left && self.kind != ChatKind::Broadcast
     }
 
     /// A followed WhatsApp channel (newsletter).
@@ -617,7 +624,23 @@ pub struct LinkPreview {
     pub description: Option<String>,
 }
 
+/// A link preview made here for an outgoing message, with its picture as JPEG.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ComposedPreview {
+    pub preview: LinkPreview,
+    pub thumbnail: Option<Vec<u8>>,
+}
+
 impl Message {
+    /// Whether WhatsApp also holds this row under an id it can be named by. A
+    /// send still pending or failed here may never have reached it, and a
+    /// disappearing-timer notice is filed under an id it never issued. Neither
+    /// may be named in a message range sent to the phone.
+    pub fn known_to_phone(&self) -> bool {
+        !timer_notice_id(&self.id)
+            && !(self.from_me && matches!(self.status, Delivery::Pending | Delivery::Failed))
+    }
+
     /// Returns a valid individual sender only for an incoming, non-revoked group message.
     pub fn private_reply_recipient(&self) -> Option<&str> {
         (!self.from_me
@@ -862,6 +885,14 @@ pub enum Content {
     },
     /// "This message was deleted."
     Revoked,
+    /// A disappearing-message timer change, drawn as a centred system row
+    /// rather than a bubble. The message's `from_me` and `sender` say who
+    /// changed it.
+    #[serde(rename = "disappearing_timer")]
+    DisappearingTimer {
+        /// The new duration in seconds; `0` means the timer was turned off.
+        seconds: u32,
+    },
     /// Unsupported content with a user-facing description.
     Unsupported {
         what: String,
@@ -891,6 +922,13 @@ pub enum Content {
         /// A group call.
         #[serde(default)]
         group: bool,
+        /// How many people were on the call, this account counted once. `None`
+        /// for a one-to-one call, and for a group call whose record does not
+        /// name who took part (one filed before this was kept, or a missed-call
+        /// notice that carries no roster). Only the number is kept, never who:
+        /// no name, number, or id of anyone on the call is stored.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        participants: Option<u32>,
     },
 }
 
@@ -903,6 +941,22 @@ pub const CALL_ENTRY_PREFIX: &str = "zapfast-call-";
 /// under. No chat has it: such a call belongs to none, so its entries show on
 /// the Calls page alone, never in the chat list.
 pub const CALL_LINK_CHAT: &str = "zapfast-call-link";
+
+/// The id prefix of the disappearing-timer notices ZapFast files from live
+/// setting changes. They are local system rows, never sent anywhere.
+pub const TIMER_NOTICE_PREFIX: &str = "zapfast-timer-";
+
+/// Whether `id` is one ZapFast made up for a row of its own, which no server
+/// ever issued: a call entry, or a disappearing-timer notice. Nothing sent to
+/// WhatsApp may name such an id.
+pub fn local_message_id(id: &str) -> bool {
+    id.starts_with(CALL_ENTRY_PREFIX) || timer_notice_id(id)
+}
+
+/// Whether `id` names a disappearing-timer notice.
+pub fn timer_notice_id(id: &str) -> bool {
+    id.starts_with(TIMER_NOTICE_PREFIX)
+}
 
 /// How far apart, in seconds, two entries for one call may be: the phone's
 /// call-log message and the call's record are stamped by different clocks.
@@ -1086,6 +1140,9 @@ impl PollDraft {
 
 /// The longest group name WhatsApp accepts, in characters.
 pub const GROUP_NAME_LIMIT: usize = whatsapp_rust::wacore::iq::groups::GROUP_SUBJECT_MAX_LENGTH;
+/// The longest group description WhatsApp takes.
+pub const GROUP_DESCRIPTION_LIMIT: usize =
+    whatsapp_rust::wacore::iq::groups::GROUP_DESCRIPTION_MAX_LENGTH;
 
 /// WhatsApp's longest live location share, in seconds.
 pub const LIVE_LOCATION_LIMIT: i64 = 8 * 60 * 60;
@@ -1312,6 +1369,11 @@ impl Content {
 
     /// [`Self::summary`] with its content label in `locale`.
     pub fn summary_in(&self, locale: crate::i18n::Locale) -> String {
+        // The duration after the label is a phrase of its own, so the whole
+        // line is built in the reader's language rather than only its label.
+        if let Self::DisappearingTimer { seconds } = self {
+            return disappearing_summary(locale, *seconds);
+        }
         let summary = self.summary();
         if self.labelled() {
             localized_summary(locale, &summary).into_owned()
@@ -1322,6 +1384,9 @@ impl Content {
 
     /// [`Self::full_summary`] with its content label in `locale`.
     pub fn full_summary_in(&self, locale: crate::i18n::Locale) -> String {
+        if matches!(self, Self::DisappearingTimer { .. }) {
+            return self.summary_in(locale);
+        }
         let summary = self.full_summary();
         if self.labelled() {
             localized_summary(locale, &summary).into_owned()
@@ -1370,6 +1435,10 @@ impl Content {
             }
             Self::Contact { display_name, .. } => format!("Contact: {display_name}"),
             Self::Poll { question, .. } => format!("Poll: {question}"),
+            Self::DisappearingTimer { seconds } => {
+                crate::util::disappearing_line(crate::i18n::Locale::English, Some(*seconds))
+                    .unwrap_or_else(|| "Disappearing messages changed".to_owned())
+            }
             Self::Revoked => "This message was deleted".to_owned(),
             Self::Unsupported { what } => format!("Unsupported message ({what})"),
             Self::PhoneOnly {
@@ -1445,6 +1514,25 @@ impl Content {
         }
     }
 
+    /// Where this message keeps `path`: `Some(None)` for its own attachment,
+    /// `Some(Some(index))` for a carousel card's picture.
+    pub fn place_of_file(&self, path: &std::path::Path) -> Option<Option<usize>> {
+        let holds = |media: &Media| media.path.as_deref() == Some(path);
+        if self.media().is_some_and(holds) {
+            return Some(None);
+        }
+        let Self::Interactive {
+            card: Some(card), ..
+        } = self
+        else {
+            return None;
+        };
+        card.carousel
+            .iter()
+            .position(|item| item.image.as_ref().is_some_and(holds))
+            .map(Some)
+    }
+
     /// Whether this message belongs in the viewer album, and as what.
     ///
     /// A GIF is not a video here: it plays inline as an animation, so it is
@@ -1483,6 +1571,46 @@ impl Content {
         {
             for (new, old) in new.carousel.iter_mut().zip(&old.carousel) {
                 if let (Some(new), Some(old)) = (&mut new.image, &old.image) {
+                    new.path = old.path.clone();
+                }
+            }
+        }
+    }
+
+    /// Takes the files that `other`, another copy of the same message,
+    /// downloaded where this copy has none: the attachment, a motion photo's
+    /// clip, and each carousel card's image. A file this copy has stays.
+    pub fn fill_local_paths(&mut self, other: &Content) {
+        if let (Some(new), Some(old)) = (self.media_mut(), other.media())
+            && new.path.is_none()
+        {
+            new.path = old.path.clone();
+        }
+        if let (
+            Self::Image { motion: new, .. },
+            Self::Image {
+                motion: Some(old), ..
+            },
+        ) = (&mut *self, other)
+            && new
+                .as_ref()
+                .is_none_or(|new| new.path.is_none() && old.path.is_some())
+        {
+            *new = Some(old.clone());
+        }
+        if let (
+            Self::Interactive {
+                card: Some(new), ..
+            },
+            Self::Interactive {
+                card: Some(old), ..
+            },
+        ) = (self, other)
+        {
+            for (new, old) in new.carousel.iter_mut().zip(&old.carousel) {
+                if let (Some(new), Some(old)) = (&mut new.image, &old.image)
+                    && new.path.is_none()
+                {
                     new.path = old.path.clone();
                 }
             }
@@ -1637,6 +1765,14 @@ fn summary_label(
     }
 }
 
+/// A timer change's line in `locale`, as the chat list and a notification
+/// show it: "Disappearing messages: 7 days", both parts translated.
+fn disappearing_summary(locale: crate::i18n::Locale, seconds: u32) -> String {
+    // A known duration always reads, so the label alone is only a fallback.
+    crate::util::disappearing_line(locale, Some(seconds))
+        .unwrap_or_else(|| crate::i18n::gettext(locale, "Disappearing messages").into_owned())
+}
+
 /// `summary` with the content label it starts with, such as "Photo" or
 /// "Voice message", in `locale`. What follows the label (a caption, a file
 /// name, a length) stays as it is. A summary of text must not come here: a
@@ -1783,6 +1919,57 @@ pub enum MediaState {
     Idle,
     Downloading,
     Failed(String),
+}
+
+/// The one ordering point between the reader's cancel and the worker's send.
+///
+/// The window cancels here directly rather than through a command, which
+/// would wait in the same queue as the message it is meant to stop. Exactly
+/// one side wins: a cancel means the message is never sent, and a commitment
+/// means it is, so the strip never leaves ahead of a message that still goes.
+#[derive(Clone, Debug, Default)]
+pub struct UploadGate(std::sync::Arc<std::sync::atomic::AtomicU8>);
+
+impl UploadGate {
+    const OPEN: u8 = 0;
+    const CANCELLED: u8 = 1;
+    const COMMITTED: u8 = 2;
+
+    fn settle(&self, outcome: u8) -> bool {
+        use std::sync::atomic::Ordering::{AcqRel, Acquire};
+        self.0
+            .compare_exchange(Self::OPEN, outcome, AcqRel, Acquire)
+            .is_ok()
+    }
+
+    /// Cancels the send, unless it was already committed. Returns whether it
+    /// is cancelled.
+    pub fn cancel(&self) -> bool {
+        self.settle(Self::CANCELLED) || self.is_cancelled()
+    }
+
+    /// Commits to the send, unless it was already cancelled. Returns whether
+    /// it may go out.
+    pub fn commit(&self) -> bool {
+        self.settle(Self::COMMITTED) || !self.is_cancelled()
+    }
+
+    pub fn is_cancelled(&self) -> bool {
+        self.0.load(std::sync::atomic::Ordering::Acquire) == Self::CANCELLED
+    }
+}
+
+/// A file going out, for the strip above its chat's composer. An empty name
+/// is a pasted picture.
+#[derive(Clone, Debug)]
+pub struct Upload {
+    pub id: u64,
+    pub gate: UploadGate,
+    pub chat: ChatId,
+    pub name: String,
+    pub percent: u8,
+    /// Roughly how long the rest takes, once the pace is known.
+    pub seconds_left: Option<u32>,
 }
 
 /// Decoded straight-alpha RGBA image bytes ready for the clipboard.
@@ -2208,6 +2395,26 @@ pub struct StickerPack {
     pub local: bool,
 }
 
+/// Markup offered for selected composer text.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ComposerFormat {
+    Bold,
+    Italic,
+    Strikethrough,
+    Monospace,
+}
+
+impl ComposerFormat {
+    pub fn marker(self) -> &'static str {
+        match self {
+            Self::Bold => "*",
+            Self::Italic => "_",
+            Self::Strikethrough => "~",
+            Self::Monospace => "```",
+        }
+    }
+}
+
 /// GIF search failure.
 #[derive(Clone, Debug, PartialEq)]
 pub struct GifError {
@@ -2216,12 +2423,24 @@ pub struct GifError {
     pub bad_key: bool,
 }
 
+/// One page from GIPHY, with an offset based on all returned API entries.
+#[derive(Clone, Debug, PartialEq)]
+pub struct GifPage {
+    pub gifs: Vec<Gif>,
+    pub next_offset: Option<usize>,
+}
+
 /// A GIF found through GIPHY.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Gif {
     pub id: String,
     /// Downloaded still-frame path.
     pub still: Option<PathBuf>,
+    /// Downloaded animated thumbnail shown while the tile is visible.
+    pub animated: Option<PathBuf>,
+    /// URL and file extension of the animated thumbnail, downloaded when the
+    /// tile first shows.
+    pub animated_source: Option<(String, String)>,
     pub mp4: String,
     pub width: u32,
     pub height: u32,
@@ -2269,12 +2488,22 @@ pub enum Dialog {
     NewContact,
     UnlockLockedChats,
     ConfirmLockChat(ChatId),
+    BlockedContacts,
+    ConfirmBlock {
+        chat: ChatId,
+        blocked: bool,
+        from_list: bool,
+    },
     /// Manages the local labels.
     Labels,
     /// Confirms deleting a chat, which cannot be undone.
     ConfirmDeleteChat(ChatId),
     /// Confirms clearing a chat's messages, which cannot be undone.
     ConfirmClearChat(ChatId),
+    ExportChat {
+        chat: ChatId,
+        include_media: bool,
+    },
     /// Leaves a group or channel, optionally archiving the chat.
     ConfirmLeaveGroup(ChatId),
     /// Confirms deleting one message. The archive is the only copy, so a
@@ -2479,6 +2708,11 @@ pub fn forward_limit(frequently_forwarded: bool) -> usize {
 /// Actions queued by views and applied after drawing.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Action {
+    FetchBlocklist,
+    SetBlocked {
+        chat: ChatId,
+        blocked: bool,
+    },
     Open(Page),
     /// Opens settings, or closes them when they are already showing.
     ToggleSettings,
@@ -2624,6 +2858,14 @@ pub enum Action {
         chat: ChatId,
         message: String,
     },
+    /// A downloaded picture or sticker at `path` could not be drawn: its file
+    /// is gone, and it downloads again like any other attachment, or it does
+    /// not decode, and its bubble offers a retry.
+    UnreadableMedia {
+        chat: ChatId,
+        message: String,
+        path: PathBuf,
+    },
     /// Downloads a motion photo's clip.
     DownloadMotion {
         chat: ChatId,
@@ -2646,6 +2888,11 @@ pub enum Action {
         path: PathBuf,
         fraction: f32,
     },
+    /// Plays or pauses the clip in the player from the bar another chat
+    /// shows it in.
+    ToggleVoice,
+    /// Stops the clip in the player.
+    StopVoice,
     /// Sets the voice playback speed to one of the supported speeds.
     SetVoiceSpeed(f32),
     /// Plays or pauses a downloaded video inside its message.
@@ -2716,6 +2963,11 @@ pub enum Action {
     OpenLog(PathBuf),
     OpenFolder(PathBuf),
     /// Saves a copy of a downloaded attachment where the person chooses.
+    ExportChat {
+        chat: ChatId,
+        include_media: bool,
+    },
+    CancelChatExport,
     SaveAttachmentAs {
         path: PathBuf,
         name: String,
@@ -2737,6 +2989,11 @@ pub enum Action {
         message: String,
     },
     CancelReply,
+    /// Stops sending the file with this upload id.
+    CancelUpload(u64),
+    /// Takes away the link preview above the composer, for its link only:
+    /// the message goes without one.
+    DismissLinkPreview,
     /// Starts selecting messages in the open chat with none picked yet.
     StartSelection,
     /// Adds a chat to the forwarding dialog's recipients or removes it,
@@ -2805,10 +3062,13 @@ pub enum Action {
     /// Opens the full emoji picker to react to a message. `beside_menu` keeps
     /// the message's context menu open next to it, as when the picker comes
     /// from the menu's "+"; the hover button opens the picker alone.
+    /// `from_list`: opened by the message list's E, so closing the picker
+    /// returns focus to the list.
     OpenReactionPicker {
         chat: ChatId,
         message: String,
         beside_menu: bool,
+        from_list: bool,
     },
     /// Inserts an emoji at the composer cursor.
     InsertEmoji(String),
@@ -2887,6 +3147,19 @@ pub enum Action {
     },
     /// Searches GIFs or lists trending results for an empty query.
     SearchGifs(String),
+    MoreGifs,
+    /// Wraps the selected character range in WhatsApp markup.
+    FormatComposer {
+        format: ComposerFormat,
+        start: usize,
+        end: usize,
+    },
+    /// Fetches one GIF result's animated preview when its tile shows.
+    FetchGifAnimation {
+        id: String,
+        url: String,
+        extension: String,
+    },
     SendGif(Gif),
     React {
         chat: ChatId,
@@ -3001,8 +3274,20 @@ pub enum Action {
     ScrollToBottom,
     /// Scrolls the open chat by about a page, or to the top of its history.
     ScrollPage(Scroll),
+    /// Moves the open chat's current message, from its focused message list.
+    MessageCursor(crate::ui::list_nav::Step),
+    /// Gives the open chat's message list keyboard focus.
+    FocusMessages,
+    /// Opens a message's context menu in the open chat, from the keyboard.
+    OpenMessageMenu(String),
+    /// The menu asked for by `OpenMessageMenu` is open: stop asking, so it
+    /// opens once and closes as any menu does.
+    MessageMenuOpened,
     /// Scrolls the open chat to a message.
     ScrollTo(String),
+    /// Goes to a replied message from the keys: as `ScrollTo`, but the
+    /// message list moves only once the message is loaded.
+    GoToReplied(String),
     /// Updates chat-list search text.
     Search(String),
     ShowUpdate,
@@ -3056,6 +3341,11 @@ pub enum Action {
         chat: ChatId,
         speed: Option<f32>,
     },
+    /// Changes a chat's disappearing-message timer; `0` turns it off.
+    SetDisappearingTimer {
+        chat: ChatId,
+        seconds: u32,
+    },
     /// Asks for a folder for new downloads.
     PickDownloadFolder,
     /// Changes our display name and About text; `None` keeps the current one.
@@ -3074,6 +3364,16 @@ pub enum Action {
     SetGroupName {
         chat: ChatId,
         name: String,
+    },
+    /// Opens the group description editor, holding the current text.
+    EditGroupDescription(String),
+    /// Closes the group description editor without changing it.
+    CloseGroupDescription,
+    /// Changes a group's description on WhatsApp; the editor closes. Empty
+    /// text removes it.
+    SetGroupDescription {
+        chat: ChatId,
+        description: String,
     },
     /// Asks for a picture and makes it the group's photo.
     PickGroupPicture(ChatId),
@@ -3120,6 +3420,8 @@ pub enum Action {
     CloseWindow,
     /// Shows another linked account in the window.
     SwitchAccount(AccountId),
+    /// Moves to the next (`1`) or previous (`-1`) account, wrapping round.
+    CycleAccount(i8),
     /// Starts linking another number beside the ones already here.
     AddAccount,
     /// Leaves an account being added before it was linked.
@@ -3128,6 +3430,9 @@ pub enum Action {
     RemoveAccount(AccountId),
     /// Deletes one account's cached attachments, never its archive.
     ClearMediaCache(AccountId),
+    /// Turns one account's desktop notifications on or off, from the account
+    /// switcher, without showing that account. It stays linked either way.
+    SetAccountNotifications(AccountId, bool),
     /// Mutes until Unix time, indefinitely with `Some(0)`, or unmutes with `None`.
     SetMuted(ChatId, Option<i64>),
     /// Moves a chat into or out of the locked folder.
@@ -3142,6 +3447,8 @@ pub enum Action {
     },
     /// Removes one pending attachment.
     RemovePending(usize),
+    /// Sends the one eligible staged photo as a WhatsApp view-once message.
+    SetPendingViewOnce(bool),
     /// Opens the cropper on a staged picture.
     EditPicture(crate::app::AttachmentId),
     /// Keeps the crop and the turn, replacing the staged picture.

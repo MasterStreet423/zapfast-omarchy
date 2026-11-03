@@ -402,13 +402,23 @@ pub fn locked_lines(locale: crate::i18n::Locale) -> (String, String) {
 }
 
 /// Builds the notification title and body, including the group sender.
-pub fn lines(chat_name: &str, is_group: bool, sender: &str, summary: &str) -> (String, String) {
+pub fn lines(
+    chat_name: &str,
+    is_group: bool,
+    sender: &str,
+    summary: &str,
+    account: Option<&str>,
+) -> (String, String) {
     let body = if is_group {
         format!("{sender}: {summary}")
     } else {
         summary.to_owned()
     };
-    (chat_name.to_owned(), body)
+    let title = match account {
+        Some(account) => format!("{chat_name} · {account}"),
+        None => chat_name.to_owned(),
+    };
+    (title, body)
 }
 
 /// The bundle identifier packaging/macos gives the app.
@@ -828,11 +838,15 @@ mod tests {
     #[test]
     fn a_group_names_the_sender_and_a_chat_does_not() {
         assert_eq!(
-            lines("Rust Berlin", true, "Mira", "Save me a seat"),
+            lines("Rust Berlin", true, "Mira", "Save me a seat", None),
             ("Rust Berlin".to_owned(), "Mira: Save me a seat".to_owned())
         );
         assert_eq!(
-            lines("Ada Lovelace", false, "Ada Lovelace", "Photo"),
+            lines("Ada Lovelace", false, "Ada Lovelace", "Photo", Some("Work")).0,
+            "Ada Lovelace · Work"
+        );
+        assert_eq!(
+            lines("Ada Lovelace", false, "Ada Lovelace", "Photo", None),
             ("Ada Lovelace".to_owned(), "Photo".to_owned())
         );
     }

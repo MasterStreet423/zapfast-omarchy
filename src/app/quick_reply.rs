@@ -209,6 +209,8 @@ impl App {
             text,
             quoting,
             mentions: Vec::new(),
+            // A quick answer goes out at once, without waiting for a link's page.
+            preview: None,
         });
         // Answering is reading: the phone and the list stop counting it.
         self.mark_read(&chat);

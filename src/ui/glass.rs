@@ -34,13 +34,9 @@ pub fn shape(rect: egui::Rect, fade: f32) -> egui::Shape {
             let mut glass = GLASS.lock().unwrap_or_else(|p| p.into_inner());
             // A window made anew has a new context; the old one took its
             // objects with it. A context that cannot frost is asked once.
-            let context = Arc::as_ptr(gl) as usize;
-            if glass
-                .as_ref()
-                .is_none_or(|(made_for, _)| *made_for != context)
-            {
+            if is_stale(glass.as_ref().map(|(made_for, _)| made_for), gl) {
                 // SAFETY: called on the painting thread with its context current.
-                *glass = Some((context, unsafe { Glass::new(gl) }));
+                *glass = Some((Arc::clone(gl), unsafe { Glass::new(gl) }));
             }
             if let Some((_, Some(glass))) = glass.as_mut() {
                 // SAFETY: as above.
@@ -50,9 +46,17 @@ pub fn shape(rect: egui::Rect, fade: f32) -> egui::Shape {
     })
 }
 
-/// The objects for the current context, keyed by it, or nothing where it
+/// Whether objects made for `made_for` cannot be used with `context`. The
+/// `Arc` is compared, not its address: holding it keeps a closed window's
+/// context from being replaced at the same address, which reused its dead
+/// framebuffers on a window reopened from the tray (#638).
+fn is_stale<T>(made_for: Option<&Arc<T>>, context: &Arc<T>) -> bool {
+    made_for.is_none_or(|made_for| !Arc::ptr_eq(made_for, context))
+}
+
+/// The objects for the current context, kept with it, or nothing where it
 /// cannot run them.
-static GLASS: Mutex<Option<(usize, Option<Glass>)>> = Mutex::new(None);
+static GLASS: Mutex<Option<(Arc<glow::Context>, Option<Glass>)>> = Mutex::new(None);
 
 /// One full-size and two small render targets, and the two programs.
 struct Glass {
@@ -307,5 +311,20 @@ unsafe fn program(gl: &glow::Context, header: &str, fragment: &str) -> Option<gl
             return None;
         }
         Some(program)
+    }
+}
+
+#[cfg(test)]
+mod context_tests {
+    use super::*;
+
+    #[test]
+    fn objects_stay_with_the_context_they_were_made_for() {
+        let first = Arc::new(1);
+        assert!(is_stale(None, &first));
+        assert!(!is_stale(Some(&first), &first));
+        assert!(!is_stale(Some(&first), &Arc::clone(&first)));
+        // A new context, equal or not, is another one.
+        assert!(is_stale(Some(&first), &Arc::new(1)));
     }
 }

@@ -9,6 +9,9 @@ protocol. These notes are for coding agents and new contributors.
 - Keep it a small native client. No browser engine, no telemetry, no
   hosted backend, no ZapFast-operated account system. Features never send
   message content to a third party.
+- WhatsApp only. ZapFast is a client for WhatsApp accounts and will not
+  speak other networks or protocols (Matrix, Signal, Telegram, IRC, XMPP)
+  or bridge to them.
 - No automation, ever. ZapFast is for a person reading and writing their
   own chats by hand. It will not have bots, an MCP server, or any API,
   command-line, plugin or scripting interface that reads, exports or sends
@@ -34,6 +37,16 @@ protocol. These notes are for coding agents and new contributors.
 - The protocol comes from whatsapp-rust. Do not reimplement pieces of it
   here, and do not advertise a capability merely because a protobuf field
   for it exists.
+- Nothing ships for one platform only. A feature or theme works on Linux,
+  Windows and macOS, through each platform's own mechanism where they differ
+  and a sensible fallback where one lacks it.
+- Fewer settings. Prefer a good default to a new setting, and never add a
+  setting per preference; a change that needs a new setting needs the
+  maintainer's approval first.
+- Pull requests leave the translation template and catalogs
+  (`assets/i18n/`) alone unless the change is a translation itself: the
+  maintainer regenerates them on `main`, and regenerated catalogs bury the
+  real change and conflict with every other pull request.
 - Do not broaden a task into adjacent features or a general refactor.
   Preserve existing user behaviour unless the task changes it.
 - Current limitations are not product exclusions. Before marking a report
@@ -92,7 +105,8 @@ protocol. These notes are for coding agents and new contributors.
   remembered chat is not being read, so it sends no receipts). Process-wide
   settings (download folder, proxy) go to every backend. `paths.rs` moves a
   single-account layout into `accounts/1/` at startup, after logging starts:
-  it refuses when anything is in the way, copies and reads back the archive's
+  it refuses when anything is in the way (a linked `accounts/1/` wins, and
+  files beside it stay untouched: only an older build makes them), copies and reads back the archive's
   keyring key before moving it, and moves SQLite side files before their
   database. Removing an account deletes its folders after its backend has
   stopped, then its keyring entry.
@@ -203,9 +217,12 @@ protocol. These notes are for coding agents and new contributors.
   call per account; the window (`app/calls.rs`) holds one call across all
   accounts with its `AccountId`, routes call actions to that account's
   backend, and declines another account's offer while one is up.
-  Group calls are not available yet: `calls::GROUP_CALLS_ENABLED` is
-  `false` (a real test carried no media either way), and everything below
-  about them is the code behind that switch, kept compiling and tested
+  Group calls are experimental: `calls::GROUP_CALLS_ENABLED` is `true` since
+  0.20. A three-person test carried audio every way and video both ways, but
+  our video froze every few seconds, since the library sends video FEC in
+  1:1 calls only (a guessed hop-by-hop group FEC, whatsapp-rust branch
+  `voip-group-video-fec`, made the SFU drop our media altogether). The switch
+  stays, kept compiling and tested both ways
   (`calls::override_group_calls` sets it per test thread). Read it through
   `calls::group_calls_enabled()`. While it is off a group has no call
   button and no call back (`ui::conversation::callable`, `call_menu`, the
@@ -649,6 +666,11 @@ protocol. These notes are for coding agents and new contributors.
   History `MESSAGE_EDIT` entries carry full snapshots, unlike live edit events:
   keep their envelope timestamp/order and normalize the body and target id.
   Do not require a separate original or create a bubble under the edit id.
+  An edit made before linking can arrive as a `secretEncryptedMessage`
+  MESSAGE_EDIT: `parse_conversation` files it as a `SealedEdit` under the
+  original's id, and the worker opens it with the original's secret (the
+  chunk's, the archive's, or the entry's own) before filing the snapshot;
+  one it cannot open is not filed.
   Count-only diagnostics can distinguish malformed snapshots from storage failures.
 - Scrolling comes from fastframe-scroll: `App::scrolling.apply` runs first
   in each unlocked frame and sets the wheel step (120 points a notch), and on

@@ -4,6 +4,7 @@
 //! active account through `App`'s `Deref`. Each account has its own backend
 //! thread, archive, and folders.
 
+use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::time::Instant;
@@ -11,7 +12,8 @@ use std::time::Instant;
 use crate::app::{AttachmentDraft, ComposerMention, Conversation};
 use crate::backend::{Backend, LinkStatus, Waker};
 use crate::model::{
-    AccountId, Chat, ChatFilter, ChatId, Contact, Label, Message, PollDraft, StickerPack,
+    AccountId, Chat, ChatActivity, ChatFilter, ChatId, Contact, Label, Message, PollDraft,
+    StickerPack,
 };
 use crate::paths::{AccountDirs, AppDirs};
 use crate::settings::AccountSettings;
@@ -30,6 +32,8 @@ pub struct Account {
     pub me_lid: Option<String>,
     pub me_name: Option<String>,
     pub me_about: Option<String>,
+    /// The phone's "Disable link previews", for this account.
+    pub link_previews_disabled: bool,
     pub chats: Vec<Chat>,
     pub contacts: HashMap<String, Contact>,
     pub conversations: HashMap<ChatId, Conversation>,
@@ -39,6 +43,9 @@ pub struct Account {
     pub(crate) prefetch_sent: Option<(bool, Option<ChatId>)>,
     pub scroll_chat_into_view: Option<ChatId>,
     pub drafts: HashMap<ChatId, String>,
+    /// Whether the open chat had a draft when opened. Keep its list priority
+    /// stable while the reader types, clears, or sends that draft.
+    pub(crate) open_draft_priority: bool,
     /// This account's media cache as last measured, for Settings. `None`
     /// until a measurement succeeds, so a failed one shows no numbers
     /// rather than zeroes.
@@ -47,12 +54,23 @@ pub struct Account {
     pub storage_token: u64,
     /// Whether the media cache is being emptied.
     pub storage_clearing: bool,
+    pub chat_export: Option<(u64, crate::archive::chat_export::Counts)>,
+    pub(crate) chat_export_sequence: u64,
+    pub(crate) chat_export_allowed_sent: Option<bool>,
     pub(crate) attachment_drafts: HashMap<ChatId, AttachmentDraft>,
     pub(crate) draft_mentions: HashMap<ChatId, Vec<ComposerMention>>,
     pub search: String,
     pub search_selected: Option<ChatId>,
     pub search_hits: Vec<Message>,
-    pub typing: HashMap<ChatId, Vec<(String, Instant)>>,
+    /// When the text last typed into the chat list's search is scanned for.
+    /// Waiting out the typing makes a word cost one scan, not one per letter.
+    pub search_due: Option<Instant>,
+    /// Normalized forms of the names and previews the chat list's search
+    /// compares, keyed by the text they came from. Normalizing ICU text costs
+    /// microseconds, and repeating it for every chat on every frame made the
+    /// whole window slow for as long as the search was open.
+    pub search_keys: RefCell<HashMap<String, String>>,
+    pub typing: HashMap<ChatId, Vec<(String, ChatActivity, Instant)>>,
     pub presence: HashMap<String, crate::app::Presence>,
     pub account_receipts_off: bool,
     pub(crate) avatars: HashMap<String, Option<PathBuf>>,
@@ -60,6 +78,11 @@ pub struct Account {
     pub(crate) avatars_full: HashMap<String, Option<PathBuf>>,
     pub(crate) avatar_full_requests: HashSet<String>,
     pub(crate) played_told: HashSet<String>,
+    /// How far each downloading attachment has got, by chat and message, as
+    /// the worker last said.
+    pub download_progress: HashMap<ChatId, HashMap<String, u8>>,
+    /// Files going out, oldest first, for the strip above the composer.
+    pub uploads: Vec<crate::model::Upload>,
     pub stickers: Vec<PathBuf>,
     pub stickers_received: Vec<PathBuf>,
     pub stickers_saved: Vec<PathBuf>,
@@ -108,8 +131,12 @@ pub struct Account {
     /// has not arrived yet.
     pub reply_when_loaded: Option<(ChatId, String)>,
     pub account_privacy: crate::privacy::Snapshot,
+    pub blocklist: crate::blocking::Blocklist,
     pub interactive_sending: HashSet<(ChatId, String)>,
     pub group_saving: HashSet<ChatId>,
+    /// Chats whose disappearing-timer change is on its way to WhatsApp. The
+    /// control stays disabled and the old timer stays visible until it lands.
+    pub timer_saving: HashSet<ChatId>,
     pub(crate) reported_online: Option<bool>,
     /// Chats this account may pin; WhatsApp Plus raises it once known.
     pub pin_limit: usize,
@@ -158,6 +185,7 @@ impl Account {
             me_lid: None,
             me_name: None,
             me_about: None,
+            link_previews_disabled: false,
             chats: Vec::new(),
             contacts: HashMap::new(),
             conversations: HashMap::new(),
@@ -165,14 +193,20 @@ impl Account {
             prefetch_sent: None,
             scroll_chat_into_view: None,
             drafts: HashMap::new(),
+            open_draft_priority: false,
             storage_stats: None,
             storage_token: 0,
             storage_clearing: false,
+            chat_export: None,
+            chat_export_sequence: 0,
+            chat_export_allowed_sent: None,
             draft_mentions: HashMap::new(),
             attachment_drafts: HashMap::new(),
             search: String::new(),
             search_selected: None,
             search_hits: Vec::new(),
+            search_due: None,
+            search_keys: RefCell::new(HashMap::new()),
             typing: HashMap::new(),
             presence: HashMap::new(),
             account_receipts_off: false,
@@ -181,6 +215,8 @@ impl Account {
             avatars_full: HashMap::new(),
             avatar_full_requests: HashSet::new(),
             played_told: HashSet::new(),
+            download_progress: HashMap::new(),
+            uploads: Vec::new(),
             stickers: Vec::new(),
             stickers_received: Vec::new(),
             stickers_saved: Vec::new(),
@@ -215,8 +251,10 @@ impl Account {
             chat_pins: HashMap::new(),
             reply_when_loaded: None,
             account_privacy: crate::privacy::Snapshot::default(),
+            blocklist: Default::default(),
             interactive_sending: HashSet::new(),
             group_saving: HashSet::new(),
+            timer_saving: HashSet::new(),
             reported_online: None,
             pin_limit: crate::backend::PINNED_CHATS,
             call_log: Vec::new(),

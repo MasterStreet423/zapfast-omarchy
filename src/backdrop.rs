@@ -18,14 +18,37 @@ pub fn active() -> bool {
     ACTIVE.load(Ordering::Relaxed)
 }
 
-/// Whether to make the window transparent when it is created. macOS always
-/// does, since every theme there paints over it; elsewhere only when the
-/// Messages theme is on and the platform can show the desktop through it,
-/// so other themes keep the opaque window they had. Transparency cannot be
-/// added to a window later, so a theme chosen while a window is open turns
-/// translucent from the next one.
-pub fn transparent_window(messages: bool) -> bool {
-    cfg!(target_os = "macos") || (messages && platform::may_show_through())
+/// Whether to make the window transparent when it is created. The Messages
+/// theme needs it where the platform can show the desktop through it. On
+/// macOS and Linux a theme whose window colour has alpha (`see_through`)
+/// also needs it: it shows the desktop, which a compositor may blur. On an
+/// opaque surface its translucent pixels are never composited and leave
+/// trails (#593). Other themes keep the opaque window they had. Transparency
+/// cannot be added to a window later, so macOS replaces the window when a
+/// theme changes this choice.
+pub fn transparent_window(messages: bool, see_through: bool) -> bool {
+    (messages && platform::may_show_through())
+        || (see_through && cfg!(any(target_os = "macos", target_os = "linux")))
+}
+
+/// Whether the window on screen was made transparent, so a frame may clear
+/// to a colour with alpha. Set by `main` as each window is made.
+static WINDOW_TRANSPARENT: AtomicBool = AtomicBool::new(false);
+
+/// Records whether the window just made is transparent.
+pub fn set_window_transparent(transparent: bool) {
+    WINDOW_TRANSPARENT.store(transparent, Ordering::Relaxed);
+}
+
+/// The colour a frame clears to: `window`, made opaque on an opaque window,
+/// where alpha would leave the last frame's pixels behind (a theme with
+/// alpha chosen while the window is open, until the next one is made).
+pub fn clear_color(window: egui::Color32) -> egui::Color32 {
+    if WINDOW_TRANSPARENT.load(Ordering::Relaxed) {
+        window
+    } else {
+        egui::Color32::from_rgb(window.r(), window.g(), window.b())
+    }
 }
 
 /// Gives the window its material while `palette` wants one, takes it away
@@ -203,11 +226,27 @@ mod tests {
     /// Other themes keep an opaque window wherever they always had one, and
     /// Messages asks for a transparent one only where it can show through.
     #[test]
-    fn only_messages_makes_a_window_transparent_off_macos() {
-        assert_eq!(transparent_window(false), cfg!(target_os = "macos"));
+    fn opaque_themes_use_an_opaque_window() {
+        assert!(!transparent_window(false, false));
         assert_eq!(
-            transparent_window(true),
-            cfg!(target_os = "macos") || platform::may_show_through()
+            transparent_window(true, false),
+            platform::may_show_through()
         );
+    }
+
+    /// A Linux theme whose window colour has alpha gets a transparent window
+    /// (#593), and an opaque window never clears to alpha.
+    #[test]
+    fn a_see_through_theme_gets_a_transparent_window_on_linux() {
+        assert_eq!(
+            transparent_window(false, true),
+            cfg!(any(target_os = "macos", target_os = "linux"))
+        );
+        let glass = egui::Color32::from_rgba_premultiplied(0, 0, 0, 0);
+        set_window_transparent(false);
+        assert_eq!(clear_color(glass).a(), 255);
+        set_window_transparent(true);
+        assert_eq!(clear_color(glass), glass);
+        set_window_transparent(false);
     }
 }

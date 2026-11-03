@@ -31,6 +31,7 @@ const PHOTO_STOP: u8 = 0;
 const PENCIL_STOP: u8 = 1;
 const NAME_CHECK_STOP: u8 = 2;
 const ACTION_STOP: u8 = 3;
+const BLOCK_STOP: u8 = 9;
 pub const MEDIA_ROW_STOP: u8 = 10;
 const PERMISSIONS_STOP: u8 = 11;
 const ADD_MEMBERS_STOP: u8 = 12;
@@ -39,6 +40,7 @@ const RESET_LINK_STOP: u8 = 14;
 const TAB_STOP: u8 = 20;
 const LEAVE_STOP: u8 = 30;
 const RETRY_STOP: u8 = 31;
+const TIMER_STOP: u8 = 32;
 
 /// The media view's title, and the overview row that opens it.
 fn media_title(app: &App) -> String {
@@ -163,12 +165,13 @@ fn header(
     focus: bool,
 ) {
     let palette = app.palette;
-    Frame::new()
-        .inner_margin(Margin::symmetric(14, 10))
+    let top = ui.cursor().top();
+    let frame = Frame::new()
+        .inner_margin(Margin::symmetric(14, 8))
         .show(ui, |ui| {
-            let room = pane::caption_header(ui, vec2(14.0, 10.0));
+            let room = pane::caption_header(ui, vec2(14.0, 8.0));
             ui.horizontal(|ui| {
-                ui.set_min_height(32.0);
+                ui.set_min_height(super::conversation::HEADER_ROW);
                 ui.add_space(room.left);
                 let button =
                     theme::icon_button(ui, icon, 18.0, palette.secondary, palette.text, label)
@@ -182,12 +185,37 @@ fn header(
                 ui.add_space(6.0);
                 theme::text(ui, title, theme::semibold(16.0), palette.text);
             });
-        });
-    ui.painter().hline(
-        ui.max_rect().x_range(),
-        ui.cursor().top(),
-        Stroke::new(1.0, palette.outline),
-    );
+        })
+        .response
+        .rect;
+    // The edge lines up with the chat header's beside it, which its name and
+    // subtitle can make taller than this row.
+    let chat_header = ui
+        .ctx()
+        .data(|data| data.get_temp::<Rect>(super::conversation::header_rect_id()));
+    let bottom = chat_header
+        .filter(|chat| (chat.top() - top).abs() < 1.0)
+        .map_or(frame.bottom(), |chat| frame.bottom().max(chat.bottom()));
+    ui.ctx()
+        .data_mut(|data| data.insert_temp(header_edge_id(), bottom));
+    let short = bottom - ui.cursor().top();
+    if short > 0.0 {
+        ui.add_space(short);
+    }
+    // A vibrant chat header has no edge (its messages scroll on under it),
+    // so this one draws none either.
+    if !palette.vibrant() {
+        ui.painter().hline(
+            ui.max_rect().x_range(),
+            bottom,
+            Stroke::new(1.0, palette.outline),
+        );
+    }
+}
+
+/// Where the pane header's edge was last drawn, for layout tests.
+pub(crate) fn header_edge_id() -> egui::Id {
+    egui::Id::new("info-header-edge")
 }
 
 /// What the overview shows of the chat, read once per frame from the chat
@@ -213,10 +241,13 @@ struct Shown {
     muted: bool,
     pinned: bool,
     archived: bool,
+    /// A chat we have left. It stays readable but takes no new settings.
+    left: bool,
     /// A group's description, when it has one.
     description: Option<String>,
     /// The disappearing-message timer line, when the timer is known.
     timer: Option<String>,
+    timer_seconds: Option<u32>,
 }
 
 impl Shown {
@@ -250,11 +281,13 @@ impl Shown {
             muted: chat.muted(crate::util::now()),
             pinned: chat.pinned,
             archived: chat.archived,
+            left: chat.left,
             description: chat
                 .group_description
                 .clone()
                 .filter(|text| chat.is_group() && !text.trim().is_empty()),
             timer: crate::util::disappearing_line(app.locale, chat.ephemeral_expiration),
+            timer_seconds: chat.ephemeral_expiration,
         }
     }
 }
@@ -289,6 +322,17 @@ fn overview(app: &mut App, ui: &mut egui::Ui, id: &str, overlay: bool) {
         });
 }
 
+/// Opens a profile picture in the image viewer. It belongs to no message, so
+/// the viewer has no album of a chat to browse from it.
+fn view_photo(picture: &std::path::Path) -> Action {
+    Action::PreviewImage {
+        path: picture.to_path_buf(),
+        chat: String::new(),
+        message: String::new(),
+        card: None,
+    }
+}
+
 /// The picture, name, details, actions and members, top to bottom.
 fn identity(app: &mut App, ui: &mut egui::Ui, shown: &Shown, overlay: bool) {
     let palette = app.palette;
@@ -313,8 +357,18 @@ fn identity(app: &mut App, ui: &mut egui::Ui, shown: &Shown, overlay: bool) {
     ui.vertical_centered(|ui| {
         if group_editable {
             group_action = group_photo(app, ui, name, id, photo, picture.as_deref());
+        } else if let Some(picture) = picture.as_deref() {
+            let label = crate::i18n::gettext(app.locale, "View photo");
+            if widgets::clickable_avatar(ui, &palette, name, id, photo, Some(picture), &label)
+                .tab_stop(Stop::InfoControl(PHOTO_STOP))
+                .on_hover_cursor(egui::CursorIcon::PointingHand)
+                .on_hover_text(label.as_ref())
+                .clicked()
+            {
+                app.actions.push(view_photo(picture));
+            }
         } else {
-            widgets::avatar(ui, &palette, name, id, photo, picture.as_deref());
+            widgets::avatar(ui, &palette, name, id, photo, None);
         }
         ui.add_space(6.0);
         if let Some(draft) = renaming.as_mut() {
@@ -513,25 +567,130 @@ fn identity(app: &mut App, ui: &mut egui::Ui, shown: &Shown, overlay: bool) {
                 palette.secondary,
             );
         }
-        // The chat's disappearing-message timer, read-only. A timer WhatsApp
-        // turned off reads as "Off", which is a fact; a chat whose timer
-        // nobody has mentioned draws nothing rather than guessing.
-        // Recorded every frame, drawn or not, so a test reading the marker
-        // after the row went away sees nothing instead of the last frame.
+        // Keep a known timer visible even when the group's permissions make
+        // it read-only. An editable chat with no known timer still offers the
+        // choice without guessing "Off". Record the marker every frame so a
+        // hidden row cannot leave the previous chat's value behind.
+        let eligible = shown.has_chat && !shown.channel && !shown.left;
+        let changeable = eligible && (!shown.group || shown.can_edit_info);
+        let showable = eligible && (changeable || shown.timer.is_some());
+        let label = shown.timer.clone().unwrap_or_else(|| {
+            crate::i18n::gettext(app.locale, "Disappearing messages").into_owned()
+        });
         ui.ctx().data_mut(|data| {
             data.insert_temp(
                 super::dialogs::disappearing_timer_id(),
-                shown.timer.as_deref().map(|text| super::dialogs::TimerRow {
-                    text: text.to_owned(),
+                showable.then(|| super::dialogs::TimerRow {
+                    text: label.clone(),
                     rect: Rect::NOTHING,
                 }),
             )
         });
-        if let Some(text) = shown.timer.as_deref() {
+        if showable {
+            let text = label.as_str();
+            // A hover highlight painted under the row: the placeholder is
+            // added first and filled in once the row's rect is known.
+            let painter = ui.painter().clone();
+            let highlight = painter.add(egui::Shape::Noop);
             let drawn = super::dialogs::disappearing_timer_row(ui, &palette, text);
             ui.ctx().data_mut(|data| {
-                data.insert_temp(super::dialogs::disappearing_timer_id(), Some(drawn))
+                data.insert_temp(super::dialogs::disappearing_timer_id(), Some(drawn.clone()))
             });
+            let saving = app.timer_saving.contains(id);
+            let can_change = changeable && !saving;
+            let response = ui.interact(
+                drawn.rect.expand2(vec2(8.0, 4.0)),
+                egui::Id::new(("disappearing-timer-control", id)),
+                if can_change {
+                    Sense::click()
+                } else {
+                    Sense::hover()
+                },
+            );
+            let response = if can_change {
+                response.tab_stop(Stop::InfoControl(TIMER_STOP))
+            } else {
+                response
+            };
+            response.widget_info(|| {
+                egui::WidgetInfo::labeled(egui::WidgetType::Button, can_change, text)
+            });
+            // Keyboard focus shows the same way the media row's does.
+            theme::reveal_focus(&response);
+            theme::focus_outline(ui, response.id, drawn.rect.expand2(vec2(8.0, 4.0)), 6.0);
+            // A clickable row reads as one: the pointer changes over it and a
+            // soft fill appears behind it. The placeholder was added before
+            // the row, so the fill stays under its icon and text.
+            if can_change && response.hovered() {
+                ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+                painter.set(
+                    highlight,
+                    egui::Shape::rect_filled(
+                        drawn.rect.expand2(vec2(8.0, 4.0)),
+                        6.0,
+                        palette.surface_hover,
+                    ),
+                );
+            }
+            // Demo/test: hold this menu open for a screenshot.
+            #[cfg(any(test, feature = "demo"))]
+            if can_change && app.open_timer_menu.as_deref() == Some(id) {
+                egui::Popup::open_id(ui.ctx(), response.id.with("popup"));
+            }
+            let choices = [
+                (0, crate::i18n::gettext(app.locale, "Off")),
+                (86_400, crate::i18n::gettext(app.locale, "24 hours")),
+                (604_800, crate::i18n::gettext(app.locale, "7 days")),
+                (7_776_000, crate::i18n::gettext(app.locale, "90 days")),
+            ];
+            let mut selected = None;
+            egui::Popup::menu(&response)
+                // The click opens it, as any menu button's does; replacing
+                // that command with `None` would leave it shut for good.
+                .open_memory(if can_change {
+                    response.clicked().then_some(egui::SetOpenCommand::Toggle)
+                } else {
+                    Some(egui::SetOpenCommand::Bool(false))
+                })
+                .align(egui::RectAlign::BOTTOM)
+                .width(widgets::menu_width(
+                    ui,
+                    &choices
+                        .iter()
+                        .map(|(_, label)| label.as_ref())
+                        .collect::<Vec<_>>(),
+                    true,
+                ))
+                .frame(widgets::menu_frame(&palette))
+                .show(|ui| {
+                    for (seconds, label) in &choices {
+                        if widgets::menu_item_enabled(
+                            ui,
+                            &palette,
+                            (shown.timer_seconds == Some(*seconds)).then_some(Icon::Check),
+                            label,
+                            can_change,
+                        ) {
+                            selected = Some(*seconds);
+                            ui.close();
+                        }
+                    }
+                });
+            if let Some(seconds) = selected {
+                app.actions.push(Action::SetDisappearingTimer {
+                    chat: id.to_owned(),
+                    seconds,
+                });
+            }
+            // Both direct and group changes disable the row while waiting.
+            if saving {
+                theme::text(
+                    ui,
+                    crate::i18n::gettext(app.locale, "Saving…"),
+                    theme::regular(12.5),
+                    palette.dim,
+                );
+            }
         }
     });
     if let Some((first, last)) = saved {
@@ -549,14 +708,49 @@ fn identity(app: &mut App, ui: &mut egui::Ui, shown: &Shown, overlay: bool) {
     }
     ui.add_space(4.0);
     actions(app, ui, shown, mine, editable);
-    if let Some(description) = shown.description.as_deref() {
+    ui.vertical_centered(|ui| super::blocking::button(app, ui, id, Stop::InfoControl(BLOCK_STOP)));
+    let describing = app.group_description_edit.take().filter(|_| group_editable);
+    if let Some(mut draft) = describing {
         ui.add_space(8.0);
-        theme::text(
-            ui,
-            crate::i18n::gettext(app.locale, "Description"),
-            theme::medium(12.5),
-            palette.secondary,
-        );
+        match group_description_field(app, ui, &mut draft) {
+            Some(true) => app.actions.push(Action::SetGroupDescription {
+                chat: id.to_owned(),
+                description: draft,
+            }),
+            Some(false) => app.actions.push(Action::CloseGroupDescription),
+            None => app.group_description_edit = Some(draft),
+        }
+    } else if group_editable && shown.description.is_none() {
+        ui.add_space(8.0);
+        let add = crate::i18n::gettext(app.locale, "Add group description");
+        if widgets::menu_item(ui, &palette, Some(Icon::Pencil), add.as_ref()) {
+            app.actions
+                .push(Action::EditGroupDescription(String::new()));
+        }
+    } else if let Some(description) = shown.description.as_deref() {
+        ui.add_space(8.0);
+        ui.horizontal(|ui| {
+            theme::text(
+                ui,
+                crate::i18n::gettext(app.locale, "Description"),
+                theme::medium(12.5),
+                palette.secondary,
+            );
+            if group_editable
+                && theme::icon_button(
+                    ui,
+                    Icon::Pencil,
+                    15.0,
+                    palette.secondary,
+                    palette.text,
+                    &crate::i18n::gettext(app.locale, "Edit group description"),
+                )
+                .clicked()
+            {
+                app.actions
+                    .push(Action::EditGroupDescription(description.to_owned()));
+            }
+        });
         ui.add_space(4.0);
         // A long description scrolls in place, so the media and the members
         // stay close under it.
@@ -1924,6 +2118,75 @@ fn group_photo(
 
 /// The group name being typed. Returns `Some(true)` when Enter or the check
 /// submits it, `Some(false)` when the cross cancels it.
+/// The description's editor: `Some(true)` to save and `Some(false)` to cancel.
+/// Enter starts a new line, as a description may have several.
+fn group_description_field(app: &App, ui: &mut egui::Ui, draft: &mut String) -> Option<bool> {
+    let palette = app.palette;
+    let hint = crate::i18n::gettext(app.locale, "Group description");
+    let field = Frame::new()
+        .fill(palette.surface)
+        .corner_radius(CornerRadius::same(theme::RADIUS))
+        .inner_margin(Margin::symmetric(10, 6))
+        .show(ui, |ui| {
+            ui.add(
+                egui::TextEdit::multiline(draft)
+                    .id(group_description_field_id())
+                    .hint_text(
+                        egui::RichText::new(hint.as_ref())
+                            .color(palette.dim)
+                            .font(theme::regular(13.5)),
+                    )
+                    .font(theme::regular(13.5))
+                    .text_color(palette.text)
+                    .frame(Frame::NONE)
+                    .char_limit(crate::model::GROUP_DESCRIPTION_LIMIT)
+                    .desired_rows(4)
+                    .desired_width(f32::INFINITY),
+            )
+        });
+    theme::focus_outline(
+        ui,
+        field.inner.id,
+        field.response.rect,
+        f32::from(theme::RADIUS),
+    );
+    if ui.memory(|memory| memory.focused().is_none()) {
+        field.inner.request_focus();
+    }
+    let mut outcome = None;
+    ui.horizontal(|ui| {
+        if theme::icon_button(
+            ui,
+            Icon::Check,
+            18.0,
+            palette.secondary,
+            palette.accent,
+            &crate::i18n::gettext(app.locale, "Save description"),
+        )
+        .clicked()
+        {
+            outcome = Some(true);
+        }
+        if theme::icon_button(
+            ui,
+            Icon::X,
+            18.0,
+            palette.secondary,
+            palette.text,
+            &crate::i18n::gettext(app.locale, "Cancel"),
+        )
+        .clicked()
+        {
+            outcome = Some(false);
+        }
+    });
+    outcome
+}
+
+fn group_description_field_id() -> egui::Id {
+    egui::Id::new("group-description-field")
+}
+
 fn group_name_field(app: &App, ui: &mut egui::Ui, draft: &mut String) -> Option<bool> {
     let palette = app.palette;
     let mut outcome = None;
@@ -2012,6 +2275,24 @@ pub fn group_name_field_id() -> egui::Id {
 
 #[cfg(test)]
 mod tests {
+    /// The picture opens the viewer on its own, not a chat's album (#640).
+    #[test]
+    fn a_profile_picture_opens_alone_in_the_viewer() {
+        let path = std::path::Path::new("/fixture/1_s_whatsapp_net-full.jpg");
+        assert!(crate::image_preview::can_view(path));
+        let crate::model::Action::PreviewImage {
+            path: shown,
+            chat,
+            message,
+            card,
+        } = super::view_photo(path)
+        else {
+            panic!("the viewer");
+        };
+        assert_eq!(shown, path);
+        assert!(chat.is_empty() && message.is_empty() && card.is_none());
+    }
+
     use super::domain;
 
     #[test]

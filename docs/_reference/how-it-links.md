@@ -13,9 +13,18 @@ code. New links list ZapFast under **Linked devices**; an existing link may
 retain the earlier name FastsApp until you link again. There you can unlink
 it at any time.
 
+WhatsApp answers a limited number of QR codes on one connection and then ends
+it. ZapFast opens a fresh connection for a new set, so the linking screen keeps
+showing a current code until you scan it.
+
 Each linked device can have one connection. Two clients using the same device
 keys will disconnect each other. A second ZapFast launch reopens the existing
 window instead of starting another instance.
+
+**Development builds:** when WhatsApp identifies a contact previously known
+by a private id, ZapFast merges that chat into the contact's phone-number
+chat. Messages keep their stars, pins, and motion-photo clips. Newer star and pin
+changes take precedence, including removing a star or pin.
 
 ## What the phone is for
 
@@ -32,7 +41,10 @@ window instead of starting another instance.
 The message archive, media, and session keys stay on your computer.
 [Settings & Files](/settings-and-files/) lists their paths. ZapFast connects
 to WhatsApp's servers, GIPHY for the GIF picker and search, and Signal's sticker
-CDN when you import a Signal sticker pack. It has no telemetry. It also asks
+CDN when you import a Signal sticker pack. While you write a link in a new text
+message, it also contacts that link's site, and whichever site the page names
+for its picture, to build a [preview](/using-zapfast/#writing). It has no
+telemetry. It also asks
 `api.github.com` once a day whether a newer release exists; you can turn this
 off in Settings. Downloading an update fetches release files from GitHub.
 

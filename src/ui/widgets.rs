@@ -556,6 +556,7 @@ pub fn submenu<R>(
     response.widget_info(|| {
         egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), label)
     });
+    note_menu_row(ui, response.id, label);
     let open = egui::Popup::is_id_open(
         ui.ctx(),
         egui::containers::menu::SubMenu::id_from_widget_id(response.id),
@@ -612,19 +613,70 @@ pub fn menu_item_enabled(
     label: &str,
     enabled: bool,
 ) -> bool {
+    // Drawn either way: a disabled item still shows, greyed out.
+    let response = menu_item_response(ui, palette, icon, label, enabled);
+    enabled && response.clicked()
+}
+
+/// A menu item as [`menu_item_enabled`] draws it, returning its response,
+/// for a menu that needs the item's id (to focus it from the keyboard).
+pub fn menu_item_response(
+    ui: &mut Ui,
+    palette: &Palette,
+    icon: Option<Icon>,
+    label: &str,
+    enabled: bool,
+) -> egui::Response {
+    menu_item_named(ui, palette, icon, label, label, enabled)
+}
+
+/// As [`menu_item_response`], with a screen reader name that differs from the
+/// visible `label`, for a row whose unavailability needs explaining.
+pub fn menu_item_named(
+    ui: &mut Ui,
+    palette: &Palette,
+    icon: Option<Icon>,
+    label: &str,
+    accessible: &str,
+    enabled: bool,
+) -> egui::Response {
+    menu_item_focusable(ui, palette, icon, label, accessible, enabled, enabled)
+}
+
+/// [`menu_item_named`] whose row can take focus even when disabled, for a
+/// menu opened to read one: the screen reader then says it is unavailable,
+/// and why, from its name.
+pub fn menu_item_focusable(
+    ui: &mut Ui,
+    palette: &Palette,
+    icon: Option<Icon>,
+    label: &str,
+    accessible: &str,
+    enabled: bool,
+    focusable: bool,
+) -> egui::Response {
     let width = ui.available_width();
+    // A disabled row still takes the click, so it does not reach a widget
+    // under the menu; `Sense::CLICK` is not focusable, so Tab skips it.
     let (rect, response) = ui.allocate_exact_size(
         vec2(width, 28.0),
-        if enabled {
+        if focusable {
             Sense::click()
         } else {
-            Sense::hover()
+            Sense::CLICK
         },
     );
     theme::reveal_focus(&response);
     response.widget_info(|| {
-        egui::WidgetInfo::labeled(egui::WidgetType::Button, enabled && ui.is_enabled(), label)
+        egui::WidgetInfo::labeled(
+            egui::WidgetType::Button,
+            enabled && ui.is_enabled(),
+            accessible,
+        )
     });
+    if focusable {
+        note_menu_row(ui, response.id, label);
+    }
     if ui.is_rect_visible(rect) {
         if response.hovered() && enabled {
             ui.painter()
@@ -664,14 +716,196 @@ pub fn menu_item_enabled(
             color,
         );
     }
-    let clicked = enabled && response.clicked();
-    if clicked {
+    if enabled && response.clicked() {
         ui.close();
     }
     if enabled {
-        response.on_hover_cursor(egui::CursorIcon::PointingHand);
+        response.on_hover_cursor(egui::CursorIcon::PointingHand)
+    } else {
+        response
     }
-    clicked
+}
+
+/// A menu row that takes focus, as letter navigation knows it.
+#[derive(Clone)]
+struct MenuRow {
+    layer: egui::LayerId,
+    id: egui::Id,
+    /// The letter its label starts with, folded as [`fold_letter`] folds.
+    letter: Option<char>,
+}
+
+/// The rows that take focus in the menus drawn so far in this pass, in the
+/// order they were drawn, which is the order Tab and the arrows walk them,
+/// and those of the pass before.
+#[derive(Clone, Default)]
+struct MenuRows {
+    pass: u64,
+    rows: Vec<MenuRow>,
+    before: (u64, Vec<MenuRow>),
+}
+
+fn menu_rows_id() -> egui::Id {
+    egui::Id::new("menu-rows")
+}
+
+/// Notes a menu row that takes focus, for [`menu_letters`].
+fn note_menu_row(ui: &Ui, id: egui::Id, label: &str) {
+    // A popup's first pass only measures it: nothing in it takes focus yet.
+    if ui.is_sizing_pass() || !ui.is_enabled() {
+        return;
+    }
+    let pass = ui.ctx().cumulative_pass_nr();
+    let row = MenuRow {
+        layer: ui.layer_id(),
+        id,
+        letter: first_letter(label),
+    };
+    ui.ctx().data_mut(|data| {
+        let rows = data.get_temp_mut_or_default::<MenuRows>(menu_rows_id());
+        if rows.pass != pass {
+            rows.before = (rows.pass, std::mem::take(&mut rows.rows));
+            rows.pass = pass;
+        }
+        rows.rows.push(row);
+    });
+}
+
+/// The menu rows drawn in the pass before this one: the menus as they are
+/// on screen while this pass reads its input.
+fn last_menu_rows(ctx: &egui::Context) -> Vec<MenuRow> {
+    let Some(before) = ctx.cumulative_pass_nr().checked_sub(1) else {
+        return Vec::new();
+    };
+    ctx.data(|data| data.get_temp::<MenuRows>(menu_rows_id()))
+        .map(|rows| {
+            if rows.pass == before {
+                rows.rows
+            } else if rows.before.0 == before {
+                rows.before.1
+            } else {
+                Vec::new()
+            }
+        })
+        .unwrap_or_default()
+}
+
+/// The letter a label is found by: its first letter or digit, past any
+/// emoji, quote, symbol or direction mark before it.
+fn first_letter(label: &str) -> Option<char> {
+    label
+        .chars()
+        .find(|letter| letter.is_alphanumeric())
+        .map(fold_letter)
+}
+
+/// A letter as letter navigation compares it: in lower case, and an alef
+/// with a hamza or madda as the plain alef, the key most layouts type it
+/// with.
+fn fold_letter(letter: char) -> char {
+    match letter {
+        '\u{623}' | '\u{625}' | '\u{622}' | '\u{671}' => '\u{627}',
+        _ => letter.to_lowercase().next().unwrap_or(letter),
+    }
+}
+
+/// Moves through the menu that has keyboard focus by letter, as a desktop
+/// menu does: each typed character moves focus to the next row whose label
+/// starts with it, from the focused row on, wrapping at the end, so the
+/// same letter again goes on to the next such row. The row is not chosen:
+/// Enter or Space chooses it. A row Tab and the arrows skip, such as a
+/// disabled one, is skipped here too.
+///
+/// It reads what was typed, not which keys were pressed, so it follows any
+/// keyboard layout, Arabic too. While a menu row has focus, what is typed
+/// goes to no one else, nor do the keys that typed it, so a letter never
+/// reaches a shortcut such as the message list's R or the message field.
+/// Space, which presses the focused row, is left alone. Called first thing
+/// in a frame, before anything else reads its keys.
+pub fn menu_letters(ctx: &egui::Context) {
+    if !egui::Popup::is_any_open(ctx) {
+        return;
+    }
+    let Some(focused) = ctx.memory(|memory| memory.focused()) else {
+        return;
+    };
+    let rows = last_menu_rows(ctx);
+    let Some(layer) = rows
+        .iter()
+        .find(|row| row.id == focused)
+        .map(|row| row.layer)
+    else {
+        return;
+    };
+    let typed = ctx.input_mut(take_typed);
+    let rows: Vec<&MenuRow> = rows.iter().filter(|row| row.layer == layer).collect();
+    let letters: Vec<Option<char>> = rows.iter().map(|row| row.letter).collect();
+    let mut at = rows.iter().position(|row| row.id == focused);
+    for letter in typed {
+        if let Some(found) = next_with_letter(&letters, at, letter) {
+            at = Some(found);
+        }
+    }
+    if let Some(row) = at.and_then(|at| rows.get(at))
+        && row.id != focused
+    {
+        ctx.memory_mut(|memory| memory.request_focus(row.id));
+        // Moving by letter is keyboard navigation, as the arrows are.
+        ctx.data_mut(|data| data.insert_temp(theme::keyboard_focus_id(), true));
+    }
+}
+
+/// Takes this frame's typed text, apart from spaces, and with it the
+/// presses that typed it: those of a key that types a character, with no
+/// Ctrl, Command or Alt held.
+fn take_typed(input: &mut egui::InputState) -> Vec<char> {
+    let mut typed = Vec::new();
+    input.events.retain(|event| match event {
+        egui::Event::Text(text) if !text.trim().is_empty() => {
+            typed.extend(text.chars().filter(|letter| !letter.is_whitespace()));
+            false
+        }
+        _ => true,
+    });
+    if !typed.is_empty() {
+        input.events.retain(|event| {
+            !matches!(
+                event,
+                egui::Event::Key {
+                    key,
+                    pressed: true,
+                    modifiers,
+                    ..
+                } if types_a_character(*key)
+                    && !(modifiers.ctrl || modifiers.command || modifiers.mac_cmd || modifiers.alt)
+            )
+        });
+    }
+    typed
+}
+
+/// Whether `key` stands for a character: a letter, a digit or a sign, not
+/// an arrow, Space, Enter or a function key.
+fn types_a_character(key: egui::Key) -> bool {
+    use egui::Key;
+    !matches!(
+        key,
+        Key::ArrowDown | Key::ArrowLeft | Key::ArrowRight | Key::ArrowUp
+    ) && key.symbol_or_name().chars().count() == 1
+}
+
+/// The index of the next of `letters` after `from` (from the start when
+/// None) that is `typed`, wrapping; `from` itself when it is the only one.
+/// None when no row starts with it.
+fn next_with_letter(letters: &[Option<char>], from: Option<usize>, typed: char) -> Option<usize> {
+    if !typed.is_alphanumeric() {
+        return None;
+    }
+    let typed = fold_letter(typed);
+    let start = from.map_or(0, |from| from + 1);
+    (0..letters.len())
+        .map(|step| (start + step) % letters.len())
+        .find(|&index| letters[index] == Some(typed))
 }
 
 pub fn menu_separator(ui: &mut Ui, palette: &Palette) {
@@ -1149,11 +1383,10 @@ fn vertical_fade(ui: &Ui, rect: Rect, top: Color32, bottom: Color32) {
     ui.painter().add(egui::Shape::mesh(mesh));
 }
 
-/// A horizontal row of chips that scrolls when it overflows. The scroll bar
-/// is the app's floating one: hidden at rest, it shows over the bottom of the
-/// chips only while the pointer is on the row, and takes no room of its own.
-/// A plain mouse wheel scrolls the row too, since most mice have no sideways
-/// wheel.
+/// A horizontal row of chips that scrolls when it overflows. It draws no
+/// scroll bar, which has no room of its own and would lie over the chips: the
+/// clipped chip and the edge's fade say there is more. A plain mouse wheel
+/// scrolls the row, since most mice have no sideways wheel.
 pub fn chip_scroll_row<R>(
     ui: &mut Ui,
     id_salt: &str,
@@ -1165,6 +1398,7 @@ pub fn chip_scroll_row<R>(
             .id_salt(id_salt)
             .animated(false)
             .auto_shrink([false, true])
+            .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysHidden)
             .show(ui, add_contents)
     })
     .inner
@@ -1850,6 +2084,209 @@ pub fn dotted_chip(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A menu open over a button, with a row for each of `labels` (one
+    /// starting with `~` disabled), its first row focused, and the frames
+    /// that letter navigation runs in.
+    struct LetterMenu {
+        ctx: egui::Context,
+        labels: Vec<&'static str>,
+        rows: Vec<egui::Id>,
+        clicked: Vec<usize>,
+        /// The events no one took in the last frame.
+        left: Vec<egui::Event>,
+    }
+
+    impl LetterMenu {
+        fn new(labels: &[&'static str]) -> Self {
+            let mut menu = Self {
+                ctx: egui::Context::default(),
+                labels: labels.to_vec(),
+                rows: Vec::new(),
+                clicked: Vec::new(),
+                left: Vec::new(),
+            };
+            // The popup's first pass only measures it.
+            menu.frame(Vec::new());
+            menu.frame(Vec::new());
+            let first = menu.rows[0];
+            menu.ctx.memory_mut(|memory| memory.request_focus(first));
+            menu.frame(Vec::new());
+            assert_eq!(menu.focused(), Some(0));
+            menu
+        }
+
+        fn frame(&mut self, events: Vec<egui::Event>) {
+            let palette = Palette::dark();
+            let labels = self.labels.clone();
+            let mut rows = Vec::new();
+            let mut clicked = Vec::new();
+            let mut left = Vec::new();
+            let mut output = self.ctx.run_ui(
+                egui::RawInput {
+                    events,
+                    ..Default::default()
+                },
+                |ui| {
+                    menu_letters(ui.ctx());
+                    let button = ui.button("Menu");
+                    egui::Popup::menu(&button)
+                        .open_memory(Some(egui::SetOpenCommand::Bool(true)))
+                        .show(|ui| {
+                            for (index, label) in labels.iter().enumerate() {
+                                let (label, enabled) = match label.strip_prefix('~') {
+                                    Some(label) => (label, false),
+                                    None => (*label, true),
+                                };
+                                let response =
+                                    menu_item_response(ui, &palette, None, label, enabled);
+                                rows.push(response.id);
+                                if enabled && response.clicked() {
+                                    clicked.push(index);
+                                }
+                            }
+                        });
+                    left = ui.input(|input| input.events.clone());
+                },
+            );
+            output.textures_delta.clear();
+            if !rows.is_empty() {
+                self.rows = rows;
+            }
+            self.clicked.extend(clicked);
+            self.left = left;
+        }
+
+        /// Types `text` as a keyboard does: the key's press, then the text.
+        fn type_text(&mut self, key: egui::Key, text: &str) -> Option<usize> {
+            self.frame(vec![
+                egui::Event::Key {
+                    key,
+                    physical_key: None,
+                    pressed: true,
+                    repeat: false,
+                    modifiers: egui::Modifiers::NONE,
+                },
+                egui::Event::Text(text.to_owned()),
+            ]);
+            self.frame(Vec::new());
+            self.focused()
+        }
+
+        fn focused(&self) -> Option<usize> {
+            let focused = self.ctx.memory(|memory| memory.focused())?;
+            self.rows.iter().position(|row| *row == focused)
+        }
+    }
+
+    /// A letter moves to the next row whose label starts with it, in either
+    /// case; the same letter again goes on to the next such row and wraps
+    /// at the end; a letter no row starts with leaves focus where it is.
+    #[test]
+    fn a_letter_moves_to_the_next_row_that_starts_with_it_and_wraps() {
+        let mut menu = LetterMenu::new(&[
+            "Reply",
+            "React",
+            "Copy text",
+            "Forward",
+            "Delete for me",
+            "Delete for everyone",
+        ]);
+        assert_eq!(menu.type_text(egui::Key::C, "c"), Some(2));
+        assert_eq!(menu.type_text(egui::Key::D, "D"), Some(4), "either case");
+        assert_eq!(menu.type_text(egui::Key::D, "d"), Some(5), "the next one");
+        assert_eq!(menu.type_text(egui::Key::D, "d"), Some(4), "wraps");
+        assert_eq!(menu.type_text(egui::Key::R, "r"), Some(0), "past the end");
+        assert_eq!(menu.type_text(egui::Key::R, "r"), Some(1));
+        assert_eq!(menu.type_text(egui::Key::R, "r"), Some(0));
+        assert_eq!(menu.type_text(egui::Key::Z, "z"), Some(0), "no Z row");
+        assert_eq!(menu.type_text(egui::Key::F, "f"), Some(3));
+        assert_eq!(menu.type_text(egui::Key::F, "f"), Some(3), "the only F row");
+    }
+
+    /// A row Tab and the arrows skip, a disabled one, letters skip too.
+    #[test]
+    fn letters_skip_the_rows_the_arrows_skip() {
+        let mut menu = LetterMenu::new(&["Reply", "~Retry", "React"]);
+        assert_eq!(menu.type_text(egui::Key::R, "r"), Some(2));
+        assert_eq!(menu.type_text(egui::Key::R, "r"), Some(0));
+    }
+
+    /// Letters follow what was typed, not the key: an Arabic layout's letters
+    /// find Arabic rows, and an alef with a hamza is found by the plain alef.
+    #[test]
+    fn arabic_letters_find_arabic_rows() {
+        // Reply, Forward (starting with an alef with a hamza below), Delete
+        // (starting with a plain alef), Copy.
+        let mut menu = LetterMenu::new(&[
+            "\u{631}\u{62f}",
+            "\u{625}\u{639}\u{627}\u{62f}\u{629} \u{62a}\u{648}\u{62c}\u{64a}\u{647}",
+            "\u{627}\u{62d}\u{630}\u{641}",
+            "\u{646}\u{633}\u{62e}",
+        ]);
+        // The keys an Arabic layout types these letters with.
+        assert_eq!(menu.type_text(egui::Key::K, "\u{646}"), Some(3));
+        assert_eq!(menu.type_text(egui::Key::H, "\u{627}"), Some(1), "hamza");
+        assert_eq!(menu.type_text(egui::Key::H, "\u{627}"), Some(2));
+        assert_eq!(menu.type_text(egui::Key::V, "\u{631}"), Some(0));
+    }
+
+    /// A letter only moves focus: no row is chosen, the menu stays open, and
+    /// neither the text nor the key that typed it is left for anyone else.
+    /// Space, which presses the focused row, and Ctrl with a letter are left.
+    #[test]
+    fn a_letter_chooses_nothing_and_goes_to_no_one_else() {
+        let mut menu = LetterMenu::new(&["Reply", "Copy text"]);
+        menu.frame(vec![
+            egui::Event::Key {
+                key: egui::Key::C,
+                physical_key: None,
+                pressed: true,
+                repeat: false,
+                modifiers: egui::Modifiers::NONE,
+            },
+            egui::Event::Text("c".into()),
+            egui::Event::Key {
+                key: egui::Key::C,
+                physical_key: None,
+                pressed: true,
+                repeat: false,
+                modifiers: egui::Modifiers::COMMAND,
+            },
+        ]);
+        assert_eq!(menu.focused(), Some(1));
+        assert!(menu.clicked.is_empty(), "{:?}", menu.clicked);
+        assert!(egui::Popup::is_any_open(&menu.ctx));
+        assert!(
+            matches!(
+                menu.left.as_slice(),
+                [egui::Event::Key { key: egui::Key::C, modifiers, .. }] if modifiers.command
+            ),
+            "{:?}",
+            menu.left
+        );
+        menu.frame(vec![egui::Event::Text(" ".into())]);
+        assert!(
+            matches!(menu.left.as_slice(), [egui::Event::Text(text)] if text == " "),
+            "{:?}",
+            menu.left
+        );
+        assert_eq!(menu.focused(), Some(1));
+    }
+
+    /// With focus outside the menu, what is typed is left for that control.
+    #[test]
+    fn letters_are_left_alone_without_a_focused_menu_row() {
+        let mut menu = LetterMenu::new(&["Reply", "Copy text"]);
+        menu.ctx
+            .memory_mut(|memory| memory.surrender_focus(menu.rows[0]));
+        menu.frame(vec![egui::Event::Text("c".into())]);
+        assert!(
+            matches!(menu.left.as_slice(), [egui::Event::Text(text)] if text == "c"),
+            "{:?}",
+            menu.left
+        );
+    }
 
     /// A name too wide for its room rests three seconds at its start, eases
     /// to its end at 40 points a second on average, rests there as long, and

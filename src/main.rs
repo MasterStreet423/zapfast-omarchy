@@ -40,8 +40,11 @@ struct Cli {
     #[arg(long, requires = "demo_tour", value_name = "PATH")]
     demo_tour_events: Option<std::path::PathBuf>,
 
-    /// Which tour to play: `launch` (41 seconds) or `whats-new` (what 0.16
-    /// added, 86 seconds).
+    /// Which tour to play: `launch` (41 seconds), `whats-new` (what 0.16
+    /// added, 86 seconds), `calls` (39 seconds; `ZAPFAST_DEMO_CALL_FEEDS`
+    /// puts video clips in its call tiles) or `whats-new-21` (what 0.21
+    /// added, 49 seconds). `ZAPFAST_DEMO_FONT=inter` draws any tour in the
+    /// bundled Inter.
     #[cfg(feature = "demo")]
     #[arg(
         long,
@@ -80,7 +83,7 @@ struct Cli {
     demo_titlebar: bool,
 
     /// Demo view: `chat`, `phone-menu`, `empty`, `settings`, `login`,
-    /// `pair`, `shortcuts`, `about`, `info`, `mention`, `light`, or a comma-separated
+    /// `pair`, `shortcuts`, `about`, `info`, `mention`, `voice-presence`, `light`, or a comma-separated
     /// mix such as `chat,light`.
     #[cfg(feature = "demo")]
     #[arg(long)]
@@ -447,10 +450,13 @@ fn run() -> eframe::Result<()> {
             // with. Demo runs keep their fixed screenshot size.
             // Decided as each window is made: it cannot become transparent
             // later.
-            let transparent =
-                zapfast::backdrop::transparent_window(lease.peek(|app: &app::App| {
-                    app.settings.theme == zapfast::settings::ThemeChoice::Messages
-                }));
+            let transparent = lease.peek(|app: &app::App| {
+                zapfast::backdrop::transparent_window(
+                    app.palette.vibrant(),
+                    app.palette.window.a() < 255,
+                )
+            });
+            zapfast::backdrop::set_window_transparent(transparent);
             // A clicked notification's answer gets the small floating window.
             let quick = lease.peek(|app: &app::App| app.quick_window_pending());
             let geometry = if demo_persistence.is_some() {
@@ -484,6 +490,12 @@ fn run() -> eframe::Result<()> {
                 Box::new(move |cc| {
                     let mut app = lease.take(&cc.egui_ctx);
                     app.attach(&cc.egui_ctx);
+                    #[cfg(target_os = "linux")]
+                    app.attach_clipboard(
+                        raw_window_handle::HasDisplayHandle::display_handle(cc)
+                            .ok()
+                            .map(|display| display.as_raw()),
+                    );
                     // Registered here rather than in `attach`, which headless
                     // tests call too: they must never start a browser.
                     #[cfg(all(unix, not(target_os = "macos")))]
@@ -757,7 +769,7 @@ impl eframe::App for Shell {
         if zapfast::backdrop::active() {
             [0.0; 4]
         } else {
-            self.app.palette.window.to_normalized_gamma_f32()
+            zapfast::backdrop::clear_color(self.app.palette.window).to_normalized_gamma_f32()
         }
     }
 
@@ -858,6 +870,8 @@ impl Shell {
         } else {
             app.frame_ui(ui);
         }
+        #[cfg(target_os = "macos")]
+        app.match_window_transparency(ui.ctx(), self.transparent);
         let startups: Vec<_> = app
             .accounts
             .iter_mut()

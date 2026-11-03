@@ -1,5 +1,6 @@
 //! ZapFast internals exposed for diagnostics and tests.
 
+pub mod a11y;
 pub mod account;
 pub mod animation;
 pub mod announcer;
@@ -13,6 +14,7 @@ pub mod autostart;
 pub mod backdrop;
 pub mod backend;
 pub mod bidi;
+pub mod blocking;
 pub mod call_audio;
 pub mod call_diag;
 pub mod call_tones;
@@ -31,6 +33,7 @@ pub mod i18n;
 pub mod i18n_extra;
 pub mod image_cache;
 pub mod image_preview;
+pub mod lottie;
 #[cfg(target_os = "macos")]
 pub mod macos;
 pub mod markup;
