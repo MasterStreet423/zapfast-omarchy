@@ -1025,10 +1025,14 @@ fn subtitle(app: &App, chat: &Chat) -> (String, Color32) {
                             .replace("{names}", &rest.join(", "))
                             .replace("{last}", last),
                     ),
-                    (_, [one]) => Some(format!("{one} is typing…")),
-                    (_, [rest @ .., last]) => {
-                        Some(format!("{} and {last} are typing…", rest.join(", ")))
-                    }
+                    (_, [one]) => Some(
+                        crate::i18n::gettext(app.locale, "{one} is typing…").replace("{one}", one),
+                    ),
+                    (_, [rest @ .., last]) => Some(
+                        crate::i18n::gettext(app.locale, "{names} and {last} are typing…")
+                            .replace("{names}", &rest.join(", "))
+                            .replace("{last}", last),
+                    ),
                 }
             };
             [ChatActivity::Typing, ChatActivity::RecordingAudio]

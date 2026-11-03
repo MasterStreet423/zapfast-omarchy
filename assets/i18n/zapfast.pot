@@ -9,7 +9,7 @@ msgstr ""
 "Project-Id-Version: ZapFast\n"
 "Report-Msgid-Bugs-To: https://github.com/crmne/zapfast/issues/new?"
 "template=translation.yml\n"
-"POT-Creation-Date: 2026-11-03 15:10-0300\n"
+"POT-Creation-Date: 2026-11-03 15:11-0300\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -99,12 +99,12 @@ msgstr ""
 msgid "Missed"
 msgstr ""
 
-#: src/model.rs:1738 src/ui/conversation.rs:2428 src/ui/image_preview.rs:1061
+#: src/model.rs:1738 src/ui/conversation.rs:2432 src/ui/image_preview.rs:1061
 #: src/ui/info.rs:1434 src/a11y.rs:199
 msgid "Photo"
 msgstr ""
 
-#: src/model.rs:1739 src/ui/conversation.rs:10586 src/ui/image_preview.rs:1059
+#: src/model.rs:1739 src/ui/conversation.rs:10590 src/ui/image_preview.rs:1059
 #: src/ui/info.rs:1432 src/a11y.rs:211
 msgid "Video"
 msgstr ""
@@ -121,7 +121,7 @@ msgstr ""
 msgid "Voice message"
 msgstr ""
 
-#: src/model.rs:1743 src/ui/conversation.rs:11583 src/a11y.rs:223
+#: src/model.rs:1743 src/ui/conversation.rs:11587 src/a11y.rs:223
 msgid "Audio"
 msgstr ""
 
@@ -137,16 +137,16 @@ msgstr ""
 msgid "Sticker pack"
 msgstr ""
 
-#: src/model.rs:1747 src/ui/conversation.rs:8394 src/a11y.rs:239
+#: src/model.rs:1747 src/ui/conversation.rs:8398 src/a11y.rs:239
 msgid "Location"
 msgstr ""
 
-#: src/model.rs:1748 src/ui/conversation.rs:8441 src/ui/conversation.rs:8667
+#: src/model.rs:1748 src/ui/conversation.rs:8445 src/ui/conversation.rs:8671
 #: src/a11y.rs:243 src/a11y.rs:275
 msgid "Live location"
 msgstr ""
 
-#: src/model.rs:1749 src/ui/conversation.rs:8439 src/a11y.rs:262
+#: src/model.rs:1749 src/ui/conversation.rs:8443 src/a11y.rs:262
 msgid "Live location ended"
 msgstr ""
 
@@ -158,7 +158,7 @@ msgstr ""
 msgid "Poll"
 msgstr ""
 
-#: src/model.rs:1752 src/ui/conversation.rs:7920 src/ui/conversation.rs:8644
+#: src/model.rs:1752 src/ui/conversation.rs:7924 src/ui/conversation.rs:8648
 #: src/a11y.rs:267 src/a11y.rs:695
 msgid "This message was deleted"
 msgstr ""
@@ -200,12 +200,12 @@ msgid "Missed video call"
 msgstr ""
 
 #: src/model.rs:1762 src/ui/conversation.rs:690 src/ui/conversation.rs:857
-#: src/ui/conversation.rs:5355 src/ui/calls.rs:104 src/ui/calls.rs:389
+#: src/ui/conversation.rs:5359 src/ui/calls.rs:104 src/ui/calls.rs:389
 msgid "Voice call"
 msgstr ""
 
 #: src/model.rs:1763 src/ui/conversation.rs:691 src/ui/conversation.rs:885
-#: src/ui/conversation.rs:5372 src/ui/calls.rs:105 src/ui/calls.rs:387
+#: src/ui/conversation.rs:5376 src/ui/calls.rs:105 src/ui/calls.rs:387
 msgid "Video call"
 msgstr ""
 
@@ -534,11 +534,11 @@ msgstr ""
 msgid "{name} is recording audio…"
 msgstr ""
 
-#: src/ui/chats.rs:1641 src/ui/conversation.rs:1040
+#: src/ui/chats.rs:1641 src/ui/conversation.rs:1044
 msgid "recording audio…"
 msgstr ""
 
-#: src/ui/chats.rs:1643 src/ui/conversation.rs:1042
+#: src/ui/chats.rs:1643 src/ui/conversation.rs:1046
 msgid "typing…"
 msgstr ""
 
@@ -550,8 +550,8 @@ msgstr ""
 msgid "Remove from favorites"
 msgstr ""
 
-#: src/ui/chats.rs:1747 src/ui/chats.rs:2144 src/ui/conversation.rs:7111
-#: src/ui/conversation.rs:7636 src/ui/dialogs.rs:1426 src/ui/picker.rs:1778
+#: src/ui/chats.rs:1747 src/ui/chats.rs:2144 src/ui/conversation.rs:7115
+#: src/ui/conversation.rs:7640 src/ui/dialogs.rs:1426 src/ui/picker.rs:1778
 msgid "Add to favorites"
 msgstr ""
 
@@ -591,7 +591,7 @@ msgstr ""
 msgid "Delete chat"
 msgstr ""
 
-#: src/ui/chats.rs:1772 src/ui/chats.rs:2339 src/ui/conversation.rs:10954
+#: src/ui/chats.rs:1772 src/ui/chats.rs:2339 src/ui/conversation.rs:10958
 #: src/ui/call.rs:529 src/ui/info.rs:864
 msgid "Mute"
 msgstr ""
@@ -608,7 +608,7 @@ msgstr ""
 msgid "Archive"
 msgstr ""
 
-#: src/ui/chats.rs:2180 src/ui/conversation.rs:10952 src/ui/call.rs:522
+#: src/ui/chats.rs:2180 src/ui/conversation.rs:10956 src/ui/call.rs:522
 #: src/ui/info.rs:858
 msgid "Unmute"
 msgstr ""
@@ -621,7 +621,7 @@ msgstr ""
 msgid "Lock chat"
 msgstr ""
 
-#: src/ui/chats.rs:2217 src/ui/conversation.rs:687 src/ui/conversation.rs:9865
+#: src/ui/chats.rs:2217 src/ui/conversation.rs:687 src/ui/conversation.rs:9869
 #: src/ui/info.rs:850
 msgid "Copy number"
 msgstr ""
@@ -721,577 +721,587 @@ msgstr ""
 msgid "{names} and {last} are recording audio…"
 msgstr ""
 
-#: src/ui/conversation.rs:1050 src/app.rs:3072
+#: src/ui/conversation.rs:1029
+#, rust-format
+msgid "{one} is typing…"
+msgstr ""
+
+#: src/ui/conversation.rs:1032
+#, rust-format
+msgid "{names} and {last} are typing…"
+msgstr ""
+
+#: src/ui/conversation.rs:1054 src/app.rs:3072
 msgid "Group"
 msgstr ""
 
-#: src/ui/conversation.rs:1060 src/ui/info.rs:547
+#: src/ui/conversation.rs:1064 src/ui/info.rs:547
 msgid "online"
 msgstr ""
 
-#: src/ui/conversation.rs:1554
+#: src/ui/conversation.rs:1558
 msgid "You blocked this contact"
 msgstr ""
 
-#: src/ui/conversation.rs:1566
+#: src/ui/conversation.rs:1570
 msgid "You left this channel"
 msgstr ""
 
-#: src/ui/conversation.rs:1570
+#: src/ui/conversation.rs:1574
 msgid "Channels are read-only in ZapFast"
 msgstr ""
 
-#: src/ui/conversation.rs:1593
+#: src/ui/conversation.rs:1597
 msgid "You left this group"
 msgstr ""
 
-#: src/ui/conversation.rs:1601
+#: src/ui/conversation.rs:1605
 msgid "Only"
 msgstr ""
 
-#: src/ui/conversation.rs:1602
+#: src/ui/conversation.rs:1606
 msgid "admins"
 msgstr ""
 
-#: src/ui/conversation.rs:1605
+#: src/ui/conversation.rs:1609
 msgid "can send messages"
 msgstr ""
 
-#: src/ui/conversation.rs:1644
+#: src/ui/conversation.rs:1648
 msgid "Original group message unavailable"
 msgstr ""
 
-#: src/ui/conversation.rs:1652 src/ui/conversation.rs:2554
+#: src/ui/conversation.rs:1656 src/ui/conversation.rs:2558
 msgid "Cancel reply (Esc)"
 msgstr ""
 
-#: src/ui/conversation.rs:1772
+#: src/ui/conversation.rs:1776
 msgid "Attach"
 msgstr ""
 
-#: src/ui/conversation.rs:1788
+#: src/ui/conversation.rs:1792
 msgid "Emoji, GIFs, and stickers"
 msgstr ""
 
-#: src/ui/conversation.rs:1871 src/ui/quick_reply.rs:121
+#: src/ui/conversation.rs:1875 src/ui/quick_reply.rs:121
 msgid "Type a message"
 msgstr ""
 
-#: src/ui/conversation.rs:1874
+#: src/ui/conversation.rs:1878
 msgid "Add a caption"
 msgstr ""
 
-#: src/ui/conversation.rs:1975
+#: src/ui/conversation.rs:1979
 msgid "Bold"
 msgstr ""
 
-#: src/ui/conversation.rs:1976
+#: src/ui/conversation.rs:1980
 msgid "Italic"
 msgstr ""
 
-#: src/ui/conversation.rs:1977
+#: src/ui/conversation.rs:1981
 msgid "Strikethrough"
 msgstr ""
 
-#: src/ui/conversation.rs:1978
+#: src/ui/conversation.rs:1982
 msgid "Monospace"
 msgstr ""
 
-#: src/ui/conversation.rs:2098
+#: src/ui/conversation.rs:2102
 msgid "Record a voice message"
 msgstr ""
 
-#: src/ui/conversation.rs:2111 src/ui/conversation.rs:11735
+#: src/ui/conversation.rs:2115 src/ui/conversation.rs:11739
 #: src/ui/dialogs.rs:1418 src/ui/locations.rs:87
 msgid "Send"
 msgstr ""
 
-#: src/ui/conversation.rs:2152
+#: src/ui/conversation.rs:2156
 msgid ""
 "Enter sends · Shift+Enter for a new line · *bold* _italic_ ~strike~ · Ctrl+V "
 "pastes a picture"
 msgstr ""
 
-#: src/ui/conversation.rs:2154
+#: src/ui/conversation.rs:2158
 msgid "Ctrl+Enter sends · *bold* _italic_ ~strike~ · Ctrl+V pastes a picture"
 msgstr ""
 
-#: src/ui/conversation.rs:2165
+#: src/ui/conversation.rs:2169
 msgid "Hide shortcut hints (bring them back from Keyboard shortcuts)"
 msgstr ""
 
-#: src/ui/conversation.rs:2180
+#: src/ui/conversation.rs:2184
 #, rust-format
 msgid "All shortcuts ({})"
 msgstr ""
 
-#: src/ui/conversation.rs:2313
+#: src/ui/conversation.rs:2317
 msgid "Send files"
 msgstr ""
 
-#: src/ui/conversation.rs:2319
+#: src/ui/conversation.rs:2323
 msgid "Send as document"
 msgstr ""
 
-#: src/ui/conversation.rs:2323 src/ui/locations.rs:16
+#: src/ui/conversation.rs:2327 src/ui/locations.rs:16
 msgid "Send location"
 msgstr ""
 
-#: src/ui/conversation.rs:2328 src/ui/polls.rs:16
+#: src/ui/conversation.rs:2332 src/ui/polls.rs:16
 msgid "Create poll"
 msgstr ""
 
-#: src/ui/conversation.rs:2390
+#: src/ui/conversation.rs:2394
 #, rust-format
 msgid "Voice message ({duration}) not sent"
 msgstr ""
 
-#: src/ui/conversation.rs:2392
+#: src/ui/conversation.rs:2396
 msgid "Discard voice message"
 msgstr ""
 
-#: src/ui/conversation.rs:2424
+#: src/ui/conversation.rs:2428
 #, rust-format
 msgid "Cancel sending {name}"
 msgstr ""
 
-#: src/ui/conversation.rs:2432
+#: src/ui/conversation.rs:2436
 #, rust-format
 msgid "Sending {name}"
 msgstr ""
 
-#: src/ui/conversation.rs:2438
+#: src/ui/conversation.rs:2442
 #, rust-format
 msgid "{time} left"
 msgstr ""
 
-#: src/ui/conversation.rs:2499
+#: src/ui/conversation.rs:2503
 msgid "Editing message"
 msgstr ""
 
-#: src/ui/conversation.rs:2510
+#: src/ui/conversation.rs:2514
 msgid "Stop editing (Esc)"
 msgstr ""
 
-#: src/ui/conversation.rs:2525 src/ui/conversation.rs:3847
-#: src/ui/conversation.rs:3984 src/ui/conversation.rs:4041
-#: src/ui/conversation.rs:4898 src/ui/conversation.rs:6964 src/ui/call.rs:1017
+#: src/ui/conversation.rs:2529 src/ui/conversation.rs:3851
+#: src/ui/conversation.rs:3988 src/ui/conversation.rs:4045
+#: src/ui/conversation.rs:4902 src/ui/conversation.rs:6968 src/ui/call.rs:1017
 #: src/app/calls.rs:135 src/app.rs:3045 src/app.rs:3060 src/app.rs:3105
 #: src/app.rs:3124 src/app.rs:3267 src/app.rs:3354 src/ui/accounts.rs:36
 #: src/ui/quick_reply.rs:166
 msgid "You"
 msgstr ""
 
-#: src/ui/conversation.rs:2540
+#: src/ui/conversation.rs:2544
 #, rust-format
 msgid "Replying to {who}"
 msgstr ""
 
-#: src/ui/conversation.rs:2580
+#: src/ui/conversation.rs:2584
 msgid "Loading preview…"
 msgstr ""
 
-#: src/ui/conversation.rs:2591
+#: src/ui/conversation.rs:2595
 msgid "Remove link preview"
 msgstr ""
 
-#: src/ui/conversation.rs:2908
+#: src/ui/conversation.rs:2912
 msgid "You pinned a message"
 msgstr ""
 
-#: src/ui/conversation.rs:2911
+#: src/ui/conversation.rs:2915
 msgid "A message was pinned"
 msgstr ""
 
-#: src/ui/conversation.rs:2913
+#: src/ui/conversation.rs:2917
 #, rust-format
 msgid "{} pinned a message"
 msgstr ""
 
-#: src/ui/conversation.rs:3659 src/notify.rs:19
+#: src/ui/conversation.rs:3663 src/notify.rs:19
 #, rust-format
 msgid "{} unread message"
 msgid_plural "{} unread messages"
 msgstr[0] ""
 msgstr[1] ""
 
-#: src/ui/conversation.rs:3863
+#: src/ui/conversation.rs:3867
 #, rust-format
 msgid "Select message from {sender}, {time}: {summary}"
 msgstr ""
 
-#: src/ui/conversation.rs:4454
+#: src/ui/conversation.rs:4458
 msgid "Newest message"
 msgstr ""
 
-#: src/ui/conversation.rs:4513
+#: src/ui/conversation.rs:4517
 msgid "Loading older messages from your phone…"
 msgstr ""
 
-#: src/ui/conversation.rs:4527
+#: src/ui/conversation.rs:4531
 msgid "Loading messages from your phone…"
 msgstr ""
 
-#: src/ui/conversation.rs:4534
+#: src/ui/conversation.rs:4538
 msgid "No messages here yet"
 msgstr ""
 
-#: src/ui/conversation.rs:4799 src/ui/image_preview.rs:399
+#: src/ui/conversation.rs:4803 src/ui/image_preview.rs:399
 msgid "React"
 msgstr ""
 
-#: src/ui/conversation.rs:4826 src/ui/conversation.rs:7098
-#: src/ui/conversation.rs:7427 src/ui/image_preview.rs:386
+#: src/ui/conversation.rs:4830 src/ui/conversation.rs:7102
+#: src/ui/conversation.rs:7431 src/ui/image_preview.rs:386
 #: src/app/quick_reply.rs:123
 msgid "Reply"
 msgstr ""
 
-#: src/ui/conversation.rs:4850 src/ui/conversation.rs:7104
-#: src/ui/conversation.rs:7483 src/ui/dialogs.rs:791 src/ui/dialogs.rs:810
+#: src/ui/conversation.rs:4854 src/ui/conversation.rs:7108
+#: src/ui/conversation.rs:7487 src/ui/dialogs.rs:791 src/ui/dialogs.rs:810
 #: src/ui/image_preview.rs:419
 msgid "Forward"
 msgstr ""
 
-#: src/ui/conversation.rs:5322
+#: src/ui/conversation.rs:5326
 msgid "Group calls happen on the phone"
 msgstr ""
 
-#: src/ui/conversation.rs:5452
+#: src/ui/conversation.rs:5456
 #, rust-format
 msgid "Playback speed {label}"
 msgstr ""
 
-#: src/ui/conversation.rs:6451
+#: src/ui/conversation.rs:6455
 msgid "Forwarded"
 msgstr ""
 
-#: src/ui/conversation.rs:6532 src/ui/conversation.rs:6797 src/a11y.rs:133
+#: src/ui/conversation.rs:6536 src/ui/conversation.rs:6801 src/a11y.rs:133
 msgid "edited"
 msgstr ""
 
-#: src/ui/conversation.rs:6756 src/ui/conversation.rs:7119
-#: src/ui/conversation.rs:7720 src/ui/message_info.rs:17
+#: src/ui/conversation.rs:6760 src/ui/conversation.rs:7123
+#: src/ui/conversation.rs:7724 src/ui/message_info.rs:17
 msgid "Message info"
 msgstr ""
 
-#: src/ui/conversation.rs:7034
+#: src/ui/conversation.rs:7038
 msgid "Remove reaction"
 msgstr ""
 
-#: src/ui/conversation.rs:7099 src/ui/conversation.rs:7444
+#: src/ui/conversation.rs:7103 src/ui/conversation.rs:7448
 msgid "Reply privately"
 msgstr ""
 
-#: src/ui/conversation.rs:7100 src/ui/conversation.rs:7456
+#: src/ui/conversation.rs:7104 src/ui/conversation.rs:7460
 msgid "Star"
 msgstr ""
 
-#: src/ui/conversation.rs:7101 src/ui/conversation.rs:7454
+#: src/ui/conversation.rs:7105 src/ui/conversation.rs:7458
 msgid "Unstar"
 msgstr ""
 
-#: src/ui/conversation.rs:7102 src/ui/conversation.rs:7470
+#: src/ui/conversation.rs:7106 src/ui/conversation.rs:7474
 msgid "Pin message"
 msgstr ""
 
-#: src/ui/conversation.rs:7103 src/ui/conversation.rs:7468
+#: src/ui/conversation.rs:7107 src/ui/conversation.rs:7472
 msgid "Unpin message"
 msgstr ""
 
-#: src/ui/conversation.rs:7105 src/ui/conversation.rs:7495
+#: src/ui/conversation.rs:7109 src/ui/conversation.rs:7499
 msgid "Open in the viewer"
 msgstr ""
 
-#: src/ui/conversation.rs:7106 src/ui/conversation.rs:7509
+#: src/ui/conversation.rs:7110 src/ui/conversation.rs:7513
 msgid "Select"
 msgstr ""
 
-#: src/ui/conversation.rs:7107 src/ui/conversation.rs:7575
+#: src/ui/conversation.rs:7111 src/ui/conversation.rs:7579
 msgid "Copy text"
 msgstr ""
 
-#: src/ui/conversation.rs:7108 src/ui/conversation.rs:7591
+#: src/ui/conversation.rs:7112 src/ui/conversation.rs:7595
 msgid "Edit"
 msgstr ""
 
-#: src/ui/conversation.rs:7109 src/ui/conversation.rs:7299
-#: src/ui/conversation.rs:7607 src/ui/conversation.rs:7950
-#: src/ui/conversation.rs:11829
+#: src/ui/conversation.rs:7113 src/ui/conversation.rs:7303
+#: src/ui/conversation.rs:7611 src/ui/conversation.rs:7954
+#: src/ui/conversation.rs:11833
 msgid "Delete for everyone"
 msgstr ""
 
-#: src/ui/conversation.rs:7110 src/ui/conversation.rs:7304
-#: src/ui/conversation.rs:7616 src/ui/conversation.rs:11830
+#: src/ui/conversation.rs:7114 src/ui/conversation.rs:7308
+#: src/ui/conversation.rs:7620 src/ui/conversation.rs:11834
 msgid "Delete for me"
 msgstr ""
 
-#: src/ui/conversation.rs:7112 src/ui/conversation.rs:7645
+#: src/ui/conversation.rs:7116 src/ui/conversation.rs:7649
 msgid "Open in system player"
 msgstr ""
 
-#: src/ui/conversation.rs:7113 src/ui/conversation.rs:7647
+#: src/ui/conversation.rs:7117 src/ui/conversation.rs:7651
 #: src/ui/picker.rs:1671
 msgid "Open file"
 msgstr ""
 
-#: src/ui/conversation.rs:7114 src/ui/conversation.rs:7657
+#: src/ui/conversation.rs:7118 src/ui/conversation.rs:7661
 #: src/ui/image_preview.rs:302 src/ui/image_preview.rs:628
 msgid "Copy image"
 msgstr ""
 
-#: src/ui/conversation.rs:7115 src/ui/conversation.rs:7666
+#: src/ui/conversation.rs:7119 src/ui/conversation.rs:7670
 #: src/ui/image_preview.rs:444 src/ui/image_preview.rs:629
 msgid "Save as…"
 msgstr ""
 
-#: src/ui/conversation.rs:7116 src/ui/conversation.rs:7678
+#: src/ui/conversation.rs:7120 src/ui/conversation.rs:7682
 msgid "Show in folder"
 msgstr ""
 
-#: src/ui/conversation.rs:7117 src/ui/conversation.rs:7691
-#: src/ui/conversation.rs:9072
+#: src/ui/conversation.rs:7121 src/ui/conversation.rs:7695
+#: src/ui/conversation.rs:9076
 msgid "Downloading…"
 msgstr ""
 
-#: src/ui/conversation.rs:7118 src/ui/conversation.rs:7693
-#: src/ui/conversation.rs:11405 src/ui/image_preview.rs:460
+#: src/ui/conversation.rs:7122 src/ui/conversation.rs:7697
+#: src/ui/conversation.rs:11409 src/ui/image_preview.rs:460
 #: src/ui/image_preview.rs:815 src/ui/image_preview.rs:823
 #: src/ui/image_preview.rs:905
 msgid "Download"
 msgstr ""
 
-#: src/ui/conversation.rs:7120 src/ui/conversation.rs:7732
+#: src/ui/conversation.rs:7124 src/ui/conversation.rs:7736
 msgid "Reload earlier messages"
 msgstr ""
 
-#: src/ui/conversation.rs:7121 src/ui/conversation.rs:7745
+#: src/ui/conversation.rs:7125 src/ui/conversation.rs:7749
 msgid "Copy message ID"
 msgstr ""
 
-#: src/ui/conversation.rs:7364
+#: src/ui/conversation.rs:7368
 msgid "Remove your reaction"
 msgstr ""
 
-#: src/ui/conversation.rs:7381
+#: src/ui/conversation.rs:7385
 msgid "React with any emoji"
 msgstr ""
 
-#: src/ui/conversation.rs:7540 src/ui/conversation.rs:7946
+#: src/ui/conversation.rs:7544 src/ui/conversation.rs:7950
 #, rust-format
 msgid "{option}, unavailable: {reason}"
 msgstr ""
 
-#: src/ui/conversation.rs:7788
+#: src/ui/conversation.rs:7792
 #, rust-format
 msgid "Card {number}: {button}"
 msgstr ""
 
-#: src/ui/conversation.rs:7830
+#: src/ui/conversation.rs:7834
 msgid "Go to replied message"
 msgstr ""
 
-#: src/ui/conversation.rs:7841
+#: src/ui/conversation.rs:7845
 #, rust-format
 msgid "Info about {name}"
 msgstr ""
 
-#: src/ui/conversation.rs:7919
+#: src/ui/conversation.rs:7923
 msgid "Only messages you sent"
 msgstr ""
 
-#: src/ui/conversation.rs:7921
+#: src/ui/conversation.rs:7925
 msgid "The time limit has passed"
 msgstr ""
 
-#: src/ui/conversation.rs:8246
+#: src/ui/conversation.rs:8250
 msgid "Interactive message"
 msgstr ""
 
-#: src/ui/conversation.rs:8451
+#: src/ui/conversation.rs:8455
 #, rust-format
 msgid "Updated {time}"
 msgstr ""
 
-#: src/ui/conversation.rs:8466 src/ui/conversation.rs:8675
+#: src/ui/conversation.rs:8470 src/ui/conversation.rs:8679
 msgid "Open WhatsApp on your phone to follow it."
 msgstr ""
 
-#: src/ui/conversation.rs:8510
+#: src/ui/conversation.rs:8514
 msgid "Chat"
 msgstr ""
 
-#: src/ui/conversation.rs:8525
+#: src/ui/conversation.rs:8529
 msgid "Add"
 msgstr ""
 
-#: src/ui/conversation.rs:8573
+#: src/ui/conversation.rs:8577
 #, rust-format
 msgid "{} sticker"
 msgid_plural "{} stickers"
 msgstr[0] ""
 msgstr[1] ""
 
-#: src/ui/conversation.rs:8586
+#: src/ui/conversation.rs:8590
 msgid "View stickers"
 msgstr ""
 
-#: src/ui/conversation.rs:8693
+#: src/ui/conversation.rs:8697
 msgid "View once photo. For your privacy, it opens only on your phone."
 msgstr ""
 
-#: src/ui/conversation.rs:8697
+#: src/ui/conversation.rs:8701
 msgid "View once video. For your privacy, it opens only on your phone."
 msgstr ""
 
-#: src/ui/conversation.rs:8701
+#: src/ui/conversation.rs:8705
 msgid "View once voice message. For your privacy, it opens only on your phone."
 msgstr ""
 
-#: src/ui/conversation.rs:8705
+#: src/ui/conversation.rs:8709
 msgid "View once audio. For your privacy, it opens only on your phone."
 msgstr ""
 
-#: src/ui/conversation.rs:8709
+#: src/ui/conversation.rs:8713
 msgid "View once message. For your privacy, it opens only on your phone."
 msgstr ""
 
-#: src/ui/conversation.rs:8711
+#: src/ui/conversation.rs:8715
 msgid "This message can only be seen on your phone."
 msgstr ""
 
-#: src/ui/conversation.rs:8735
+#: src/ui/conversation.rs:8739
 #, rust-format
 msgid "Unsupported: {what}"
 msgstr ""
 
-#: src/ui/conversation.rs:8929
+#: src/ui/conversation.rs:8933
 msgid "Previous card"
 msgstr ""
 
-#: src/ui/conversation.rs:8931
+#: src/ui/conversation.rs:8935
 msgid "Next card"
 msgstr ""
 
-#: src/ui/conversation.rs:9054
+#: src/ui/conversation.rs:9058
 msgid "Save all…"
 msgstr ""
 
-#: src/ui/conversation.rs:9074
+#: src/ui/conversation.rs:9078
 msgid "Download all"
 msgstr ""
 
-#: src/ui/conversation.rs:9213 src/ui/conversation.rs:9368
+#: src/ui/conversation.rs:9217 src/ui/conversation.rs:9372
 #, rust-format
 msgid "{error} · Click to retry"
 msgstr ""
 
-#: src/ui/conversation.rs:9327 src/ui/conversation.rs:10365
+#: src/ui/conversation.rs:9331 src/ui/conversation.rs:10369
 msgid "Could not display this picture. Click to open it."
 msgstr ""
 
-#: src/ui/conversation.rs:9345 src/ui/conversation.rs:10419
+#: src/ui/conversation.rs:9349 src/ui/conversation.rs:10423
 msgid "Download failed. Click to retry."
 msgstr ""
 
-#: src/ui/conversation.rs:9491 src/ui/dialogs.rs:225
+#: src/ui/conversation.rs:9495 src/ui/dialogs.rs:225
 msgid "Sending reply…"
 msgstr ""
 
-#: src/ui/conversation.rs:9492 src/ui/dialogs.rs:227
+#: src/ui/conversation.rs:9496 src/ui/dialogs.rs:227
 msgid "Connect to WhatsApp to reply"
 msgstr ""
 
-#: src/ui/conversation.rs:9493
+#: src/ui/conversation.rs:9497
 msgid "This conversation is read-only"
 msgstr ""
 
-#: src/ui/conversation.rs:9494
+#: src/ui/conversation.rs:9498
 msgid "Reply options are for the recipient"
 msgstr ""
 
-#: src/ui/conversation.rs:9495
+#: src/ui/conversation.rs:9499
 msgid "Open this option in WhatsApp Web or on your phone"
 msgstr ""
 
-#: src/ui/conversation.rs:9674
+#: src/ui/conversation.rs:9678
 #, rust-format
 msgid "Send reply: {label}"
 msgstr ""
 
-#: src/ui/conversation.rs:9678 src/ui/login.rs:307
+#: src/ui/conversation.rs:9682 src/ui/login.rs:307
 msgid "Copy code"
 msgstr ""
 
-#: src/ui/conversation.rs:9693
+#: src/ui/conversation.rs:9697
 msgid "More content in WhatsApp Web or on your phone"
 msgstr ""
 
-#: src/ui/conversation.rs:9864 src/ui/dialogs.rs:2057 src/ui/info.rs:816
+#: src/ui/conversation.rs:9868 src/ui/dialogs.rs:2057 src/ui/info.rs:816
 msgid "Message"
 msgstr ""
 
-#: src/ui/conversation.rs:10120 src/ui/locations.rs:52
+#: src/ui/conversation.rs:10124 src/ui/locations.rs:52
 msgid "Open in a map"
 msgstr ""
 
-#: src/ui/conversation.rs:10892 src/ui/conversation.rs:11421
+#: src/ui/conversation.rs:10896 src/ui/conversation.rs:11425
 msgid "Pause"
 msgstr ""
 
-#: src/ui/conversation.rs:10894 src/ui/conversation.rs:11423
+#: src/ui/conversation.rs:10898 src/ui/conversation.rs:11427
 #: src/ui/settings.rs:2011
 msgid "Play"
 msgstr ""
 
-#: src/ui/conversation.rs:10923
+#: src/ui/conversation.rs:10927
 msgid "Back to the message (Esc)"
 msgstr ""
 
-#: src/ui/conversation.rs:10925
+#: src/ui/conversation.rs:10929
 msgid "Fill the window"
 msgstr ""
 
-#: src/ui/conversation.rs:11265 src/ui/conversation.rs:11540
+#: src/ui/conversation.rs:11269 src/ui/conversation.rs:11544
 #, rust-format
 msgid "{error}. Click to retry."
 msgstr ""
 
-#: src/ui/conversation.rs:11621
+#: src/ui/conversation.rs:11625
 msgid "Preparing playback speed"
 msgstr ""
 
-#: src/ui/conversation.rs:11625
+#: src/ui/conversation.rs:11629
 msgid "Playback speed. Right-click for every speed."
 msgstr ""
 
-#: src/ui/conversation.rs:11688
+#: src/ui/conversation.rs:11692
 msgid "Discard"
 msgstr ""
 
-#: src/ui/conversation.rs:11776
+#: src/ui/conversation.rs:11780
 msgid "Cancel selection"
 msgstr ""
 
-#: src/ui/conversation.rs:11785 src/ui/new_group.rs:146
+#: src/ui/conversation.rs:11789 src/ui/new_group.rs:146
 #, rust-format
 msgid "{count} selected"
 msgid_plural "{count} selected"
 msgstr[0] ""
 msgstr[1] ""
 
-#: src/ui/conversation.rs:11799
+#: src/ui/conversation.rs:11803
 msgid "Forward…"
 msgstr ""
 
-#: src/ui/conversation.rs:11815
+#: src/ui/conversation.rs:11819
 msgid "Delete…"
 msgstr ""
 
-#: src/ui/conversation.rs:13701
+#: src/ui/conversation.rs:13705
 msgid "View once"
 msgstr ""
 
-#: src/ui/conversation.rs:13730
+#: src/ui/conversation.rs:13734
 msgid "The recipient can open this photo only once, on their phone."
 msgstr ""
 
@@ -1403,6 +1413,10 @@ msgstr ""
 
 #: src/ui/dialogs.rs:647 src/i18n_extra.rs:43
 msgid "Search chats"
+msgstr ""
+
+#: src/ui/dialogs.rs:760
+msgid "No writable chats found"
 msgstr ""
 
 #: src/ui/dialogs.rs:781 src/ui/info.rs:307 src/ui/info.rs:1266

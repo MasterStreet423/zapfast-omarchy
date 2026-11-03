@@ -757,7 +757,7 @@ fn forward(app: &mut App, ui: &mut egui::Ui, messages: &[String]) {
             if chats.is_empty() {
                 theme::text(
                     ui,
-                    "No writable chats found",
+                    crate::i18n::gettext(app.locale, "No writable chats found"),
                     theme::regular(13.5),
                     palette.secondary,
                 );
