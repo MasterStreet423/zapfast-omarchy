@@ -56,6 +56,8 @@ scripts/sync-upstream.sh           # fetch + merge + catálogos
 scripts/sync-upstream.sh --seguir  # tras resolver a mano un conflicto de código
 ```
 
+El README es el del fork: si choca, el script se queda con el nuestro.
+
 `zapfast.pot` y `es.po` se generan desde el código, así que sus conflictos no
 se resuelven a mano: el script regenera el `.pot` y, en `es.po`, deja nuestra
 traducción y suma las nuevas de upstream. Al final dice cuántos textos

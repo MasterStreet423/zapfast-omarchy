@@ -1,154 +1,77 @@
 <p align="center">
-  <img src="docs/assets/images/logo.svg" alt="ZapFast logo" width="88" height="88">
+  <img src="docs/assets/images/logo.svg" alt="Logo de ZapFast" width="88" height="88">
 </p>
 
-<h1 align="center">ZapFast</h1>
+<h1 align="center">zapfast-omarchy</h1>
 
-<p align="center"><strong>WhatsApp, native and fast.</strong><br>A lightweight WhatsApp app for Linux, macOS, and Windows.</p>
+<p align="center"><strong>ZapFast en español y hecho para Omarchy.</strong><br>
+El cliente de WhatsApp nativo de <a href="https://github.com/crmne/zapfast">crmne/zapfast</a>, al día con el oficial, más lo que le falta en un escritorio Omarchy.</p>
 
 <p align="center">
-  <a href="https://zapfast.rocks/download/"><strong>Download</strong></a> ·
-  <a href="https://zapfast.rocks/getting-started/">Getting started</a> ·
-  <a href="https://zapfast.rocks/using-zapfast/">User guide</a> ·
-  <a href="CONTRIBUTING.md">Contribute</a>
+  <a href="https://github.com/MasterStreet423/zapfast-omarchy/releases/latest"><strong>Descargar</strong></a> ·
+  <a href="FORK.md">Cómo está hecho</a> ·
+  <a href="https://github.com/crmne/zapfast">ZapFast oficial</a>
 </p>
 
-<p align="center">
-  <a href="Cargo.toml"><img src="https://img.shields.io/badge/Built_with-Rust-00a884" alt="Built with Rust"></a>
-  <a href="https://zapfast.rocks/download/"><img src="https://img.shields.io/badge/Linux_%C2%B7_macOS_%C2%B7_Windows-24292f" alt="Linux, macOS, and Windows"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-00a884" alt="MIT license"></a>
-</p>
+## Qué agrega
 
-> **Fork [zapfast-omarchy](https://github.com/MasterStreet423/zapfast-omarchy):**
-> el ZapFast oficial al día, con la interfaz entera en español, emojis
-> buscables en español y el fondo de Omarchy en el chat. Detalle y cómo se
-> sincroniza en [FORK.md](FORK.md).
-
-ZapFast is a WhatsApp client written in Rust with
-[egui](https://www.egui.rs) and [fastframe](https://fastframe.dev), the
-framework behind a family of native desktop apps. It links to your phone as a
-companion device through
-[whatsapp-rust](https://github.com/oxidezap/whatsapp-rust) and has no browser
-engine. In our Linux test it opens in under a second and uses about 200 MB of
-idle RAM, against 1.13 GB for WhatsApp Web.
-[See the measurements](https://zapfast.rocks/benchmarks/).
-
-The interface is available in English, Chinese (Simplified and Traditional),
-Dutch, French, German, Indonesian, Italian, Portuguese (Brazil), Russian,
-Spanish, and Turkish.
-
-<picture>
-  <source media="(prefers-color-scheme: light)" srcset="docs/screenshot-light.png">
-  <img src="docs/screenshot.png" alt="ZapFast showing a conversation with an attachment, voice messages, reactions, a quoted reply, and a link preview">
-</picture>
-
-<details>
-<summary><strong>Watch ZapFast in action</strong></summary>
-
-https://github.com/user-attachments/assets/2bf86b54-45fc-4add-8de7-c426c3cdad9b
-
-</details>
-
-[Features](#your-chats-on-your-desktop) · [Install](#install) · [Link your phone](#link-your-phone) · [Help](#guides-and-help)
-
-## Your chats, on your desktop
-
-| Feature | What you can do |
+| | |
 |---|---|
-| **Messages** | Send formatted text, replies, edits, reactions, forwards, pictures, files, stickers, GIFs, polls, and voice messages. |
-| **Media in the chat** | Play voice messages, videos, round video messages, GIFs, and animated stickers in place. |
-| **Your history** | Keep your chats in an encrypted archive on this computer, fetch older messages from your phone as you scroll, and export locally saved chat history as text or a ZIP with downloaded attachments. |
-| **Several numbers** | Link more than one WhatsApp number and switch between them in one window. |
-| **Desktop controls** | Use keyboard shortcuts, select and copy text across messages, and stay linked in the tray with notifications. |
-| **Themes** | Choose light, dark, system appearance, or custom colours. On Omarchy, follow your desktop theme. |
-| **Privacy** | Hide locked chats behind a code, or the whole window behind an app lock. Nothing goes to a server of ours. |
+| **Interfaz entera en español** | Todos los textos marcados con gettext y `es.po` completo, incluidos los que el oficial deja fijos en el código (atajos, categorías de emoji). |
+| **Emojis en español** | El selector y el autocompletado `:atajo:` buscan por los nombres CLDR en español, sin importar las tildes: `corazon` encuentra ❤️. |
+| **Responder desde la notificación** | Un clic en la notificación abre una ventana chica para contestar. Enter manda, Esc deja el texto como borrador, Ctrl+O abre el chat completo. |
+| **Fondo de Omarchy en el chat** | Si el tema sigue al sistema, el fondo del escritorio se ve detrás de la conversación y cambia en vivo con él. |
+| **Abrir chats desde el escritorio** | `zapfast open-chat <id>` y la lista de chats recientes en `$XDG_RUNTIME_DIR/zapfast/chats.json`, para que un lanzador como el menú de Omarchy los liste y los abra, grupos incluidos. |
+| **"En línea" solo cuando lo miras** | La presencia la decide el foco de la ventana: con ZapFast escondido en la bandeja, la cuenta no aparece en línea. |
 
-## Install
+Todo lo demás —mensajes, llamadas, varias cuentas, archivo cifrado, temas— es
+el ZapFast oficial tal cual. El detalle de cada cambio, dónde vive en el código
+y cómo se trae lo nuevo del oficial está en [FORK.md](FORK.md).
 
-| Platform | Installation |
-|---|---|
-| **macOS** | `brew install --cask crmne/tap/zapfast`, or [download the Mac app](https://zapfast.rocks/download/#macos). |
-| **Arch Linux** | `yay -S zapfast-bin` |
-| **Windows** | Choose your build on the [Download page](https://zapfast.rocks/download/#windows). |
-| **Other Linux** | Find Nix, AppImage, and other options on the [Download page](https://zapfast.rocks/download/#linux). |
-| **From source** | Follow [Getting started](https://zapfast.rocks/getting-started/) for dependencies and commands. |
+## Instalar
 
-## Link your phone
-
-1. Open ZapFast. It shows a QR code.
-2. On your phone, open WhatsApp, then **Settings**, **Linked devices**,
-   **Link a device**, and scan the code. Or click **Link with phone number**
-   and enter the eight-character code on your phone.
-3. Your recent chats arrive from the phone. Older messages follow as you
-   scroll up.
-
-The link survives restarts, and your phone does not need to stay online to
-read what ZapFast has already stored. See
-[Getting started](https://zapfast.rocks/getting-started/) for the full
-walkthrough and [How it links](https://zapfast.rocks/how-it-links/) for the
-details.
-
-## Guides and help
-
-The complete guide lives at **[zapfast.rocks](https://zapfast.rocks/)**.
-
-| You want to… | Read |
-|---|---|
-| Know what ZapFast does and does not do yet | [What is ZapFast?](https://zapfast.rocks/what-is-zapfast/) |
-| Link your phone or build from source | [Getting started](https://zapfast.rocks/getting-started/) |
-| Learn messages, stickers, polls, and shortcuts | [Using ZapFast](https://zapfast.rocks/using-zapfast/) |
-| Find settings, stored files, encryption, the app lock, and updates | [Settings and files](https://zapfast.rocks/settings-and-files/) |
-| Make your own theme | [Making a theme](https://zapfast.rocks/themes/) |
-| Understand what stays on this computer | [How it links](https://zapfast.rocks/how-it-links/) |
-| Understand account risk | [Account safety](https://zapfast.rocks/what-is-zapfast/#account-safety) |
-| Report a bug or propose a feature | Read [Contributing](CONTRIBUTING.md), then use the [issue forms](https://github.com/crmne/zapfast/issues/new/choose). |
-
-## Contributing
-
-Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening an issue or pull
-request. To look at the interface without a WhatsApp account, run:
+Bajar el último build de [Releases](https://github.com/MasterStreet423/zapfast-omarchy/releases/latest)
+e instalarlo en `~/.local/bin`:
 
 ```sh
-cargo run --features demo -- --demo
+curl -L https://github.com/MasterStreet423/zapfast-omarchy/releases/latest/download/zapfast-omarchy-x86_64-linux.tar.gz | tar xz
+install -Dm755 zapfast-omarchy-*/zapfast ~/.local/bin/zapfast
 ```
 
-[AGENTS.md](AGENTS.md) describes the architecture, [DEMO.md](DEMO.md) the
-demo pages, screenshots, and recorded tours, and
-[PACKAGING.md](PACKAGING.md) releases and packages.
+`~/.local/bin` va antes que `/usr/bin` en el PATH de Omarchy, así que tapa a un
+`zapfast-bin` instalado con pacman sin desinstalarlo. Este build no se
+actualiza solo: el autoactualizador de ZapFast bajaría el oficial, en inglés y
+sin estos cambios.
 
-Native notifications use Fastframe on Linux, macOS and Windows. ZapFast keeps
-its account/chat routing, privacy settings, notification limits and sound
-previews. Clicks open the announced message; reading a chat withdraws its
-tracked notifications. OS permissions and notification presentation still apply.
+### Compilar
 
+```sh
+cargo build --release
+install -Dm755 target/release/zapfast ~/.local/bin/zapfast
+```
 
-## More native apps
+Las dependencias del sistema son las del oficial: ver
+[Getting started](https://zapfast.rocks/getting-started/).
 
-**Want Spotify just as fast and native?** [Spotifast](https://spotifast.rocks)
-is ZapFast's sibling. Both are built on
-[fastframe](https://fastframe.dev).
+## Vincular el teléfono
 
-## Acknowledgements
+Al abrirlo muestra un código QR. En el teléfono: WhatsApp → **Ajustes** →
+**Dispositivos vinculados** → **Vincular un dispositivo**, y escanear. También
+se puede vincular con un código de ocho letras desde **Vincular con número de
+teléfono**.
 
-ZapFast uses [whatsapp-rust](https://github.com/oxidezap/whatsapp-rust),
-[egui](https://www.egui.rs), [fastframe](https://fastframe.dev), the
-[Inter](https://rsms.me/inter/) typeface and Noto Color Emoji (OFL), and
-[Lucide](https://lucide.dev) icons (ISC), also used for the chat wallpaper
-doodles. The notification sounds are [Pidgin](https://pidgin.im)'s, under the
-GPL-2.0 (see `assets/sounds/`).
+## Créditos y aviso
 
-ZapFast is an unofficial client and is not affiliated with WhatsApp or Meta.
-Using an unofficial client may be against WhatsApp's terms of service and
-could get an account suspended. Use it at your own risk. WhatsApp is a
-trademark of WhatsApp LLC.
+Todo el trabajo de fondo es de [ZapFast](https://github.com/crmne/zapfast), de
+Carmine Paolino y sus colaboradores, sobre
+[whatsapp-rust](https://github.com/oxidezap/whatsapp-rust),
+[egui](https://www.egui.rs) y [fastframe](https://fastframe.dev). Las fuentes,
+íconos y sonidos que trae tienen sus propias licencias, listadas en el
+[README del oficial](https://github.com/crmne/zapfast#acknowledgements).
 
-Licensed under the [MIT License](LICENSE).
+ZapFast es un cliente no oficial y no tiene relación con WhatsApp ni con Meta.
+Usar un cliente no oficial puede ir contra los términos de servicio de
+WhatsApp y podría hacer que suspendan la cuenta: úsalo bajo tu propio riesgo.
+WhatsApp es una marca registrada de WhatsApp LLC.
 
-## Star history
-
-<a href="https://www.star-history.com/?repos=crmne%2Fzapfast&amp;type=date">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=crmne/zapfast&amp;type=date&amp;theme=dark">
-    <img alt="ZapFast GitHub stars over time" src="https://api.star-history.com/chart?repos=crmne/zapfast&amp;type=date">
-  </picture>
-</a>
+Licencia [MIT](LICENSE), heredada del oficial.

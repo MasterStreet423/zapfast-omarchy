@@ -21,6 +21,11 @@ resolver_catalogos() {
     if grep -qx "$i18n/zapfast.pot" <<<"$conflictos"; then
         git checkout --theirs -- "$i18n/zapfast.pot"
     fi
+    # El README es el del fork, escrito aparte: lo que upstream cambie en el
+    # suyo no se trae.
+    if grep -qx README.md <<<"$conflictos"; then
+        git checkout --ours -- README.md
+    fi
     # POTFILES es una lista: se quedan las entradas de los dos lados.
     if grep -qx "$i18n/POTFILES" <<<"$conflictos"; then
         sed -i '/^<<<<<<< /d;/^=======$/d;/^>>>>>>> /d' "$i18n/POTFILES"
