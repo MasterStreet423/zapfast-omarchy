@@ -33,6 +33,19 @@ defecto) es la distribución: el oficial al día más estos cambios.
   (`zapfast <número>`, `wa.me` y `whatsapp://`): eso abre por número; esto, por
   id, así que también abre grupos.
 
+- **Responder desde la notificación.** El clic en la notificación de un mensaje
+  abre una ventana chica con el mensaje, algunos de alrededor y un campo para
+  contestar: Enter manda (citando el mensaje en grupos) y cierra, Esc cierra y
+  deja el texto como borrador del chat, Ctrl+O abre el chat en la ventana
+  completa. Con la app en la bandeja es la única ventana (app id
+  `zapfast-reply`). El bloqueo de la app y los chats bloqueados mantienen el
+  clic de siempre. Se apaga en Ajustes → Notificaciones. Código en
+  `src/app/quick_reply.rs` y `src/ui/quick_reply.rs`.
+- **Presencia manual.** La cuenta se muestra en línea según el foco de la
+  ventana, no según lo que anuncia la librería por su cuenta; así, con
+  ZapFast escondido en la bandeja, la cuenta no aparece en línea.
+  `PresencePolicy::Manual` en `src/backend/worker.rs`.
+
 - **Sin empaquetado de Windows ni winget.** El fork es para Omarchy; lo que
   upstream agregó en `packaging/windows/` y `packaging/winget/` no se trae.
 
