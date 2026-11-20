@@ -45,7 +45,10 @@ people, only admins can mention everyone. People are notified as they are
 for any mention. Edits update the visible mentions. Editing an existing `@all`
 mention does not notify everyone again; adding `@all` in an edit requests a new
 notification. Forwarding or quoting an `@all` message does not notify everyone
-again. A group where an unread message mentions you, or everyone, shows **@**
+again. A forwarded message notifies nobody it mentions: each mention is
+written out as the name that person has in ZapFast (their contact name, the
+name on their profile, or their number).
+A group where an unread message mentions you, or everyone, shows **@**
 beside its unread count in the chat list, even when muted, and opening it shows
 the oldest unread mention. The smiley opens emoji
 (searchable), GIFs, and stickers,
@@ -343,6 +346,8 @@ items with the same protocol album identity, sender and local calendar date
 are grouped. A reply shared by several items appears once above the grid;
 different reply targets keep their own previews. If only some items carry
 the quoted text, the preview uses one of those copies.
+With automatic downloads on, each item up to 64 MiB downloads as it comes
+into view, as a single attachment does.
 **Download all** downloads every item that is not on this
 computer yet, whatever its size, as clicking each one would, and shows
 individual failures; **Save all…** copies downloaded files to a folder
@@ -560,7 +565,9 @@ The call screen opens as soon as you press the button and says
 Hanging up before then cancels the call before it reaches them. An incoming call takes over the
 window with the caller's picture and name, and **Accept** and **Decline**. It
 also raises a desktop notification and plays a ringtone until it is answered, declined,
-or given up, so a window hidden in the tray does not hide the call. The
+or given up, so a window hidden in the tray does not hide the call. If word
+that a call ended never arrives (a dropped connection can lose it), a call
+still ringing after two minutes is filed as missed, so the next call rings. The
 ringtone follows your notification sound: with the sound set to **None**, or
 notifications off, a call shows without ringing. A call in a
 muted, archived, or locked chat stays as quiet as a message in it. A locked
@@ -684,6 +691,12 @@ only the selected messages, in chat order, using the same sharing format,
 even if some have scrolled off-screen. Attachments contribute a text label and
 any caption; their files are not copied. Copying keeps the selection open.
 
+On Wayland, copied text stays on the clipboard after the window closes to the
+tray, so it can be pasted into other apps while ZapFast keeps running in the
+background. This needs a desktop that supports clipboard data-control
+(Hyprland, wlroots desktops, KDE, sway). Where it is missing, GNOME among them,
+the clipboard is only available while the window is open.
+
 ## Chats
 
 Someone without a saved contact or profile name shows as their phone number. In
@@ -693,7 +706,9 @@ a group that hides numbers, WhatsApp sends only a masked one such as
 To find a contact in **New chat**, type part of their name or number. Each
 word you type matches the start of a word in the name, in order: `will shak`
 finds William Shakespeare, and `j d` finds John Doe. A plain part of the name
-also works, such as `liam`.
+also works, such as `liam`. The first match is highlighted; press Enter to open
+its chat. The list is only as tall as its matches, up to the space the window
+leaves.
 
 Connection and history-sync notices appear below the open chat’s header,
 leaving the chat list in place. In a narrow window showing only the list,
@@ -721,7 +736,8 @@ contact list, and Escape closes the dialog.
 
 The search bar finds chats by name, number, or latest message; searches all
 messages stored on this computer; and finds contacts without an existing chat.
-Use `↑`/`↓` to select a matching chat and Enter to open it ready for typing.
+Names match as they do in **New chat**: each word you type can start a word of
+the name, in order, so `will shak` finds William Shakespeare. Use `↑`/`↓` to select a matching chat and Enter to open it ready for typing.
 Click a message result to jump to it, or a contact to start a chat. Use
 `Alt+↑/↓`, or `Ctrl+Shift+[` and `Ctrl+Shift+]` as in WhatsApp, to switch chats
 without leaving the composer (Command instead of Ctrl on macOS), and
@@ -866,6 +882,10 @@ panel closes. In a narrow window the panel is a page of its own: **Back**
 returns to the chat. A locked
 chat's media is listed only while the locked folder is open.
 
+A person's details also list the groups you are both in, under a heading
+such as **3 groups in common**: click one to open it. Groups you left and
+locked chats are not listed.
+
 **Development builds** also show a group's description in the panel. You can
 select and copy its text, and a long description scrolls. To change the
 description, use your phone.
@@ -959,9 +979,11 @@ Shift+Tab bring the focused button into view, too.
 ## Notifications and the tray
 
 Closing the window keeps ZapFast linked in the tray, unless **Keep running when
-the window closes** is off, which also leaves out the tray icon. On macOS, click the menu
-bar icon to open its menu, then choose **Show or hide ZapFast** to reopen the
-window. On Linux and Windows, click the tray icon to reopen it, and click it
+the window closes** is off, which also leaves out the tray icon. On macOS,
+closing the window always keeps ZapFast running in the Dock, as other Mac apps
+do: click the Dock icon to reopen the window, and turn off **Show in the menu
+bar** if you do not want the menu bar icon. With the icon, click it to open its
+menu, then choose **Show or hide ZapFast**. On Linux and Windows, click the tray icon to reopen it, and click it
 again to hide a window that is in front. Launching the
 app again reopens the window on every platform. To quit, use **Quit** in the
 tray menu, or **Quit** in the Dock icon's menu on macOS, or on Linux **Quit ZapFast** in the

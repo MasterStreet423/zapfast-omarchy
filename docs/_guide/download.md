@@ -2,6 +2,8 @@
 title: Download
 description: Get ZapFast for Linux, macOS, or Windows, with install instructions for each.
 nav_order: 1
+seo:
+  title: Download for Linux, macOS, and Windows
 ---
 
 {% assign v = site.zapfast_version %}
@@ -72,6 +74,50 @@ decrypts. The module reads those files when it activates:
 programs.zapfast.secretFiles.proxy = config.sops.secrets.zapfast-proxy.path;
 ```
 
+On Debian, Ubuntu and their derivatives, install the `.deb`; apt fetches
+the libraries it needs:
+
+```sh
+sudo apt install ./{{ name }}_{{ v }}_amd64.deb    # or _arm64.deb
+```
+
+- [{{ name }}_{{ v }}_amd64.deb]({{ base }}/{{ name }}_{{ v }}_amd64.deb)
+- [{{ name }}_{{ v }}_arm64.deb]({{ base }}/{{ name }}_{{ v }}_arm64.deb)
+
+On Fedora 44 and newer, install from the
+[COPR repository](https://copr.fedorainfracloud.org/coprs/paolino/zapfast/),
+so dnf updates {{ app }} with the rest of your system:
+
+```sh
+sudo dnf copr enable paolino/zapfast
+sudo dnf install zapfast
+```
+
+On openSUSE and other RPM distributions, or to install one release by hand,
+take the `.rpm`:
+
+```sh
+sudo dnf install ./{{ name }}-{{ v }}-1.x86_64.rpm    # or .aarch64.rpm
+sudo zypper install ./{{ name }}-{{ v }}-1.x86_64.rpm # on openSUSE
+```
+
+- [{{ name }}-{{ v }}-1.x86_64.rpm]({{ base }}/{{ name }}-{{ v }}-1.x86_64.rpm)
+- [{{ name }}-{{ v }}-1.aarch64.rpm]({{ base }}/{{ name }}-{{ v }}-1.aarch64.rpm)
+
+These packages do not add a repository yet, so {{ app }} tells you when a
+release is out and you install the new package the same way.
+
+On any distribution with [Flatpak](https://flatpak.org), install the bundle.
+It runs in Flatpak's sandbox: it reaches the network, sound, your devices
+(the camera and microphone for calls), the keyring and notifications, but not
+your files, which you attach through the system's file picker:
+
+```sh
+flatpak install --user ./{{ name }}-v{{ v }}-x86_64.flatpak
+```
+
+- [{{ name }}-v{{ v }}-x86_64.flatpak]({{ base }}/{{ name }}-v{{ v }}-x86_64.flatpak)
+
 For other distributions, download a tarball with the binary, desktop file,
 and icon:
 
@@ -96,7 +142,7 @@ Emoji come from the desktop's colour emoji font when one is installed
 (`noto-fonts-emoji`, `fonts-noto-color-emoji` on Debian), else from the copy
 {{ app }} bundles. The file picker uses `xdg-desktop-portal`.
 
-A Flatpak bundle is being prepared; {{ app }} is not on Flathub yet.
+{{ app }} is not on Flathub yet.
 
 ## macOS
 

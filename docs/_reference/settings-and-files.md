@@ -139,7 +139,7 @@ name or description, in the interface language or in English.
 - **Zoom**: interface scale, also `Ctrl+Plus`, `Ctrl+Minus` and `Ctrl+0`.
 - **Language**: the interface language, or **Auto** to follow the system.
   Brazilian Portuguese, German, Spanish, Italian, French, Russian, Simplified
-  Chinese, Traditional Chinese, Turkish, and Indonesian are available; otherwise English.
+  Chinese, Traditional Chinese, Turkish, Indonesian, and Dutch are available; otherwise English.
   Message contents, names, and logs are never translated.
 - **Custom title bar** (Windows and Linux, off by default): ZapFast draws
   its own title bar instead of the desktop's. The window buttons sit in the
@@ -226,9 +226,14 @@ name or description, in the interface language or in English.
 
 **System**
 
-- **Keep running when the window closes**: keep ZapFast linked in the tray.
-  With this off ZapFast has no tray or menu bar icon; an icon already there
-  leaves at the next start.
+- **Keep running when the window closes** (Linux and Windows): keep ZapFast
+  linked in the tray. With this off ZapFast has no tray icon; an icon already
+  there leaves at the next start.
+- **Show in the menu bar** (macOS): the menu bar icon. Closing the window
+  always keeps ZapFast running in the Dock, which reopens it; **Quit**
+  (Command+Q) quits. With this off ZapFast has no menu bar icon; an icon
+  already there leaves at the next start, and **Start at login** opens the
+  window, since the Dock cannot bring back a window that was never made.
 - **Start at login**: start in the tray without a window, where the platform
   supports it. If the desktop's tray is not up yet, ZapFast waits up to 30
   seconds for it, then opens the window, since a desktop without a tray could

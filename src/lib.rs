@@ -21,6 +21,8 @@ pub mod call_tones;
 pub mod calls;
 pub mod camera;
 pub mod chat_index;
+#[cfg(target_os = "linux")]
+pub mod clipboard;
 #[cfg(any(test, feature = "demo"))]
 pub mod demo;
 pub mod desktop_background;
