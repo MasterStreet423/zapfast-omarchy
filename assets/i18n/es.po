@@ -2136,14 +2136,12 @@ msgid "System"
 msgstr "Sistema"
 
 #: src/ui/settings.rs:691
-#, fuzzy
 msgid "Show in the menu bar"
-msgstr "Ver en el chat"
+msgstr "Mostrar en la barra de menús"
 
 #: src/ui/settings.rs:694
-#, fuzzy
 msgid "Closing the window keeps ZapFast in the Dock. Quit with Ctrl+Q."
-msgstr "Cerrar la ventana (ZapFast sigue en la bandeja)"
+msgstr "Cerrar la ventana deja ZapFast en el Dock. Sal con Ctrl+Q."
 
 #: src/ui/settings.rs:700
 msgid "Keep running when the window closes"
@@ -4021,8 +4019,8 @@ msgstr "Admin. del grupo"
 #, rust-format
 msgid "{} group in common"
 msgid_plural "{} groups in common"
-msgstr[0] ""
-msgstr[1] ""
+msgstr[0] "{} grupo en común"
+msgstr[1] "{} grupos en común"
 
 #: src/ui/info.rs:1317
 #, rust-format
