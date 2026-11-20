@@ -41,10 +41,6 @@ defecto) es la distribución: el oficial al día más estos cambios.
   `zapfast-reply`). El bloqueo de la app y los chats bloqueados mantienen el
   clic de siempre. Se apaga en Ajustes → Notificaciones. Código en
   `src/app/quick_reply.rs` y `src/ui/quick_reply.rs`.
-- **Presencia manual.** La cuenta se muestra en línea según el foco de la
-  ventana, no según lo que anuncia la librería por su cuenta; así, con
-  ZapFast escondido en la bandeja, la cuenta no aparece en línea.
-  `PresencePolicy::Manual` en `src/backend/worker.rs`.
 
 - **Sin empaquetado de Windows ni winget.** El fork es para Omarchy; lo que
   upstream agregó en `packaging/windows/` y `packaging/winget/` no se trae.

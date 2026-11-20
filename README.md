@@ -22,7 +22,6 @@ El cliente de WhatsApp nativo de <a href="https://github.com/crmne/zapfast">crmn
 | **Responder desde la notificación** | Un clic en la notificación abre una ventana chica para contestar. Enter manda, Esc deja el texto como borrador, Ctrl+O abre el chat completo. |
 | **Fondo de Omarchy en el chat** | Si el tema sigue al sistema, el fondo del escritorio se ve detrás de la conversación y cambia en vivo con él. |
 | **Abrir chats desde el escritorio** | `zapfast open-chat <id>` y la lista de chats recientes en `$XDG_RUNTIME_DIR/zapfast/chats.json`, para que un lanzador como el menú de Omarchy los liste y los abra, grupos incluidos. |
-| **"En línea" solo cuando lo miras** | La presencia la decide el foco de la ventana: con ZapFast escondido en la bandeja, la cuenta no aparece en línea. |
 
 Todo lo demás —mensajes, llamadas, varias cuentas, archivo cifrado, temas— es
 el ZapFast oficial tal cual. El detalle de cada cambio, dónde vive en el código
