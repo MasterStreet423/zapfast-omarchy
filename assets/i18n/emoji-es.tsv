@@ -353,7 +353,7 @@
 ☁	nube|clima|nublado|tiempo
 ☂	paraguas abierto|accesorio|clima|lluvia|paraguas|tiempo
 ☃	muñeco de nieve nevado|clima|frío|hombre de nieve|invierno|muñeco|muñeco de nieve|nieve
-☄	meteorito|cometa|espacio|estela|estrella|rojo
+☄	cometa espacial|cometa|espacio|estela|estrella|meteorito|rojo
 ☎	teléfono de línea|agenda|cables|línea|llamar|teléfono
 ☑	casilla seleccionada|✓|aprobar|casilla|casilla con marca de verificación|check|listo|marca|selección|verificación|verificación en un recuadro
 ☔	paraguas con gotas|accesorio|clima|gotas|llover|lluvia|paraguas|paraguas con gotas lluvia|sombrilla|tiempo
@@ -571,7 +571,7 @@
 🇨🇨	Bandera: Islas Cocos|Bandera
 🇨🇩	Bandera: República Democrática del Congo|Bandera
 🇨🇫	Bandera: República Centroafricana|Bandera
-🇨🇬	Bandera: República del Congo|Bandera
+🇨🇬	Bandera: Congo|Bandera
 🇨🇭	Bandera: Suiza|Bandera
 🇨🇮	Bandera: Costa de Marfil|Bandera
 🇨🇰	Bandera: Islas Cook|Bandera
@@ -777,7 +777,7 @@
 🇻🇨	Bandera: San Vicente y las Granadinas|Bandera
 🇻🇪	Bandera: Venezuela|Bandera
 🇻🇬	Bandera: Islas Vírgenes Británicas|Bandera
-🇻🇮	Bandera: Islas Vírgenes de EE. UU.|Bandera
+🇻🇮	Bandera: Islas Vírgenes de EE.UU.|Bandera
 🇻🇳	Bandera: Vietnam|Bandera
 🇻🇺	Bandera: Vanuatu|Bandera
 🇼🇫	Bandera: Wallis y Futuna|Bandera
@@ -1759,6 +1759,7 @@
 🛖	cabaña|casa|choza|hogar|refugio|yurta
 🛗	ascensor|accesibilidad|elevador|montacargas
 🛘	alud|alud de barro|avalancha|desastre|montaña|peligro|rocas|terremoto
+🛙	faro|baliza|esperanza|guía|iluminación|luz|mar|marítimo|navegación|señal
 🛜	wifi|computadora|conectividad|enrutador|inalámbrico|internet|red|teléfono inteligente|wlan
 🛝	tobogán|deslizar|diversión|jugar|parque|plaza|resbaladilla|viajes y lugares
 🛞	rueda|auto|carro|girar|llanta|neumático|rodar|vehículo|viajes y lugares
@@ -2147,6 +2148,9 @@
 🪈	flauta|banda|flautín|grabador|instrumento de viento|música|orquesta|pífano
 🪉	arpa|amor|angelical|cuerdas|cupido|instrumento|música|orquesta
 🪊	trombón|instrumento|jazz|movimiento de la vara|música|triste|viento-metal
+🪋	meteorito|apocalipsis|bola de fuego|caída|espacio|estrella|gravedad|roca
+🪌	goma de borrar|borrar|corrección|deshacer|dibujar|eliminar|equivocación|error|escribir|goma|quitar
+🪍	red con mango|atrapar|capturar|cazamariposas|cazar|malla|pescar|red
 🪎	cofre del tesoro|botín|dinero|gemas|joyas|objetos de valor|oro|plata|premio|riqueza
 🪏	pala|agujero|cavar|enterrar|excavar|jardín|nieve|palear|plantar
 🪐	planeta con anillos|planeta|saturnino|saturno
@@ -2205,6 +2209,7 @@
 🫅	persona con corona|corona|monarca|monarquía|nobleza|real|realeza
 🫆	huella dactilar|delito|detective|forense|huella|huella digital|identidad|misterio|rastro|seguridad
 🫈	criatura peluda|bosque|críptido|gigante|hombre de las nieves|peludo|pie grande|yeti
+🫌	mariposa monarca|cambio|esperanza|frágil|insecto|metamorfosis|migración|oruga|transformación
 🫍	orca|ballena|mamífero marino
 🫎	alce|animal|asta|ciervo canadiense|cuernos|mamífero|uapití
 🫏	burro|animal|asno|borrico|mamífero|mula|terco
@@ -2221,6 +2226,7 @@
 🫚	raíz de jengibre|cerveza|especia|hierba|jengibre|natural|raíz|salud
 🫛	vaina|edamame|guisante|judía|legumbre|porotos|soja|vegetal
 🫜	tubérculo|cocina vegetariana|comida|ensalada|huerto|nabo|rábano|raíz|remolacha|vegetales|verdura
+🫝	pepinillo|aperitivo|condimento|encurtido|fermentar|pepino|salmuera
 🫟	salpicadura|derrame|goteo|holi|Krishna|lío|líquido|mancha|pintura|tinta
 🫠	cara derritiéndose|calor|cara avergonzada|cara que se derrite|derretirse|desaparecer|emoticones y emociones|sarcasmo|sarcástico|sonrisa|vergüenza
 🫡	cara saludando|buena suerte|ejército|emoticones y emociones|ok|orden|respeto|saludo|sí|sí señor|sí señora
@@ -2233,6 +2239,7 @@
 🫨	cara que vibra|aturdimiento|cara|locura|mareo|pánico|shock|sorpresa|temblando|terremoto
 🫩	cara con ojeras|agotamiento|cansado|cansancio|cara|cara cansada|dormí mal|falta de sueño|no dormí|sueño
 🫪	cara de susto|ansiedad|pánico|shock|sorpresa|susto|vulnerabilidad
+🫫	cara resquebrajándose|desmoronar|enmascarar|resiliencia|revelar|romper|tensión|transformación
 🫯	nube de pelea|bronca|debate|desacuerdo|forcejeo|gresca|pelea|trifulca
 🫰	mano con dedo índice y pulgar cruzados|amor|caro|chasquido|corazón|dinero|gasto|mano|personas y cuerpos
 🫱	mano hacia la derecha|apretón de manos|dar la mano|mano|mano derecha|sacudir|sacudón de manos|sostener
@@ -2243,3 +2250,5 @@
 🫶	corazón con las manos|amor|corazón|manos|manos formando un corazón|te amo
 🫷	mano empujando hacia la izquierda|a la izquierda|choca esos cinco|detener|empujar|rechazar|stop
 🫸	mano empujando hacia la derecha|a la derecha|choca esos cinco|detener|empujar|rechazar|stop
+🫹	pulgar hacia la izquierda|agarrar|eso|esto|izquierda|neutral|señalar
+🫺	pulgar hacia la derecha|agarrar|derecha|eso|esto|neutral|señalar
